@@ -1,0 +1,32 @@
+bundle:
+  name: "genie-adoption-tracking"
+
+sync:
+  include:
+    - .build
+
+artifacts:
+  default:
+    build: apx build
+
+resources:
+  database_instances:
+    genie-adoption-tracking-db:
+      name: "genie-adoption-tracking"
+      capacity: "CU_1"
+  apps:
+    genie-adoption-tracking-app:
+      name: "genie-adoption-tracking"
+      description: "genie-adoption-tracking created with apx"
+      source_code_path: ./.build
+      resources:
+        - name: "db"
+          database:
+            database_name: "databricks_postgres"
+            instance_name: ${resources.database_instances.genie-adoption-tracking-db.name}
+            permission: "CAN_CONNECT_AND_CREATE"
+
+targets:
+  dev:
+    mode: development
+    default: true

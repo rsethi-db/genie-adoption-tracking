@@ -1,0 +1,1 @@
+command: ["uvicorn", "genie_adoption_tracking.backend.app:app", "--workers", "1"]
