@@ -30,7 +30,7 @@ function DashboardPage() {
   return (
     <AppShell>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Signal Dashboard</h1>
+        <h1 className="text-2xl font-bold">Signals</h1>
         <p className="text-sm text-muted-foreground">
           Aggregate signal captured from account teams running the play — the raw
           material for MBR reporting.

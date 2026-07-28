@@ -59,8 +59,8 @@ export function AppShell({
           </Link>
           <nav className="flex items-center gap-1">
             <NavLink to="/accounts" label="Accounts" />
-            <NavLink to="/dashboard" label="Signal Dashboard" />
-            <NavLink to="/playbook" label="Playbook" />
+            <NavLink to="/dashboard" label="Signals" />
+            <NavLink to="/playbook" label="Getting Help" />
           </nav>
           <div className="flex-1" />
           <ModeToggle />

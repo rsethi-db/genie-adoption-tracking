@@ -11,18 +11,20 @@ rows to Lakebase via `Dependencies.Session`.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime, timezone
 
 from databricks.sdk.service.iam import User as UserOut
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
-from . import account_plan, playbook
+from . import account_plan, adoption_workflow, playbook
 from .core import Dependencies, create_router
 from .db import (
     Account,
     AccountIssue,
     AccountPlanItem,
+    AdoptionTaskState,
     Blocker,
     ChecklistProgress,
     ResourceClick,
@@ -36,6 +38,12 @@ from .models import (
     AccountOut,
     AccountPlanItemOut,
     AccountPlanToggleIn,
+    AdoptionBulkSaveIn,
+    AdoptionLaneOut,
+    AdoptionStageOut,
+    AdoptionTaskOut,
+    AdoptionTaskUpdateIn,
+    AdoptionWorkflowOut,
     BlockerAggOut,
     BlockerDefOut,
     BlockerIn,
@@ -198,6 +206,98 @@ def _readiness_pct(session: Session, account: Account) -> int:
     return pct
 
 
+def _avg_readiness(session: Session, accounts: Sequence[Account]) -> int:
+    """Average readiness % across accounts using a few batched queries instead of
+    resolving each account's plan individually — the per-account resolve was an N+1
+    that made the Signals dashboard slow with ~500 accounts."""
+    if not accounts:
+        return 0
+    use_cases = session.exec(select(UseCase)).all()
+    open_blockers = session.exec(
+        select(Blocker).where(Blocker.resolved == False)  # noqa: E712
+    ).all()
+    issues = session.exec(select(AccountIssue)).all()
+    plan_rows = session.exec(select(AccountPlanItem)).all()
+
+    ucs_by_acct: dict[str, list[UseCase]] = {}
+    for uc in use_cases:
+        ucs_by_acct.setdefault(uc.account_id, []).append(uc)
+    uc_to_acct = {uc.id: uc.account_id for uc in use_cases}
+    open_blk_by_acct: dict[str, int] = {}
+    for b in open_blockers:
+        aid = uc_to_acct.get(b.use_case_id)
+        if aid:
+            open_blk_by_acct[aid] = open_blk_by_acct.get(aid, 0) + 1
+    open_iss_by_acct: dict[str, int] = {}
+    for i in issues:
+        if _issue_is_open(i.status):
+            open_iss_by_acct[i.account_id] = open_iss_by_acct.get(i.account_id, 0) + 1
+    manual_by_acct: dict[str, dict] = {}
+    for p in plan_rows:
+        manual_by_acct.setdefault(p.account_id, {})[p.item_key] = p
+
+    total = 0
+    for a in accounts:
+        ucs = ucs_by_acct.get(a.id, [])
+        max_order = -1
+        for uc in ucs:
+            max_order = max(max_order, account_plan.STAGE_ORDER.get(uc.stage, -1))
+        facts = account_plan.AccountFacts(
+            pp_enabled=a.pp_status in ("on", "on_default"),
+            aim_status=a.aim_status,
+            aim_ws_enabled=a.aim_ws_enabled,
+            uc_count=len(ucs),
+            max_stage_order=max_order,
+            genie_active=a.genie_active,
+            open_issues=open_iss_by_acct.get(a.id, 0),
+            open_blockers=open_blk_by_acct.get(a.id, 0),
+        )
+        manual = manual_by_acct.get(a.id, {})
+        applicable = 0
+        done = 0
+        for item in account_plan.ITEMS:
+            row = manual.get(item["key"])
+            r = account_plan.resolve_item(
+                item, facts, row.done if row else False, row.note if row else ""
+            )
+            if r.applicable:
+                applicable += 1
+                if r.status == "done":
+                    done += 1
+        total += round(100 * done / applicable) if applicable else 0
+    return round(total / len(accounts))
+
+
+def _build_adoption(session: Session, account: Account) -> AdoptionWorkflowOut:
+    """The Adoption Workflow matrix for one account: static stage/lane/task content
+    merged with the account's stored per-task status + note."""
+    stored = {
+        s.task_key: s
+        for s in session.exec(
+            select(AdoptionTaskState).where(
+                AdoptionTaskState.account_id == account.id
+            )
+        ).all()
+    }
+    tasks = [
+        AdoptionTaskOut(
+            key=t["key"],
+            stage=t["stage"],
+            lane=t["lane"],
+            label=t["label"],
+            status=(stored[t["key"]].status if t["key"] in stored
+                    else adoption_workflow.DEFAULT_STATUS),
+            note=stored[t["key"]].note if t["key"] in stored else "",
+        )
+        for t in adoption_workflow.TASKS
+    ]
+    return AdoptionWorkflowOut(
+        stages=[AdoptionStageOut(**s) for s in adoption_workflow.STAGES],
+        lanes=[AdoptionLaneOut(**ln) for ln in adoption_workflow.LANES],
+        tasks=tasks,
+    )
+
+
 # --------------------------------------------------------------------------------------
 # Meta
 # --------------------------------------------------------------------------------------
@@ -276,7 +376,9 @@ def list_accounts(session: Dependencies.Session):
             aim_status=a.aim_status,
             aim_ws_enabled=a.aim_ws_enabled,
             genie_active=a.genie_active,
-            readiness_pct=_readiness_pct(session, a),
+            # Not shown on the account lookup; skip the per-account plan resolve
+            # (it was an N+1 that ran several Lakebase queries per account).
+            readiness_pct=0,
             open_issues=open_issues_by_account.get(a.id, 0),
             created_at=a.created_at,
             use_case_count=counts.get(a.id, 0),
@@ -397,7 +499,96 @@ def get_account(account_id: str, session: Dependencies.Session):
         use_cases=uc_out,
         plan=plan_items,
         issues=issues_out,
+        adoption=_build_adoption(session, acct),
     )
+
+
+@router.post(
+    "/accounts/{account_id}/adoption",
+    response_model=AccountDetailOut,
+    operation_id="updateAdoptionTask",
+)
+def update_adoption_task(
+    account_id: str,
+    body: AdoptionTaskUpdateIn,
+    session: Dependencies.Session,
+    user_ws: Dependencies.UserClient,
+):
+    acct = session.get(Account, account_id)
+    if acct is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if not adoption_workflow.is_valid_task(body.task_key):
+        raise HTTPException(status_code=400, detail="Unknown adoption task")
+    if body.status is not None and not adoption_workflow.is_valid_status(body.status):
+        raise HTTPException(status_code=400, detail="Invalid status")
+
+    existing = session.exec(
+        select(AdoptionTaskState).where(
+            AdoptionTaskState.account_id == account_id,
+            AdoptionTaskState.task_key == body.task_key,
+        )
+    ).first()
+    if existing is None:
+        existing = AdoptionTaskState(
+            id=_uid(), account_id=account_id, task_key=body.task_key
+        )
+    if body.status is not None:
+        existing.status = body.status
+    if body.note is not None:
+        existing.note = body.note
+    existing.updated_at = _utcnow()
+    existing.updated_by = _actor(user_ws)
+    session.add(existing)
+    session.commit()
+    return get_account(account_id, session)
+
+
+@router.post(
+    "/accounts/{account_id}/adoption/save",
+    response_model=AccountDetailOut,
+    operation_id="saveAdoptionTasks",
+)
+def save_adoption_tasks(
+    account_id: str,
+    body: AdoptionBulkSaveIn,
+    session: Dependencies.Session,
+    user_ws: Dependencies.UserClient,
+):
+    """Persist the whole Adoption Workflow questionnaire in one request (Save button)."""
+    acct = session.get(Account, account_id)
+    if acct is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    existing = {
+        s.task_key: s
+        for s in session.exec(
+            select(AdoptionTaskState).where(
+                AdoptionTaskState.account_id == account_id
+            )
+        ).all()
+    }
+    actor = _actor(user_ws)
+    now = _utcnow()
+    for item in body.items:
+        if not adoption_workflow.is_valid_task(item.task_key):
+            continue  # ignore stray keys rather than failing the whole save
+        if item.status is not None and not adoption_workflow.is_valid_status(item.status):
+            raise HTTPException(status_code=400, detail=f"Invalid status: {item.status}")
+        row = existing.get(item.task_key)
+        if row is None:
+            row = AdoptionTaskState(
+                id=_uid(), account_id=account_id, task_key=item.task_key
+            )
+            existing[item.task_key] = row
+        if item.status is not None:
+            row.status = item.status
+        if item.note is not None:
+            row.note = item.note
+        row.updated_at = now
+        row.updated_by = actor
+        session.add(row)
+    session.commit()
+    return get_account(account_id, session)
 
 
 @router.post(
@@ -844,11 +1035,7 @@ def get_dashboard(session: Dependencies.Session):
     accounts_with_issues = len(
         {i.account_id for i in all_issues if _issue_is_open(i.status)}
     )
-    avg_readiness = (
-        round(sum(_readiness_pct(session, a) for a in accounts) / len(accounts))
-        if accounts
-        else 0
-    )
+    avg_readiness = _avg_readiness(session, accounts)
 
     return DashboardOut(
         total_accounts=len(accounts),

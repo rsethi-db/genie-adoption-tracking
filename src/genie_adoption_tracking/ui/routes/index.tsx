@@ -47,17 +47,17 @@ function Index() {
         />
         <FeatureCard
           icon={<LineChart className="h-5 w-5" />}
-          title="Signal Dashboard"
+          title="Signals Dashboard"
           desc="The U1→U6 funnel, top blockers by category, stalled accounts, and which resources the field pulls most."
           to="/dashboard"
           cta="Open dashboard"
         />
         <FeatureCard
           icon={<BookOpen className="h-5 w-5" />}
-          title="The Playbook"
+          title="Getting Help"
           desc="The full stage-by-stage matrix, the five 'Getting Unstuck' blocker categories, and every go/ resource link."
           to="/playbook"
-          cta="Browse playbook"
+          cta="Next Step"
         />
       </div>
     </AppShell>

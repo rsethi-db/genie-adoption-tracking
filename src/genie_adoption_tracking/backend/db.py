@@ -123,6 +123,30 @@ class AccountPlanItem(SQLModel, table=True):
     updated_by: str = Field(default="")
 
 
+class AdoptionTaskState(SQLModel, table=True):
+    """Per-account status + note for one Adoption Workflow task (stage × lane grid).
+    Task identity (stage, lane, label) is static content in adoption_workflow.py;
+    only the team-entered status/note is persisted here (one row per account+task).
+
+    Created (unqualified) in `public` alongside the other `gat_*` tables: the `genie`
+    schema does not exist in this workspace's Lakebase — the app's own `create_all`
+    made every `gat_*` table in `public` (which is why the SP owns them and can ALTER
+    them in migrations.py), and `search_path=genie,public` falls through to `public`.
+    Pinning to `genie` was tried and crashed startup with `schema "genie" does not
+    exist`, so it stays in `public`."""
+
+    __tablename__ = "gat_adoption_task_state"
+
+    id: str = Field(primary_key=True)
+    account_id: str = Field(index=True, foreign_key="gat_account.id")
+    task_key: str = Field(index=True)
+    # not_initiated | na | in_progress | completed
+    status: str = Field(default="not_initiated")
+    note: str = Field(default="")
+    updated_at: datetime = Field(default_factory=_utcnow)
+    updated_by: str = Field(default="")
+
+
 class AccountIssue(SQLModel, table=True):
     """Genie-related Brickroad issues per account (all severities), synced from GTM.
     Read-only reference data (like use cases), not user-editable signal."""

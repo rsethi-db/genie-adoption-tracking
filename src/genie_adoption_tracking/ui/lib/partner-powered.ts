@@ -49,6 +49,24 @@ export const AIM_OFF_NEXT_STEPS = [
   "Once identities are in place, share the Genie space with the right business-user groups.",
 ];
 
+export type EnforceStatus = "on" | "off" | "unknown";
+
+// Short badge label for the account-level Enforce setting.
+export function enforceLabel(enforce: string): string {
+  if (enforce === "on") return "Enforce On";
+  if (enforce === "off") return "Enforce Off";
+  return "Enforce Unknown";
+}
+
+// Tone of the enforce badge *in the Partner-Powered-off context* (where it's shown).
+// PP off + enforce on → every workspace is hard-blocked (bad).
+// PP off + enforce off → a workspace could still enable it (a lever — warn, not block).
+export function enforceTone(enforce: string): "bad" | "warn" | "muted" {
+  if (enforce === "on") return "bad";
+  if (enforce === "off") return "warn";
+  return "muted";
+}
+
 // Short implication text for the enforce setting.
 export function enforceImplication(enforce: string, ppStatus: string): string | null {
   if (ppStatus === "off" && enforce === "off") {

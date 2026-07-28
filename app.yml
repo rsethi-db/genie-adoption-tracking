@@ -1,1 +1,8 @@
 command: ["uvicorn", "genie_adoption_tracking.backend.app:app", "--workers", "1"]
+
+env:
+  # App SP lacks CREATE on the default `public` schema; route all objects to the
+  # dedicated `genie` schema (SP was granted USAGE, CREATE there). Set per-connection
+  # via libpq PGOPTIONS since we can't ALTER the SP role's default search_path.
+  - name: PGOPTIONS
+    value: "-c search_path=genie,public"

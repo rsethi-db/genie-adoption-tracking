@@ -3,10 +3,14 @@ import { Suspense, useState } from "react";
 import {
   useGetAccountSuspense,
   useToggleAccountPlanItem,
+  useSaveAdoptionTasks,
   getAccountKey,
   listAccountsKey,
   type AccountPlanItemOut,
   type AccountIssueOut,
+  type AdoptionWorkflowOut,
+  type AdoptionTaskOut,
+  type UseCaseListOut,
 } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
@@ -15,10 +19,12 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft,
-  ArrowRight,
   AlertTriangle,
   ShieldAlert,
   ShieldCheck,
@@ -28,6 +34,9 @@ import {
   Clock,
   Circle,
   MinusCircle,
+  ChevronDown,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -37,6 +46,8 @@ import {
   AIM_DOCS_URL,
   AIM_OFF_NEXT_STEPS,
   enforceImplication,
+  enforceLabel,
+  enforceTone,
   isPpEnabled,
 } from "@/lib/partner-powered";
 
@@ -114,55 +125,32 @@ function AccountDetail({ accountId }: { accountId: string }) {
         wsTotal={data.ws_total ?? 0}
       />
 
+      <EnforceStatus
+        status={data.pp_status ?? "unknown"}
+        enforce={data.pp_enforce ?? "unknown"}
+      />
+
       <AimBanner
         status={data.aim_status ?? "unknown"}
         enabled={data.aim_ws_enabled ?? 0}
         total={data.ws_total ?? 0}
       />
 
-      <AccountPlan
+      {data.adoption && (
+        <AdoptionWorkflow
+          accountId={data.id}
+          workflow={data.adoption}
+          ppStatus={data.pp_status ?? "unknown"}
+        />
+      )}
+
+      <UseCaseFlow useCases={data.use_cases} />
+
+      <ObjectionsBlockers
         accountId={data.id}
         plan={data.plan ?? []}
         issues={data.issues ?? []}
       />
-
-      <h2 className="text-lg font-semibold mb-3">Genie use cases</h2>
-      {data.use_cases.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-center text-muted-foreground">
-            No Genie use cases synced from GTM for this account yet.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-3">
-          {data.use_cases.map((uc) => (
-            <Link key={uc.id} to="/use-cases/$id" params={{ id: uc.id }}>
-              <Card className="hover:border-primary/50 transition-colors">
-                <CardContent className="py-4 flex items-center gap-4">
-                  <Badge variant="secondary" className="font-mono text-xs w-12 justify-center">
-                    {uc.stage.toUpperCase()}
-                  </Badge>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{uc.title}</div>
-                    {(uc.estimated_monthly_dbus ?? 0) > 0 && (
-                      <div className="text-xs text-muted-foreground">
-                        {fmtDbus(uc.estimated_monthly_dbus ?? 0)}/mo est. DBU
-                      </div>
-                    )}
-                  </div>
-                  {(uc.open_blockers ?? 0) > 0 && (
-                    <Badge variant="destructive" className="gap-1">
-                      <AlertTriangle className="h-3 w-3" />
-                      {uc.open_blockers}
-                    </Badge>
-                  )}
-                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      )}
 
       {(data.issues ?? []).length > 0 && (
         <AccountIssues issues={data.issues ?? []} />
@@ -240,7 +228,442 @@ function AccountIssues({ issues }: { issues: AccountIssueOut[] }) {
   );
 }
 
-function AccountPlan({
+// ---------------------------------------------------------------------------
+// Adoption Workflow — "What happens at every stage".
+// Stage columns (U1–U6); tasks colored by lane (border). Edits are held locally
+// and persisted to Lakebase in one shot via the Save button.
+// ---------------------------------------------------------------------------
+
+const ADOPTION_STATUSES: { value: string; label: string }[] = [
+  { value: "not_initiated", label: "Not Initiated" },
+  { value: "na", label: "NA" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "completed", label: "Completed" },
+];
+
+// Lane tone → color: Happy Path = green, Recommended = blue, As Needed = orange.
+const LANE_ACCENT: Record<string, string> = {
+  green: "border-l-green-500",
+  blue: "border-l-blue-500",
+  orange: "border-l-orange-500",
+};
+const LANE_DOT: Record<string, string> = {
+  green: "bg-green-500",
+  blue: "bg-blue-500",
+  orange: "bg-orange-500",
+};
+
+// Reference links shown under specific workflow/security questions (by task key).
+const TASK_RESOURCES: Record<string, { label: string; url: string }[]> = {
+  sec_authority_review: [
+    {
+      label: "Security Authority Review guide",
+      url: "https://docs.google.com/document/d/1t1hZc6gJ6zrVOL9bPuTjAg4C6FLRbZzTPrVsFg3mXas/edit?tab=t.0#heading=h.hq2sxeq7ozii",
+    },
+    {
+      label: "Databricks AI trust & safety",
+      url: "https://docs.databricks.com/aws/en/databricks-ai/databricks-ai-trust",
+    },
+  ],
+};
+
+function StatusRadio({
+  value,
+  onPick,
+}: {
+  value: string;
+  onPick: (v: string) => void;
+}) {
+  return (
+    <div role="radiogroup" className="flex flex-wrap gap-1.5 mt-2">
+      {ADOPTION_STATUSES.map((s) => {
+        const selected = value === s.value;
+        return (
+          <button
+            key={s.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onPick(s.value)}
+            className={cn(
+              "flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors",
+              selected
+                ? "border-primary bg-primary/10 text-foreground font-medium"
+                : "border-border text-muted-foreground hover:bg-accent"
+            )}
+          >
+            <span
+              className={cn(
+                "h-2.5 w-2.5 rounded-full border",
+                selected ? "border-primary bg-primary" : "border-muted-foreground"
+              )}
+            />
+            {s.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function AdoptionStatusIcon({ status }: { status: string }) {
+  // Show an indicator only for answered statuses; Not Initiated stays blank.
+  // Only Completed is colored (green); In Progress / NA are neutral.
+  if (status === "completed")
+    return <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />;
+  if (status === "in_progress")
+    return <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />;
+  if (status === "na")
+    return <MinusCircle className="h-4 w-4 shrink-0 text-muted-foreground" />;
+  return null; // not_initiated → blank
+}
+
+function AdoptionTaskCard({
+  task,
+  tone,
+  value,
+  onChange,
+}: {
+  task: AdoptionTaskOut;
+  tone: string;
+  value: { status: string; note: string };
+  onChange: (patch: { status?: string; note?: string }) => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-md border border-l-4 bg-card p-2.5",
+        LANE_ACCENT[tone] ?? "border-l-border"
+      )}
+    >
+      <div className="flex items-start gap-1.5">
+        <AdoptionStatusIcon status={value.status} />
+        <div className="text-xs font-medium leading-snug">{task.label}</div>
+      </div>
+      <StatusRadio value={value.status} onPick={(v) => onChange({ status: v })} />
+      <Textarea
+        value={value.note}
+        onChange={(e) => onChange({ note: e.target.value })}
+        placeholder="Add a note…"
+        className="mt-2 min-h-[38px] text-xs"
+      />
+      {(TASK_RESOURCES[task.key] ?? []).length > 0 && (
+        <div className="mt-2 space-y-1">
+          {TASK_RESOURCES[task.key].map((r) => (
+            <a
+              key={r.url}
+              href={r.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <ExternalLink className="h-3 w-3 shrink-0" />
+              {r.label}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdoptionWorkflow({
+  accountId,
+  workflow,
+  ppStatus,
+}: {
+  accountId: string;
+  workflow: AdoptionWorkflowOut;
+  ppStatus: string;
+}) {
+  const qc = useQueryClient();
+
+  // Hold all task edits locally; persist to Lakebase only on Save.
+  const [edits, setEdits] = useState<Record<string, { status: string; note: string }>>(
+    () => {
+      const m: Record<string, { status: string; note: string }> = {};
+      for (const t of workflow.tasks)
+        m[t.key] = { status: t.status ?? "not_initiated", note: t.note ?? "" };
+      return m;
+    }
+  );
+  const [dirty, setDirty] = useState(false);
+
+  const save = useSaveAdoptionTasks({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getAccountKey({ account_id: accountId }) });
+        qc.invalidateQueries({ queryKey: listAccountsKey() });
+        setDirty(false);
+        toast.success("Responses saved");
+      },
+      onError: () => toast.error("Could not save responses"),
+    },
+  });
+
+  const setField = (key: string, patch: { status?: string; note?: string }) => {
+    setEdits((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+    setDirty(true);
+  };
+
+  const onSave = () =>
+    save.mutate({
+      params: { account_id: accountId },
+      data: {
+        items: Object.entries(edits).map(([task_key, v]) => ({
+          task_key,
+          status: v.status,
+          note: v.note,
+        })),
+      },
+    });
+
+  // Index tasks by lane+stage so each lane renders as one aligned horizontal band
+  // (color row) across the stage columns — matching the workflow slide.
+  const byCell = new Map<string, AdoptionTaskOut[]>();
+  for (const t of workflow.tasks) {
+    const k = `${t.lane}::${t.stage}`;
+    const arr = byCell.get(k);
+    if (arr) arr.push(t);
+    else byCell.set(k, [t]);
+  }
+
+  const gridCols = `repeat(${workflow.stages.length}, minmax(230px, 1fr))`;
+
+  // Prerequisites (Pre-Reqs banner + Security & Review questions) only show when
+  // Partner-Powered AI is NOT enabled; hidden entirely for PP-on accounts.
+  const showPrereqs = !isPpEnabled(ppStatus);
+  const securityTasks = workflow.tasks.filter((t) => t.lane === "security");
+
+  return (
+    <Card className="mb-6">
+      <CardHeader className="pb-3 flex flex-row items-start justify-between gap-4">
+        <div>
+          <CardTitle className="text-base">The Adoption Workflow</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            What happens at every stage — set the status and add notes per task, then
+            Save.
+          </p>
+        </div>
+        <Button
+          onClick={onSave}
+          disabled={save.isPending || !dirty}
+          className="shrink-0"
+        >
+          {save.isPending ? "Saving…" : "Save"}
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {/* Prerequisites — only for accounts where Partner-Powered AI is not on. */}
+        {showPrereqs && (
+          <div className="mb-4">
+            <div className="rounded-md bg-[#0B2026] text-white px-4 py-2.5 text-sm">
+              <span className="font-mono font-semibold tracking-wide mr-2">
+                PRE-REQS · READY?
+              </span>
+              <span className="text-white/80">
+                Determine eligibility — do they have the foundational tech blocks to
+                proceed?
+              </span>
+            </div>
+            {securityTasks.length > 0 && (
+              <div className="mt-3">
+                <h3 className="text-sm font-semibold mb-2">Security &amp; Review</h3>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {securityTasks.map((t) => (
+                    <AdoptionTaskCard
+                      key={t.key}
+                      task={t}
+                      tone=""
+                      value={edits[t.key] ?? { status: "not_initiated", note: "" }}
+                      onChange={(patch) => setField(t.key, patch)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <div style={{ minWidth: 900 }}>
+            {/* Stage header row — U-codes in red */}
+            <div className="grid gap-3 mb-2" style={{ gridTemplateColumns: gridCols }}>
+              {workflow.stages.map((s) => (
+                <div key={s.key} className="px-1">
+                  <div className="text-xs font-bold text-red-600">{s.code}</div>
+                  <div className="text-xs font-medium leading-tight">{s.name}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* One row per lane — aligned color bands across the stage columns */}
+            {workflow.lanes.map((lane) => (
+              <div
+                key={lane.key}
+                className="grid gap-3 py-3 border-t"
+                style={{ gridTemplateColumns: gridCols }}
+              >
+                {workflow.stages.map((s) => {
+                  const cell = byCell.get(`${lane.key}::${s.key}`) ?? [];
+                  return (
+                    <div key={s.key} className="space-y-2">
+                      {cell.length === 0 ? (
+                        <div className="min-h-[24px] flex items-center justify-center text-muted-foreground/40 text-sm">
+                          —
+                        </div>
+                      ) : (
+                        cell.map((t) => (
+                          <AdoptionTaskCard
+                            key={t.key}
+                            task={t}
+                            tone={lane.tone}
+                            value={edits[t.key] ?? { status: "not_initiated", note: "" }}
+                            onChange={(patch) => setField(t.key, patch)}
+                          />
+                        ))
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+
+            {/* Legend — what each border color means */}
+            <div className="flex flex-wrap items-center gap-4 mt-4 pt-3 border-t text-xs">
+              <span className="text-muted-foreground">Border color:</span>
+              {workflow.lanes.map((l) => (
+                <div key={l.key} className="flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      "inline-block h-3 w-3 rounded-sm",
+                      LANE_DOT[l.tone] ?? "bg-border"
+                    )}
+                  />
+                  <span>{l.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+const UC_STAGES: { key: string; code: string }[] = [
+  { key: "u1", code: "U1" },
+  { key: "u2", code: "U2" },
+  { key: "u3", code: "U3" },
+  { key: "u4", code: "U4" },
+  { key: "u5", code: "U5" },
+  { key: "u6", code: "U6" },
+];
+
+// Genie use cases arranged as a horizontal U1–U6 stage flow (matches the
+// Adoption Workflow layout). Read-only — no create option here.
+function UseCaseFlow({ useCases }: { useCases: UseCaseListOut[] }) {
+  const [open, setOpen] = useState(false);
+  const byStage = new Map<string, UseCaseListOut[]>();
+  for (const s of UC_STAGES) byStage.set(s.key, []);
+  for (const uc of useCases) {
+    const arr = byStage.get(uc.stage);
+    if (arr) arr.push(uc);
+    else byStage.set(uc.stage, [uc]);
+  }
+  const gridCols = `repeat(${UC_STAGES.length}, minmax(190px, 1fr))`;
+
+  return (
+    <div className="mb-6">
+      {/* Clickable box — expands to the U1–U6 use-case flow */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between rounded-lg border bg-card px-4 py-3 text-left hover:border-primary/50 transition-colors"
+      >
+        <span className="text-base font-semibold">
+          Genie use cases{" "}
+          <span className="font-normal text-muted-foreground">
+            ({useCases.length})
+          </span>
+        </span>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+
+      {open &&
+        (useCases.length === 0 ? (
+          <Card className="mt-3">
+            <CardContent className="py-10 text-center text-muted-foreground">
+              No Genie use cases synced from GTM for this account yet.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <div style={{ minWidth: 900 }}>
+              {/* Stage header row (U-codes in red) */}
+              <div
+                className="grid gap-3 mb-2"
+                style={{ gridTemplateColumns: gridCols }}
+              >
+                {UC_STAGES.map((s) => (
+                  <div key={s.key} className="text-xs font-bold text-red-600 px-1">
+                    {s.code}
+                  </div>
+                ))}
+              </div>
+              {/* One column per stage */}
+              <div className="grid gap-3" style={{ gridTemplateColumns: gridCols }}>
+                {UC_STAGES.map((s) => {
+                  const list = byStage.get(s.key) ?? [];
+                  return (
+                    <div key={s.key} className="space-y-2">
+                      {list.length === 0 ? (
+                        <div className="min-h-[24px] flex items-center justify-center text-muted-foreground/40 text-sm">
+                          —
+                        </div>
+                      ) : (
+                        list.map((uc) => (
+                          <Link key={uc.id} to="/use-cases/$id" params={{ id: uc.id }}>
+                            <Card className="hover:border-primary/50 transition-colors">
+                              <CardContent className="py-3 px-3">
+                                <div className="text-sm font-medium leading-snug">
+                                  {uc.title}
+                                </div>
+                                {(uc.estimated_monthly_dbus ?? 0) > 0 && (
+                                  <div className="text-xs text-muted-foreground mt-0.5">
+                                    {fmtDbus(uc.estimated_monthly_dbus ?? 0)}/mo est. DBU
+                                  </div>
+                                )}
+                                {(uc.open_blockers ?? 0) > 0 && (
+                                  <Badge variant="destructive" className="gap-1 mt-1.5">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    {uc.open_blockers}
+                                  </Badge>
+                                )}
+                              </CardContent>
+                            </Card>
+                          </Link>
+                        ))
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ))}
+    </div>
+  );
+}
+
+// Objections & Blockers — kept as its own card (extracted from the removed
+// "Account action plan"; the other plan groups are no longer shown).
+function ObjectionsBlockers({
   accountId,
   plan,
   issues,
@@ -257,54 +680,31 @@ function AccountPlan({
         qc.invalidateQueries({ queryKey: getAccountKey({ account_id: accountId }) });
         qc.invalidateQueries({ queryKey: listAccountsKey() });
       },
-      onError: () => toast.error("Could not update the plan"),
+      onError: () => toast.error("Could not update"),
     },
   });
-
-  // Group items in declared group order.
-  const groups: { key: string; name: string; items: AccountPlanItemOut[] }[] = [];
-  for (const item of plan) {
-    let g = groups.find((x) => x.key === item.group);
-    if (!g) {
-      g = { key: item.group, name: item.group_name, items: [] };
-      groups.push(g);
-    }
-    g.items.push(item);
-  }
+  const items = plan.filter((p) => p.group === "objections");
+  if (items.length === 0) return null;
 
   return (
     <Card className="mb-6">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Account action plan</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Tailored to this account from its signals — Partner-Powered AI, identity,
-          UCO stages, consumption and open issues. Auto items resolve themselves;
-          steps that don't apply are marked N/A; the rest are yours to work.
-        </p>
+        <CardTitle className="text-base">Objections &amp; Blockers</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-5">
-        {groups.map((g) => (
-          <div key={g.key}>
-            <div className="text-xs font-semibold uppercase text-muted-foreground mb-2">
-              {g.name}
-            </div>
-            <div className="space-y-2">
-              {g.items.map((item) => (
-                <PlanRow
-                  key={item.key}
-                  accountId={accountId}
-                  item={item}
-                  issues={item.key === "other_blockers" ? openIssues : []}
-                  onToggle={(done, note) =>
-                    toggle.mutate({
-                      params: { account_id: accountId },
-                      data: { item_key: item.key, done, note },
-                    })
-                  }
-                />
-              ))}
-            </div>
-          </div>
+      <CardContent className="space-y-2">
+        {items.map((item) => (
+          <PlanRow
+            key={item.key}
+            accountId={accountId}
+            item={item}
+            issues={item.key === "other_blockers" ? openIssues : []}
+            onToggle={(done, note) =>
+              toggle.mutate({
+                params: { account_id: accountId },
+                data: { item_key: item.key, done, note },
+              })
+            }
+          />
         ))}
       </CardContent>
     </Card>
@@ -536,6 +936,53 @@ function PartnerPoweredBanner({
           <ExternalLink className="h-3.5 w-3.5" />
           How to enable Partner-Powered AI (docs)
         </a>
+      </div>
+    </div>
+  );
+}
+
+// Enforce status — shown only when Partner-Powered AI is off, directly below the
+// PP banner (mirrors the enforce badge from the old accounts list).
+function EnforceStatus({
+  status,
+  enforce,
+}: {
+  status: string;
+  enforce: string;
+}) {
+  if (status !== "off") return null;
+  // Shown for every PP-off account, including enforce = unknown.
+  const tone = enforceTone(enforce); // bad (on) | warn (off) | muted (unknown)
+  const cls =
+    tone === "bad"
+      ? "border-destructive/50 bg-destructive/5"
+      : tone === "warn"
+        ? "border-amber-600/40 bg-amber-600/5"
+        : "border-border bg-muted/30";
+  const iconCls =
+    tone === "bad"
+      ? "text-destructive"
+      : tone === "warn"
+        ? "text-amber-700 dark:text-amber-400"
+        : "text-muted-foreground";
+  const msg =
+    enforceImplication(enforce, status) ??
+    "Enforce setting is unknown for this account — confirm the account-level Partner-Powered AI enforce setting.";
+  return (
+    <div
+      className={cn(
+        "rounded-lg border p-3 mb-4 flex items-start gap-2 text-sm",
+        cls
+      )}
+    >
+      {enforce === "on" ? (
+        <Lock className={cn("h-4 w-4 shrink-0 mt-0.5", iconCls)} />
+      ) : (
+        <Unlock className={cn("h-4 w-4 shrink-0 mt-0.5", iconCls)} />
+      )}
+      <div>
+        <span className="font-medium">{enforceLabel(enforce)}</span>{" "}
+        <span className="text-muted-foreground">{msg}</span>
       </div>
     </div>
   );

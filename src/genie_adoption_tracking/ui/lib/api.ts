@@ -13,6 +13,7 @@ export class ApiError extends Error {
     }
 }
 export interface AccountDetailOut {
+    adoption?: AdoptionWorkflowOut | null;
     ae_owner: string;
     aim_status?: string;
     aim_ws_enabled?: number;
@@ -94,6 +95,37 @@ export interface AccountPlanToggleIn {
     done?: boolean | null;
     item_key: string;
     note?: string | null;
+}
+export interface AdoptionBulkSaveIn {
+    items: AdoptionTaskUpdateIn[];
+}
+export interface AdoptionLaneOut {
+    key: string;
+    name: string;
+    tone: string;
+}
+export interface AdoptionStageOut {
+    code: string;
+    key: string;
+    name: string;
+}
+export interface AdoptionTaskOut {
+    key: string;
+    label: string;
+    lane: string;
+    note?: string;
+    stage: string;
+    status?: string;
+}
+export interface AdoptionTaskUpdateIn {
+    note?: string | null;
+    status?: string | null;
+    task_key: string;
+}
+export interface AdoptionWorkflowOut {
+    lanes: AdoptionLaneOut[];
+    stages: AdoptionStageOut[];
+    tasks: AdoptionTaskOut[];
 }
 export interface BlockerAggOut {
     category_key: string;
@@ -461,6 +493,138 @@ export function useGetAccountSuspense<TData = {
         queryKey: getAccountKey(options.params),
         queryFn: ()=>getAccount(options.params),
         ...options?.query
+    });
+}
+export interface UpdateAdoptionTaskParams {
+    account_id: string;
+    "X-Forwarded-Host"?: string | null;
+    "X-Forwarded-Preferred-Username"?: string | null;
+    "X-Forwarded-User"?: string | null;
+    "X-Forwarded-Email"?: string | null;
+    "X-Request-Id"?: string | null;
+    "X-Forwarded-Access-Token"?: string | null;
+}
+export const updateAdoptionTask = async (params: UpdateAdoptionTaskParams, data: AdoptionTaskUpdateIn, options?: RequestInit): Promise<{
+    data: AccountDetailOut;
+}> =>{
+    const res = await fetch(`/api/accounts/${params.account_id}/adoption`, {
+        ...options,
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...(params?.["X-Forwarded-Host"] != null && {
+                "X-Forwarded-Host": params["X-Forwarded-Host"]
+            }),
+            ...(params?.["X-Forwarded-Preferred-Username"] != null && {
+                "X-Forwarded-Preferred-Username": params["X-Forwarded-Preferred-Username"]
+            }),
+            ...(params?.["X-Forwarded-User"] != null && {
+                "X-Forwarded-User": params["X-Forwarded-User"]
+            }),
+            ...(params?.["X-Forwarded-Email"] != null && {
+                "X-Forwarded-Email": params["X-Forwarded-Email"]
+            }),
+            ...(params?.["X-Request-Id"] != null && {
+                "X-Request-Id": params["X-Request-Id"]
+            }),
+            ...(params?.["X-Forwarded-Access-Token"] != null && {
+                "X-Forwarded-Access-Token": params["X-Forwarded-Access-Token"]
+            }),
+            ...options?.headers
+        },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export function useUpdateAdoptionTask(options?: {
+    mutation?: UseMutationOptions<{
+        data: AccountDetailOut;
+    }, ApiError, {
+        params: UpdateAdoptionTaskParams;
+        data: AdoptionTaskUpdateIn;
+    }>;
+}) {
+    return useMutation({
+        mutationFn: (vars)=>updateAdoptionTask(vars.params, vars.data),
+        ...options?.mutation
+    });
+}
+export interface SaveAdoptionTasksParams {
+    account_id: string;
+    "X-Forwarded-Host"?: string | null;
+    "X-Forwarded-Preferred-Username"?: string | null;
+    "X-Forwarded-User"?: string | null;
+    "X-Forwarded-Email"?: string | null;
+    "X-Request-Id"?: string | null;
+    "X-Forwarded-Access-Token"?: string | null;
+}
+export const saveAdoptionTasks = async (params: SaveAdoptionTasksParams, data: AdoptionBulkSaveIn, options?: RequestInit): Promise<{
+    data: AccountDetailOut;
+}> =>{
+    const res = await fetch(`/api/accounts/${params.account_id}/adoption/save`, {
+        ...options,
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...(params?.["X-Forwarded-Host"] != null && {
+                "X-Forwarded-Host": params["X-Forwarded-Host"]
+            }),
+            ...(params?.["X-Forwarded-Preferred-Username"] != null && {
+                "X-Forwarded-Preferred-Username": params["X-Forwarded-Preferred-Username"]
+            }),
+            ...(params?.["X-Forwarded-User"] != null && {
+                "X-Forwarded-User": params["X-Forwarded-User"]
+            }),
+            ...(params?.["X-Forwarded-Email"] != null && {
+                "X-Forwarded-Email": params["X-Forwarded-Email"]
+            }),
+            ...(params?.["X-Request-Id"] != null && {
+                "X-Request-Id": params["X-Request-Id"]
+            }),
+            ...(params?.["X-Forwarded-Access-Token"] != null && {
+                "X-Forwarded-Access-Token": params["X-Forwarded-Access-Token"]
+            }),
+            ...options?.headers
+        },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export function useSaveAdoptionTasks(options?: {
+    mutation?: UseMutationOptions<{
+        data: AccountDetailOut;
+    }, ApiError, {
+        params: SaveAdoptionTasksParams;
+        data: AdoptionBulkSaveIn;
+    }>;
+}) {
+    return useMutation({
+        mutationFn: (vars)=>saveAdoptionTasks(vars.params, vars.data),
+        ...options?.mutation
     });
 }
 export interface ToggleAccountPlanItemParams {

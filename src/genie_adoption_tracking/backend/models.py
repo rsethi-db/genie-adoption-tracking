@@ -98,6 +98,50 @@ class AccountOut(BaseModel):
 
 
 # --------------------------------------------------------------------------------------
+# Adoption Workflow (stage × lane matrix, per-account status + note)
+# --------------------------------------------------------------------------------------
+
+
+class AdoptionStageOut(BaseModel):
+    key: str
+    code: str
+    name: str
+
+
+class AdoptionLaneOut(BaseModel):
+    key: str
+    name: str
+    tone: str  # lava | navy | amber — maps to the app accent colors
+
+
+class AdoptionTaskOut(BaseModel):
+    key: str
+    stage: str
+    lane: str
+    label: str
+    status: str = "not_initiated"  # not_initiated | na | in_progress | completed
+    note: str = ""
+
+
+class AdoptionWorkflowOut(BaseModel):
+    stages: list[AdoptionStageOut]
+    lanes: list[AdoptionLaneOut]
+    tasks: list[AdoptionTaskOut]
+
+
+class AdoptionTaskUpdateIn(BaseModel):
+    task_key: str
+    status: str | None = None
+    note: str | None = None
+
+
+class AdoptionBulkSaveIn(BaseModel):
+    """Save the whole questionnaire in one shot (Save button)."""
+
+    items: list[AdoptionTaskUpdateIn]
+
+
+# --------------------------------------------------------------------------------------
 # Use cases
 # --------------------------------------------------------------------------------------
 
@@ -134,6 +178,7 @@ class AccountDetailOut(BaseModel):
     use_cases: list["UseCaseListOut"]
     plan: list["AccountPlanItemOut"] = []
     issues: list["AccountIssueOut"] = []
+    adoption: "AdoptionWorkflowOut | None" = None
 
 
 class AccountIssueOut(BaseModel):

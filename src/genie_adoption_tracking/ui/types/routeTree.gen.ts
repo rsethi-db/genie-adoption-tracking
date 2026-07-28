@@ -9,28 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './../routes/__root'
-import { Route as UseCasesRouteImport } from './../routes/use-cases'
-import { Route as PlaybookRouteImport } from './../routes/playbook'
-import { Route as DashboardRouteImport } from './../routes/dashboard'
-import { Route as AccountsRouteImport } from './../routes/accounts'
 import { Route as IndexRouteImport } from './../routes/index'
+import { Route as AccountsRouteImport } from './../routes/accounts'
+import { Route as DashboardRouteImport } from './../routes/dashboard'
+import { Route as PlaybookRouteImport } from './../routes/playbook'
+import { Route as UseCasesRouteImport } from './../routes/use-cases'
 import { Route as AccountsIndexRouteImport } from './../routes/accounts.index'
-import { Route as UseCasesIdRouteImport } from './../routes/use-cases.$id'
 import { Route as AccountsAccountIdRouteImport } from './../routes/accounts.$accountId'
+import { Route as UseCasesIdRouteImport } from './../routes/use-cases.$id'
 
-const UseCasesRoute = UseCasesRouteImport.update({
-  id: '/use-cases',
-  path: '/use-cases',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PlaybookRoute = PlaybookRouteImport.update({
-  id: '/playbook',
-  path: '/playbook',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountsRoute = AccountsRouteImport.update({
@@ -38,9 +28,19 @@ const AccountsRoute = AccountsRouteImport.update({
   path: '/accounts',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlaybookRoute = PlaybookRouteImport.update({
+  id: '/playbook',
+  path: '/playbook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UseCasesRoute = UseCasesRouteImport.update({
+  id: '/use-cases',
+  path: '/use-cases',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountsIndexRoute = AccountsIndexRouteImport.update({
@@ -48,15 +48,15 @@ const AccountsIndexRoute = AccountsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AccountsRoute,
 } as any)
-const UseCasesIdRoute = UseCasesIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => UseCasesRoute,
-} as any)
 const AccountsAccountIdRoute = AccountsAccountIdRouteImport.update({
   id: '/$accountId',
   path: '/$accountId',
   getParentRoute: () => AccountsRoute,
+} as any)
+const UseCasesIdRoute = UseCasesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => UseCasesRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -131,25 +131,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/use-cases': {
-      id: '/use-cases'
-      path: '/use-cases'
-      fullPath: '/use-cases'
-      preLoaderRoute: typeof UseCasesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/playbook': {
-      id: '/playbook'
-      path: '/playbook'
-      fullPath: '/playbook'
-      preLoaderRoute: typeof PlaybookRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/accounts': {
@@ -159,11 +145,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/playbook': {
+      id: '/playbook'
+      path: '/playbook'
+      fullPath: '/playbook'
+      preLoaderRoute: typeof PlaybookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/use-cases': {
+      id: '/use-cases'
+      path: '/use-cases'
+      fullPath: '/use-cases'
+      preLoaderRoute: typeof UseCasesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/accounts/': {
@@ -173,19 +173,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountsIndexRouteImport
       parentRoute: typeof AccountsRoute
     }
-    '/use-cases/$id': {
-      id: '/use-cases/$id'
-      path: '/$id'
-      fullPath: '/use-cases/$id'
-      preLoaderRoute: typeof UseCasesIdRouteImport
-      parentRoute: typeof UseCasesRoute
-    }
     '/accounts/$accountId': {
       id: '/accounts/$accountId'
       path: '/$accountId'
       fullPath: '/accounts/$accountId'
       preLoaderRoute: typeof AccountsAccountIdRouteImport
       parentRoute: typeof AccountsRoute
+    }
+    '/use-cases/$id': {
+      id: '/use-cases/$id'
+      path: '/$id'
+      fullPath: '/use-cases/$id'
+      preLoaderRoute: typeof UseCasesIdRouteImport
+      parentRoute: typeof UseCasesRoute
     }
   }
 }
