@@ -53,13 +53,14 @@ export function AppShell({
             <div className="flex flex-col leading-tight">
               <span className="text-sm font-semibold">Genie Adoption</span>
               <span className="text-[10px] text-muted-foreground -mt-0.5">
-                Field Playbook Tracker
+                Navigator
               </span>
             </div>
           </Link>
           <nav className="flex items-center gap-1">
             <NavLink to="/accounts" label="Accounts" />
             <NavLink to="/dashboard" label="Signals" />
+            <NavLink to="/campaigns" label="Campaigns" />
             <NavLink to="/playbook" label="Getting Help" />
           </nav>
           <div className="flex-1" />

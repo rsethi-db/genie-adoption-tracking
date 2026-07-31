@@ -64,7 +64,7 @@ function DashboardBody() {
         />
         <StatTile
           icon={<ShieldAlert className="h-4 w-4" />}
-          label="AIM Off"
+          label="No provisioning (AIM/SCIM)"
           value={data.aim_off_accounts ?? 0}
           tone={(data.aim_off_accounts ?? 0) > 0 ? "bad" : undefined}
         />

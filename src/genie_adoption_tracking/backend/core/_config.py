@@ -29,6 +29,10 @@ class AppConfig(BaseSettings):
     )
     app_name: str = Field(default=app_name)
 
+    # Genie Space that backs the in-app chat assistant. Set via
+    # GENIE_ADOPTION_TRACKING_GENIE_SPACE_ID (see app.yml / .env). Empty = chat disabled.
+    genie_space_id: str = Field(default="")
+
     @property
     def static_assets_path(self) -> Path:
         return Path(str(resources.files(app_slug))).joinpath("__dist__")

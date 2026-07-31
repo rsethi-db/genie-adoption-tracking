@@ -33,8 +33,8 @@ LANES: list[dict] = [
     {"key": "as_needed", "name": "As Needed", "tone": "orange"},
 ]
 
-STATUSES = ["not_initiated", "na", "in_progress", "completed"]
-Status = Literal["not_initiated", "na", "in_progress", "completed"]
+STATUSES = ["not_initiated", "na", "in_progress", "completed", "blocked"]
+Status = Literal["not_initiated", "na", "in_progress", "completed", "blocked"]
 DEFAULT_STATUS: Status = "not_initiated"
 
 

@@ -88,6 +88,8 @@ class AccountOut(BaseModel):
     ws_pp_off: int = 0
     aim_status: str = "unknown"
     aim_ws_enabled: int = 0
+    provisioning_status: str = "unknown"
+    provisioning_ws_enabled: int = 0
     genie_active: bool = False
     readiness_pct: int = 0
     open_issues: int = 0
@@ -170,6 +172,8 @@ class AccountDetailOut(BaseModel):
     ws_pp_off: int = 0
     aim_status: str = "unknown"
     aim_ws_enabled: int = 0
+    provisioning_status: str = "unknown"
+    provisioning_ws_enabled: int = 0
     genie_active: bool = False
     readiness_pct: int = 0
     created_at: datetime
@@ -347,3 +351,85 @@ class DashboardOut(BaseModel):
 
 # AccountDetailOut forward-references UseCaseListOut (defined above), resolve it.
 AccountDetailOut.model_rebuild()
+
+
+# --------------------------------------------------------------------------------------
+# Campaigns — leadership push to account teams
+# --------------------------------------------------------------------------------------
+
+
+class SegmentOut(BaseModel):
+    key: str
+    label: str
+    description: str
+    # Pre-fill templates for the compose form (leadership starts from a strong draft).
+    tpl_title: str = ""
+    tpl_ask: str = ""
+    tpl_cta: str = ""
+
+
+class CampaignIn(BaseModel):
+    title: str
+    ask: str
+    cta: str
+    segment: str = "all"
+    sub_vertical: str = ""
+    deadline: str = ""
+    priority: str = "normal"
+
+
+class CampaignTargetOut(BaseModel):
+    account_id: str
+    account_name: str
+    owners: list[str]  # AE/SA/DSA names on the account
+
+
+class CampaignOut(BaseModel):
+    id: str
+    title: str
+    ask: str
+    cta: str
+    segment: str
+    segment_label: str
+    sub_vertical: str = ""
+    deadline: str = ""
+    priority: str = "normal"
+    active: bool = True
+    created_at: datetime
+    created_by: str = ""
+    target_count: int = 0
+    # Populated on detail/preview only (not the list), to keep the feed light.
+    targets: list[CampaignTargetOut] = []
+    mailto_url: str = ""
+    slack_text: str = ""
+
+
+class CampaignPreviewOut(BaseModel):
+    target_count: int
+    targets: list[CampaignTargetOut] = []
+
+
+# --------------------------------------------------------------------------------------
+# Genie chat assistant
+# --------------------------------------------------------------------------------------
+
+
+class GenieStatusOut(BaseModel):
+    enabled: bool
+
+
+class GenieAskIn(BaseModel):
+    question: str
+    # Continue an existing conversation (multi-turn) when provided.
+    conversation_id: str | None = None
+    # Tailor answers to a specific account (context injected into the first turn).
+    account_id: str | None = None
+
+
+class GenieAnswerOut(BaseModel):
+    conversation_id: str
+    message_id: str
+    text: str
+    sql: str | None = None
+    columns: list[str] = []
+    rows: list[list[str]] = []

@@ -192,13 +192,16 @@ FROM fins f
 GROUP BY f.account_name
 """
 
-# Automatic Identity Management (AIM) per account, from the GTM Genie-ready report
-# (same source the dashboard uses). We derive on/partial/off from the share of
-# workspaces with AIM enabled.
+# User provisioning per account, from the GTM Genie-ready report (same source the
+# Genie Ready dashboard uses). Per the Genie Ready FAQ, the readiness criterion is
+# "User Provisioning — AIM OR SCIM": AIM is preferred, but SCIM provisioning is an
+# acceptable path. So we pull BOTH the AIM workspace count and the broader
+# `workspaces_with_user_provisioning` count (any provisioning = AIM or SCIM).
 AIM_QUERY = """
 SELECT g.account_name,
   COALESCE(g.total_workspaces, 0) AS total_ws,
-  COALESCE(g.workspaces_with_aim_enabled, 0) AS aim_ws
+  COALESCE(g.workspaces_with_aim_enabled, 0) AS aim_ws,
+  COALESCE(g.workspaces_with_user_provisioning, 0) AS prov_ws
 FROM main.gtm_gold.rpt_account_genie_ready g
 JOIN (
   SELECT DISTINCT account_name FROM main.gtm_silver.account_dim
@@ -417,23 +420,38 @@ def fetch_issues(ws) -> list[dict]:
     return rows
 
 
+def _prov_status(total_ws: int, enabled_ws: int) -> str:
+    """on / partial / off / unknown from a workspace-enabled share."""
+    if total_ws == 0:
+        return "unknown"
+    if enabled_ws == 0:
+        return "off"
+    if enabled_ws >= total_ws:
+        return "on"
+    return "partial"
+
+
 def fetch_aim(ws) -> dict[str, dict]:
-    """Map account_name -> {aim_status, aim_ws_enabled}."""
+    """Map account_name -> AIM + user-provisioning (AIM or SCIM) signals.
+
+    Returns aim_status/aim_ws_enabled (AIM specifically) plus provisioning_status/
+    provisioning_ws_enabled (ANY provisioning = AIM or SCIM). The readiness criterion
+    is AIM-or-SCIM, so provisioning_* is what drives 'ready'; aim_* is kept to still
+    show whether the preferred method (AIM) is in place.
+    """
     out: dict[str, dict] = {}
     for r in _run_query(ws, AIM_QUERY):
-        name, total_ws, aim_ws = r[0], int(r[1] or 0), int(r[2] or 0)
-        if total_ws == 0:
-            status = "unknown"
-        elif aim_ws == 0:
-            status = "off"
-        elif aim_ws >= total_ws:
-            status = "on"
-        else:
-            status = "partial"
-        # If multiple report rows per account, keep the most-enabled.
+        name = r[0]
+        total_ws, aim_ws, prov_ws = int(r[1] or 0), int(r[2] or 0), int(r[3] or 0)
+        # If multiple report rows per account, keep the most-provisioned.
         prev = out.get(name)
-        if prev is None or aim_ws > prev["aim_ws_enabled"]:
-            out[name] = {"aim_status": status, "aim_ws_enabled": aim_ws}
+        if prev is None or prov_ws > prev.get("provisioning_ws_enabled", -1):
+            out[name] = {
+                "aim_status": _prov_status(total_ws, aim_ws),
+                "aim_ws_enabled": aim_ws,
+                "provisioning_status": _prov_status(total_ws, prov_ws),
+                "provisioning_ws_enabled": prov_ws,
+            }
     return out
 
 
@@ -563,6 +581,8 @@ def main() -> None:
                     ws_pp_off=ws_row.get("ws_pp_off", 0),
                     aim_status=aim_row.get("aim_status", "unknown"),
                     aim_ws_enabled=aim_row.get("aim_ws_enabled", 0),
+                    provisioning_status=aim_row.get("provisioning_status", "unknown"),
+                    provisioning_ws_enabled=aim_row.get("provisioning_ws_enabled", 0),
                     genie_active=pp_row.get("genie_active", False),
                     created_by=SEED_MARKER,
                 )

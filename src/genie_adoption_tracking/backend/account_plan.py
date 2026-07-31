@@ -67,7 +67,7 @@ ITEMS: list[PlanItem] = [
     {"key": "sec_review", "group": "ai_platform",
      "label": "AI Security Review completed", "derive": "sec_review", "note": False},
     {"key": "aim_enabled", "group": "ai_platform",
-     "label": "Automatic Identity Management enabled", "derive": "aim", "note": False},
+     "label": "User provisioning (AIM or SCIM) in place", "derive": "provisioning", "note": False},
 
     # --- Awareness & Discovery ---
     {"key": "awareness_demo", "group": "awareness",
@@ -108,6 +108,8 @@ class AccountFacts:
     pp_enabled: bool
     aim_status: str
     aim_ws_enabled: int
+    provisioning_status: str
+    provisioning_ws_enabled: int
     uc_count: int
     max_stage_order: int  # -1 if no use cases
     genie_active: bool
@@ -145,15 +147,31 @@ def resolve_item(
             else "Partner-Powered AI is OFF — Genie can't consume",
         )
 
-    if d == "aim":
-        if facts.aim_status == "on":
-            return ResolvedItem(True, "done", True, "AIM enabled on all workspaces")
-        if facts.aim_status == "partial":
+    if d == "provisioning":
+        # Genie-ready criterion: account-level user provisioning via AIM OR SCIM.
+        # AIM is preferred; SCIM is an acceptable path. `provisioning_status` reflects
+        # ANY provisioning; `aim_status` tells us whether the preferred method is used.
+        aim_note = (
+            " (via AIM)"
+            if facts.aim_status in ("on", "partial")
+            else " (via SCIM)"
+        )
+        if facts.provisioning_status == "on":
+            return ResolvedItem(
+                True, "done", True,
+                f"User provisioning enabled on all workspaces{aim_note}",
+            )
+        if facts.provisioning_status == "partial":
             return ResolvedItem(
                 True, "in_progress", True,
-                f"AIM on {facts.aim_ws_enabled} workspace(s) — not all",
+                f"Provisioning on {facts.provisioning_ws_enabled} workspace(s) — "
+                f"not all{aim_note}",
             )
-        return ResolvedItem(True, "todo", True, "Automatic Identity Management is off")
+        return ResolvedItem(
+            True, "todo", True,
+            "No user provisioning (AIM or SCIM) detected — set up account-level "
+            "provisioning",
+        )
 
     if d == "sec_review":
         # Not needed once Partner-Powered AI is already enabled.

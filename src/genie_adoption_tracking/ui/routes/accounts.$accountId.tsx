@@ -8,6 +8,7 @@ import {
   listAccountsKey,
   type AccountPlanItemOut,
   type AccountIssueOut,
+  type AccountDetailOut,
   type AdoptionWorkflowOut,
   type AdoptionTaskOut,
   type UseCaseListOut,
@@ -45,11 +46,14 @@ import {
   PP_OFF_NEXT_STEPS,
   AIM_DOCS_URL,
   AIM_OFF_NEXT_STEPS,
+  GENIE_READY_DOC_URL,
+  GENIE_READY_DASHBOARD_URL,
   enforceImplication,
   enforceLabel,
   enforceTone,
   isPpEnabled,
 } from "@/lib/partner-powered";
+import { openGenieChat } from "@/components/genie-chat";
 
 export const Route = createFileRoute("/accounts/$accountId")({
   component: () => <AccountDetailPage />,
@@ -84,78 +88,105 @@ function AccountDetail({ accountId }: { accountId: string }) {
     query: { select: (d) => d.data },
   });
 
+  const hasIssues = (data.issues ?? []).length > 0;
+
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">{data.name}</h1>
-        <div className="text-sm text-muted-foreground mt-1 flex flex-wrap gap-x-4 gap-y-1">
-          {data.sub_vertical && <span>{data.sub_vertical}</span>}
-          {data.ae_owner && <span>AE · {data.ae_owner}</span>}
-          {data.sa_owner && <span>SA · {data.sa_owner}</span>}
-          {data.dsa_owner && <span>DSA · {data.dsa_owner}</span>}
-        </div>
-        <div className="flex items-center gap-3 mt-3 text-sm">
-          {data.monthly_dbus > 0 && (
-            <span className="text-emerald-700 dark:text-emerald-400 font-medium">
-              {fmtDbus(data.monthly_dbus)}/mo est. DBU
-            </span>
-          )}
-          {data.open_blockers > 0 && (
-            <Badge variant="destructive" className="gap-1">
-              <AlertTriangle className="h-3 w-3" />
-              {data.open_blockers} open blocker
-              {data.open_blockers === 1 ? "" : "s"}
-            </Badge>
-          )}
-        </div>
-        <div className="mt-4 max-w-md">
-          <div className="flex justify-between text-xs mb-1">
-            <span className="text-muted-foreground">Account readiness</span>
-            <span className="font-medium">{data.readiness_pct ?? 0}%</span>
+      {/* Header */}
+      <div className="mb-4">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold">{data.name}</h1>
+            <div className="text-sm text-muted-foreground mt-1 flex flex-wrap gap-x-4 gap-y-1">
+              {data.sub_vertical && <span>{data.sub_vertical}</span>}
+              {data.ae_owner && <span>AE · {data.ae_owner}</span>}
+              {data.sa_owner && <span>SA · {data.sa_owner}</span>}
+              {data.dsa_owner && <span>DSA · {data.dsa_owner}</span>}
+            </div>
+            <div className="flex items-center gap-3 mt-3 text-sm">
+              {data.monthly_dbus > 0 && (
+                <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                  {fmtDbus(data.monthly_dbus)}/mo est. DBU
+                </span>
+              )}
+              {data.open_blockers > 0 && (
+                <Badge variant="destructive" className="gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  {data.open_blockers} open blocker
+                  {data.open_blockers === 1 ? "" : "s"}
+                </Badge>
+              )}
+            </div>
           </div>
-          <Progress value={data.readiness_pct ?? 0} />
+          <Button
+            variant="outline"
+            className="gap-2 shrink-0"
+            onClick={() =>
+              openGenieChat(`What should I focus on next with ${data.name}?`)
+            }
+          >
+            <Sparkles className="h-4 w-4" /> Ask about this account
+          </Button>
         </div>
       </div>
 
-      <PartnerPoweredBanner
-        status={data.pp_status ?? "unknown"}
-        enforce={data.pp_enforce ?? "unknown"}
-        wsOn={data.ws_pp_on ?? 0}
-        wsOff={data.ws_pp_off ?? 0}
-        wsTotal={data.ws_total ?? 0}
-      />
+      {/* Sticky in-page section nav */}
+      <SectionNav hasIssues={hasIssues} />
 
-      <EnforceStatus
-        status={data.pp_status ?? "unknown"}
-        enforce={data.pp_enforce ?? "unknown"}
-      />
+      {/* Readiness & eligibility — one compact card replacing the 3 stacked banners */}
+      <section id="sec-overview" className="scroll-mt-32">
+        <ReadinessEligibility data={data} />
+      </section>
 
-      <AimBanner
-        status={data.aim_status ?? "unknown"}
-        enabled={data.aim_ws_enabled ?? 0}
-        total={data.ws_total ?? 0}
-      />
+      <section id="sec-workflow" className="scroll-mt-32">
+        {data.adoption && (
+          <AdoptionWorkflow
+            accountId={data.id}
+            accountName={data.name}
+            workflow={data.adoption}
+            ppStatus={data.pp_status ?? "unknown"}
+          />
+        )}
+      </section>
 
-      {data.adoption && (
-        <AdoptionWorkflow
+      <section id="sec-usecases" className="scroll-mt-32">
+        <UseCaseFlow useCases={data.use_cases} />
+      </section>
+
+      <section id="sec-risks" className="scroll-mt-32">
+        <ObjectionsBlockers
           accountId={data.id}
-          workflow={data.adoption}
-          ppStatus={data.pp_status ?? "unknown"}
+          plan={data.plan ?? []}
+          issues={data.issues ?? []}
         />
-      )}
 
-      <UseCaseFlow useCases={data.use_cases} />
-
-      <ObjectionsBlockers
-        accountId={data.id}
-        plan={data.plan ?? []}
-        issues={data.issues ?? []}
-      />
-
-      {(data.issues ?? []).length > 0 && (
-        <AccountIssues issues={data.issues ?? []} />
-      )}
+        {hasIssues && <AccountIssues issues={data.issues ?? []} />}
+      </section>
     </div>
+  );
+}
+
+// Sticky within-page navigation so the SA can jump straight to the workflow rather
+// than scrolling past the eligibility banners every time.
+function SectionNav({ hasIssues }: { hasIssues: boolean }) {
+  const links: { id: string; label: string }[] = [
+    { id: "sec-overview", label: "Overview" },
+    { id: "sec-workflow", label: "Workflow" },
+    { id: "sec-usecases", label: "Use cases" },
+    { id: "sec-risks", label: hasIssues ? "Risks & issues" : "Risks" },
+  ];
+  return (
+    <nav className="sticky top-16 z-30 -mx-4 px-4 py-2 bg-background/90 backdrop-blur-sm border-b mb-4 flex flex-wrap gap-1">
+      {links.map((l) => (
+        <a
+          key={l.id}
+          href={`#${l.id}`}
+          className="px-3 py-1.5 text-sm rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+        >
+          {l.label}
+        </a>
+      ))}
+    </nav>
   );
 }
 
@@ -239,6 +270,7 @@ const ADOPTION_STATUSES: { value: string; label: string }[] = [
   { value: "na", label: "NA" },
   { value: "in_progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
+  { value: "blocked", label: "Blocked" },
 ];
 
 // Lane tone → color: Happy Path = green, Recommended = blue, As Needed = orange.
@@ -278,6 +310,8 @@ function StatusRadio({
     <div role="radiogroup" className="flex flex-wrap gap-1.5 mt-2">
       {ADOPTION_STATUSES.map((s) => {
         const selected = value === s.value;
+        // Blocked selects in destructive red to stand out from the other statuses.
+        const isBlocked = s.value === "blocked";
         return (
           <button
             key={s.value}
@@ -288,14 +322,20 @@ function StatusRadio({
             className={cn(
               "flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors",
               selected
-                ? "border-primary bg-primary/10 text-foreground font-medium"
+                ? isBlocked
+                  ? "border-destructive bg-destructive/10 text-destructive font-medium"
+                  : "border-primary bg-primary/10 text-foreground font-medium"
                 : "border-border text-muted-foreground hover:bg-accent"
             )}
           >
             <span
               className={cn(
                 "h-2.5 w-2.5 rounded-full border",
-                selected ? "border-primary bg-primary" : "border-muted-foreground"
+                selected
+                  ? isBlocked
+                    ? "border-destructive bg-destructive"
+                    : "border-primary bg-primary"
+                  : "border-muted-foreground"
               )}
             />
             {s.label}
@@ -308,9 +348,11 @@ function StatusRadio({
 
 function AdoptionStatusIcon({ status }: { status: string }) {
   // Show an indicator only for answered statuses; Not Initiated stays blank.
-  // Only Completed is colored (green); In Progress / NA are neutral.
+  // Completed = green, Blocked = red, In Progress / NA are neutral.
   if (status === "completed")
     return <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />;
+  if (status === "blocked")
+    return <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />;
   if (status === "in_progress")
     return <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />;
   if (status === "na")
@@ -323,17 +365,20 @@ function AdoptionTaskCard({
   tone,
   value,
   onChange,
+  accountName,
 }: {
   task: AdoptionTaskOut;
   tone: string;
   value: { status: string; note: string };
   onChange: (patch: { status?: string; note?: string }) => void;
+  accountName: string;
 }) {
+  const blocked = value.status === "blocked";
   return (
     <div
       className={cn(
         "rounded-md border border-l-4 bg-card p-2.5",
-        LANE_ACCENT[tone] ?? "border-l-border"
+        blocked ? "border-l-destructive ring-1 ring-destructive/30" : LANE_ACCENT[tone] ?? "border-l-border"
       )}
     >
       <div className="flex items-start gap-1.5">
@@ -347,6 +392,22 @@ function AdoptionTaskCard({
         placeholder="Add a note…"
         className="mt-2 min-h-[38px] text-xs"
       />
+      {/* When a task is blocked, offer a one-click path to Genie for how to get
+          unstuck — pre-filled with the task + account so the answer is specific. */}
+      {blocked && (
+        <button
+          type="button"
+          onClick={() =>
+            openGenieChat(
+              `${accountName} is blocked on "${task.label}". How do I get unstuck? What play, demo, or resource should I use?`
+            )
+          }
+          className="mt-2 inline-flex items-center gap-1 text-xs text-destructive hover:underline font-medium"
+        >
+          <Sparkles className="h-3 w-3 shrink-0" />
+          Ask Genie how to get unstuck
+        </button>
+      )}
       {(TASK_RESOURCES[task.key] ?? []).length > 0 && (
         <div className="mt-2 space-y-1">
           {TASK_RESOURCES[task.key].map((r) => (
@@ -369,10 +430,12 @@ function AdoptionTaskCard({
 
 function AdoptionWorkflow({
   accountId,
+  accountName,
   workflow,
   ppStatus,
 }: {
   accountId: string;
+  accountName: string;
   workflow: AdoptionWorkflowOut;
   ppStatus: string;
 }) {
@@ -435,23 +498,47 @@ function AdoptionWorkflow({
   const showPrereqs = !isPpEnabled(ppStatus);
   const securityTasks = workflow.tasks.filter((t) => t.lane === "security");
 
+  const blockedCount = Object.values(edits).filter(
+    (e) => e.status === "blocked"
+  ).length;
+  const unsavedCount = Object.entries(edits).filter(([key, e]) => {
+    const orig = workflow.tasks.find((t) => t.key === key);
+    return (
+      (orig?.status ?? "not_initiated") !== e.status ||
+      (orig?.note ?? "") !== e.note
+    );
+  }).length;
+
   return (
     <Card className="mb-6">
-      <CardHeader className="pb-3 flex flex-row items-start justify-between gap-4">
+      {/* Sticky header — stays visible while working down the tall matrix so the
+          Save button (and unsaved / blocked counts) are always reachable. */}
+      <CardHeader className="pb-3 sticky top-16 z-20 bg-card/95 backdrop-blur-sm rounded-t-xl border-b flex flex-row items-start justify-between gap-4">
         <div>
           <CardTitle className="text-base">The Adoption Workflow</CardTitle>
           <p className="text-sm text-muted-foreground">
             What happens at every stage — set the status and add notes per task, then
             Save.
           </p>
+          {blockedCount > 0 && (
+            <span className="mt-1.5 inline-flex items-center gap-1 text-xs text-destructive font-medium">
+              <AlertTriangle className="h-3 w-3" />
+              {blockedCount} blocked task{blockedCount === 1 ? "" : "s"}
+            </span>
+          )}
         </div>
-        <Button
-          onClick={onSave}
-          disabled={save.isPending || !dirty}
-          className="shrink-0"
-        >
-          {save.isPending ? "Saving…" : "Save"}
-        </Button>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <Button onClick={onSave} disabled={save.isPending || !dirty}>
+            {save.isPending
+              ? "Saving…"
+              : unsavedCount > 0
+                ? `Save (${unsavedCount})`
+                : "Save"}
+          </Button>
+          {dirty && !save.isPending && (
+            <span className="text-[10px] text-muted-foreground">Unsaved changes</span>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         {/* Prerequisites — only for accounts where Partner-Powered AI is not on. */}
@@ -477,6 +564,7 @@ function AdoptionWorkflow({
                       tone=""
                       value={edits[t.key] ?? { status: "not_initiated", note: "" }}
                       onChange={(patch) => setField(t.key, patch)}
+                      accountName={accountName}
                     />
                   ))}
                 </div>
@@ -520,6 +608,7 @@ function AdoptionWorkflow({
                             tone={lane.tone}
                             value={edits[t.key] ?? { status: "not_initiated", note: "" }}
                             onChange={(patch) => setField(t.key, patch)}
+                            accountName={accountName}
                           />
                         ))
                       )}
@@ -842,24 +931,236 @@ function WsCounts({
   );
 }
 
+// One compact "Readiness & eligibility" card that replaces the three full-width
+// stacked banners (PP / Enforce / AIM). Shows the readiness bar with an expandable
+// plan breakdown, plus a status strip for the eligibility signals — each row expands
+// to the full banner detail (next steps, docs links) on demand.
+function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const pp = data.pp_status ?? "unknown";
+  const ppEnabled = isPpEnabled(pp);
+  const aim = data.aim_status ?? "unknown";
+  // User-provisioning readiness = AIM OR SCIM (provisioning_status is the broader
+  // "any provisioning" signal); aim tells us whether the preferred method is used.
+  const prov = data.provisioning_status ?? "unknown";
+  const plan = data.plan ?? [];
+  const applicable = plan.filter((p) => p.applicable);
+  const done = applicable.filter((p) => p.status === "done");
+  const remaining = applicable.filter((p) => p.status !== "done");
+
+  const toggle = (k: string) => setExpanded((e) => (e === k ? null : k));
+
+  const ppTone: RowTone = ppEnabled ? "good" : pp === "off" ? "bad" : "warn";
+  const provTone: RowTone =
+    prov === "on" ? "good" : prov === "off" ? "bad" : "warn";
+  const showEnforce = pp === "off";
+  const enfTone: RowTone =
+    enforceTone(data.pp_enforce ?? "unknown") === "bad"
+      ? "bad"
+      : enforceTone(data.pp_enforce ?? "unknown") === "warn"
+        ? "warn"
+        : "muted";
+
+  return (
+    <Card className="mb-6">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Readiness &amp; eligibility</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Readiness bar + expandable breakdown */}
+        <div className="max-w-md">
+          <div className="flex justify-between text-xs mb-1">
+            <button
+              type="button"
+              onClick={() => setShowBreakdown((s) => !s)}
+              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+            >
+              Account readiness
+              <ChevronDown
+                className={cn(
+                  "h-3 w-3 transition-transform",
+                  showBreakdown && "rotate-180"
+                )}
+              />
+            </button>
+            <span className="font-medium">
+              {data.readiness_pct ?? 0}%
+              <span className="text-muted-foreground font-normal">
+                {" "}
+                ({done.length}/{applicable.length})
+              </span>
+            </span>
+          </div>
+          <Progress value={data.readiness_pct ?? 0} />
+          {showBreakdown && (
+            <div className="mt-2 grid gap-1 text-xs">
+              {remaining.length === 0 ? (
+                <span className="text-emerald-700 dark:text-emerald-400">
+                  All applicable readiness items are done.
+                </span>
+              ) : (
+                <>
+                  <span className="text-muted-foreground">Still to do:</span>
+                  {remaining.map((p) => (
+                    <span key={p.key} className="flex items-center gap-1.5">
+                      <Circle className="h-3 w-3 text-muted-foreground shrink-0" />
+                      {p.label}
+                    </span>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Eligibility status strip — click a row to see its detail */}
+        <div className="divide-y border-t">
+          <EligibilityRow
+            tone={ppTone}
+            label="Partner-Powered AI"
+            value={
+              ppEnabled
+                ? pp === "on_default"
+                  ? "On (default)"
+                  : "On"
+                : pp === "off"
+                  ? "Off"
+                  : "Unknown"
+            }
+            open={expanded === "pp"}
+            onToggle={() => toggle("pp")}
+          >
+            <PartnerPoweredBanner
+              status={pp}
+              enforce={data.pp_enforce ?? "unknown"}
+              wsOn={data.ws_pp_on ?? 0}
+              wsOff={data.ws_pp_off ?? 0}
+              wsTotal={data.ws_total ?? 0}
+              bare
+            />
+          </EligibilityRow>
+
+          {showEnforce && (
+            <EligibilityRow
+              tone={enfTone}
+              label="PP enforce"
+              value={enforceLabel(data.pp_enforce ?? "unknown")}
+              open={expanded === "enforce"}
+              onToggle={() => toggle("enforce")}
+            >
+              <EnforceStatus
+                status={pp}
+                enforce={data.pp_enforce ?? "unknown"}
+                bare
+              />
+            </EligibilityRow>
+          )}
+
+          <EligibilityRow
+            tone={provTone}
+            label="User provisioning (AIM or SCIM)"
+            value={
+              prov === "on"
+                ? aim === "on" || aim === "partial"
+                  ? "On (AIM)"
+                  : "On (SCIM)"
+                : prov === "partial"
+                  ? "Partial"
+                  : prov === "off"
+                    ? "Off"
+                    : "Unknown"
+            }
+            open={expanded === "prov"}
+            onToggle={() => toggle("prov")}
+          >
+            <ProvisioningBanner
+              status={prov}
+              aimStatus={aim}
+              enabled={data.provisioning_ws_enabled ?? 0}
+              total={data.ws_total ?? 0}
+              bare
+            />
+          </EligibilityRow>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+type RowTone = "good" | "bad" | "warn" | "muted";
+
+const ROW_DOT: Record<RowTone, string> = {
+  good: "bg-emerald-500",
+  bad: "bg-destructive",
+  warn: "bg-amber-500",
+  muted: "bg-muted-foreground/50",
+};
+
+function EligibilityRow({
+  tone,
+  label,
+  value,
+  open,
+  onToggle,
+  children,
+}: {
+  tone: RowTone;
+  label: string;
+  value: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center gap-2.5 py-2.5 text-left"
+      >
+        <span className={cn("h-2 w-2 rounded-full shrink-0", ROW_DOT[tone])} />
+        <span className="text-sm flex-1">{label}</span>
+        <span className="text-sm font-medium">{value}</span>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+      {open && <div className="pb-3">{children}</div>}
+    </div>
+  );
+}
+
 function PartnerPoweredBanner({
   status,
   enforce,
   wsOn,
   wsOff,
   wsTotal,
+  bare = false,
 }: {
   status: string;
   enforce: string;
   wsOn: number;
   wsOff: number;
   wsTotal: number;
+  bare?: boolean;
 }) {
   const implication = enforceImplication(enforce, status);
 
   if (isPpEnabled(status)) {
     return (
-      <div className="rounded-lg border border-emerald-600/40 bg-emerald-600/5 p-4 mb-4">
+      <div
+        className={
+          bare
+            ? "px-0"
+            : "rounded-lg border border-emerald-600/40 bg-emerald-600/5 p-4 mb-4"
+        }
+      >
         <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-medium">
           <ShieldCheck className="h-4 w-4" />
           {status === "on_default"
@@ -878,12 +1179,16 @@ function PartnerPoweredBanner({
   const isOff = status === "off";
   return (
     <div
-      className={[
-        "rounded-lg border p-4 mb-4",
-        isOff
-          ? "border-destructive/50 bg-destructive/5"
-          : "border-amber-600/40 bg-amber-600/5",
-      ].join(" ")}
+      className={
+        bare
+          ? "px-0"
+          : [
+              "rounded-lg border p-4 mb-4",
+              isOff
+                ? "border-destructive/50 bg-destructive/5"
+                : "border-amber-600/40 bg-amber-600/5",
+            ].join(" ")
+      }
     >
       <div
         className={[
@@ -946,9 +1251,11 @@ function PartnerPoweredBanner({
 function EnforceStatus({
   status,
   enforce,
+  bare = false,
 }: {
   status: string;
   enforce: string;
+  bare?: boolean;
 }) {
   if (status !== "off") return null;
   // Shown for every PP-off account, including enforce = unknown.
@@ -971,8 +1278,10 @@ function EnforceStatus({
   return (
     <div
       className={cn(
-        "rounded-lg border p-3 mb-4 flex items-start gap-2 text-sm",
-        cls
+        bare
+          ? "flex items-start gap-2 text-sm"
+          : "rounded-lg border p-3 mb-4 flex items-start gap-2 text-sm",
+        bare ? "" : cls
       )}
     >
       {enforce === "on" ? (
@@ -988,14 +1297,21 @@ function EnforceStatus({
   );
 }
 
-function AimBanner({
+// User provisioning readiness = AIM OR SCIM. `status` is the broader provisioning
+// signal; `aimStatus` tells us whether the preferred method (AIM) is in use so we can
+// name the path and still nudge SCIM→AIM where it helps.
+function ProvisioningBanner({
   status,
+  aimStatus,
   enabled,
   total,
+  bare = false,
 }: {
   status: string;
+  aimStatus: string;
   enabled: number;
   total: number;
+  bare?: boolean;
 }) {
   const count =
     total > 0 ? (
@@ -1004,35 +1320,70 @@ function AimBanner({
         ({enabled.toLocaleString()}/{total.toLocaleString()} workspaces)
       </span>
     ) : null;
+  const viaAim = aimStatus === "on" || aimStatus === "partial";
+  const method = viaAim ? "AIM" : "SCIM";
+
+  const genieReadyLinks = (
+    <div className="flex flex-wrap gap-4 mt-3 text-sm">
+      <a
+        href={GENIE_READY_DOC_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 text-primary hover:underline"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+        go/genieready
+      </a>
+      <a
+        href={GENIE_READY_DASHBOARD_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 text-primary hover:underline"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+        Genie Ready dashboard
+      </a>
+      <a
+        href={AIM_DOCS_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 text-primary hover:underline"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+        AIM docs
+      </a>
+    </div>
+  );
 
   if (status === "on") {
     return (
-      <div className="rounded-lg border border-emerald-600/40 bg-emerald-600/5 p-3 mb-6 text-sm flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-        <ShieldCheck className="h-4 w-4" />
-        <span className="font-medium">Automatic Identity Management: On</span>
-        {count}
+      <div className={bare ? "text-sm" : "rounded-lg border border-emerald-600/40 bg-emerald-600/5 p-3 mb-6 text-sm"}>
+        <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-medium">
+          <ShieldCheck className="h-4 w-4" />
+          User provisioning: On (via {method}){count}
+        </div>
+        {!viaAim && (
+          <p className="text-muted-foreground mt-1">
+            Provisioned via SCIM — meets the Genie-ready criterion. AIM is preferred
+            where available (handles account identity and workspace access in one flow).
+          </p>
+        )}
+        {genieReadyLinks}
       </div>
     );
   }
   if (status === "partial") {
     return (
-      <div className="rounded-lg border border-amber-600/40 bg-amber-600/5 p-3 mb-6 text-sm">
+      <div className={bare ? "text-sm" : "rounded-lg border border-amber-600/40 bg-amber-600/5 p-3 mb-6 text-sm"}>
         <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-medium">
           <ShieldAlert className="h-4 w-4" />
-          Automatic Identity Management: Partial{count}
+          User provisioning: Partial{count}
         </div>
         <p className="text-muted-foreground mt-1">
-          Some workspaces have AIM; enable it everywhere so identities are ready for
-          Genie sharing.{" "}
-          <a
-            href={AIM_DOCS_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="text-primary hover:underline inline-flex items-center gap-1"
-          >
-            <ExternalLink className="h-3 w-3" /> docs
-          </a>
+          Some workspaces have provisioning ({method}); extend it everywhere so
+          identities are ready for Genie sharing.
         </p>
+        {genieReadyLinks}
       </div>
     );
   }
@@ -1040,12 +1391,14 @@ function AimBanner({
   const isOff = status === "off";
   return (
     <div
-      className={[
-        "rounded-lg border p-4 mb-6",
-        isOff
-          ? "border-destructive/50 bg-destructive/5"
-          : "border-amber-600/40 bg-amber-600/5",
-      ].join(" ")}
+      className={
+        bare
+          ? ""
+          : [
+              "rounded-lg border p-4 mb-6",
+              isOff ? "border-destructive/50 bg-destructive/5" : "border-amber-600/40 bg-amber-600/5",
+            ].join(" ")
+      }
     >
       <div
         className={[
@@ -1055,8 +1408,8 @@ function AimBanner({
       >
         <ShieldAlert className="h-4 w-4" />
         {isOff
-          ? "Automatic Identity Management is Off"
-          : "Automatic Identity Management: Unknown"}
+          ? "No user provisioning (AIM or SCIM)"
+          : "User provisioning: Unknown"}
         {count}
       </div>
       <div className="mt-3">
@@ -1072,15 +1425,7 @@ function AimBanner({
           ))}
         </ul>
       </div>
-      <a
-        href={AIM_DOCS_URL}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center gap-1 text-primary hover:underline text-sm mt-3"
-      >
-        <ExternalLink className="h-3.5 w-3.5" />
-        Enable Automatic Identity Management (docs)
-      </a>
+      {genieReadyLinks}
     </div>
   );
 }

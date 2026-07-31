@@ -50,6 +50,10 @@ class Account(SQLModel, table=True):
     # Automatic Identity Management: "on" (all ws) | "partial" | "off" | "unknown".
     aim_status: str = Field(default="unknown")
     aim_ws_enabled: int = Field(default=0)
+    # User provisioning = AIM OR SCIM (the Genie-ready criterion). Broader than AIM:
+    # "on"/"partial"/"off"/"unknown" from the share of workspaces with any provisioning.
+    provisioning_status: str = Field(default="unknown")
+    provisioning_ws_enabled: int = Field(default=0)
     # True if the account consumed Genie in the trailing 2 years (active footprint).
     genie_active: bool = Field(default=False)
     created_at: datetime = Field(default_factory=_utcnow)
@@ -173,5 +177,28 @@ class ResourceClick(SQLModel, table=True):
     use_case_id: str | None = Field(default=None, index=True)
     resource_key: str = Field(index=True)
     stage: str = Field(default="")
+    created_at: datetime = Field(default_factory=_utcnow, index=True)
+    created_by: str = Field(default="")
+
+
+class Campaign(SQLModel, table=True):
+    """A leadership 'push' to account teams: a targeted ask with a clear call-to-action
+    and deadline, aimed at a segment of accounts (e.g. PP AI off, no provisioning).
+
+    Segment is a stored key (resolved to live accounts at read time, so a campaign
+    stays accurate as signals change). Only the campaign definition is persisted here;
+    delivery is via in-app feed + generated mailto/Slack drafts."""
+
+    __tablename__ = "gat_campaign"
+
+    id: str = Field(primary_key=True)
+    title: str = Field(default="")
+    ask: str = Field(default="")  # the body / context
+    cta: str = Field(default="")  # the specific call to action
+    segment: str = Field(default="all", index=True)  # segment key (see campaigns.py)
+    sub_vertical: str = Field(default="")  # optional refinement when segment=sub_vertical
+    deadline: str = Field(default="")  # ISO date string, optional
+    priority: str = Field(default="normal")  # normal | high
+    active: bool = Field(default=True, index=True)
     created_at: datetime = Field(default_factory=_utcnow, index=True)
     created_by: str = Field(default="")

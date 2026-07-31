@@ -6,3 +6,6 @@ env:
   # via libpq PGOPTIONS since we can't ALTER the SP role's default search_path.
   - name: PGOPTIONS
     value: "-c search_path=genie,public"
+  # Genie Space backing the in-app chat assistant (structured gat_* data + docs).
+  - name: GENIE_ADOPTION_TRACKING_GENIE_SPACE_ID
+    value: "01f18cf8c3a61358b44d253c50b35ebe"

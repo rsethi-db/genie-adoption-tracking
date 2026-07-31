@@ -36,16 +36,23 @@ export const PP_OFF_NEXT_STEPS = [
   "Confirm Genie can reach Partner-Powered models, then start the U1 demo.",
 ];
 
-// --- Automatic Identity Management (AIM) ---------------------------------------
-// AIM auto-provisions identities (Entra ID) into Databricks. It's a prerequisite for
-// the smoothest Genie rollout (users/groups available for sharing & governance).
+// --- User provisioning: AIM or SCIM --------------------------------------------
+// The Genie-ready criterion is account-level user provisioning via EITHER Automatic
+// Identity Management (AIM, preferred) OR SCIM (acceptable fallback). Both put
+// users/groups in place for Genie sharing & governance. See go/genieready.
 
 export const AIM_DOCS_URL =
-  "https://docs.databricks.com/aws/en/admin/users-groups/scim/aim";
+  "https://docs.databricks.com/aws/en/admin/users-groups/automatic-identity-management/";
+
+// Field references for the Genie-ready provisioning criterion.
+export const GENIE_READY_DOC_URL = "https://go/genieready";
+export const GENIE_READY_DASHBOARD_URL =
+  "https://home.databricks.com/sales/field-performance/products/genie-and-ai-bi/";
 
 export const AIM_OFF_NEXT_STEPS = [
-  "Enable Automatic Identity Management in the account console → Settings → Identity.",
-  "Confirm Entra ID users/groups are provisioned into the workspace.",
+  "Set up account-level user provisioning — AIM (preferred) or SCIM.",
+  "AIM: enable Automatic Identity Management for the account (Entra/Okta) for just-in-time provisioning.",
+  "SCIM: if AIM isn't available for this cloud/IdP, configure account-level SCIM provisioning instead.",
   "Once identities are in place, share the Genie space with the right business-user groups.",
 ];
 

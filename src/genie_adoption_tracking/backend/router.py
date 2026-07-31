@@ -149,6 +149,8 @@ def _account_facts(session: Session, account: Account) -> account_plan.AccountFa
         pp_enabled=account.pp_status in ("on", "on_default"),
         aim_status=account.aim_status,
         aim_ws_enabled=account.aim_ws_enabled,
+        provisioning_status=account.provisioning_status,
+        provisioning_ws_enabled=account.provisioning_ws_enabled,
         uc_count=len(use_cases),
         max_stage_order=max_order,
         genie_active=account.genie_active,
@@ -246,6 +248,8 @@ def _avg_readiness(session: Session, accounts: Sequence[Account]) -> int:
             pp_enabled=a.pp_status in ("on", "on_default"),
             aim_status=a.aim_status,
             aim_ws_enabled=a.aim_ws_enabled,
+            provisioning_status=a.provisioning_status,
+            provisioning_ws_enabled=a.provisioning_ws_enabled,
             uc_count=len(ucs),
             max_stage_order=max_order,
             genie_active=a.genie_active,
@@ -375,6 +379,8 @@ def list_accounts(session: Dependencies.Session):
             ws_pp_off=a.ws_pp_off,
             aim_status=a.aim_status,
             aim_ws_enabled=a.aim_ws_enabled,
+            provisioning_status=a.provisioning_status,
+            provisioning_ws_enabled=a.provisioning_ws_enabled,
             genie_active=a.genie_active,
             # Not shown on the account lookup; skip the per-account plan resolve
             # (it was an N+1 that ran several Lakebase queries per account).
@@ -491,6 +497,8 @@ def get_account(account_id: str, session: Dependencies.Session):
         ws_pp_off=acct.ws_pp_off,
         aim_status=acct.aim_status,
         aim_ws_enabled=acct.aim_ws_enabled,
+        provisioning_status=acct.provisioning_status,
+        provisioning_ws_enabled=acct.provisioning_ws_enabled,
         genie_active=acct.genie_active,
         readiness_pct=plan_pct,
         created_at=acct.created_at,
@@ -1029,7 +1037,8 @@ def get_dashboard(session: Dependencies.Session):
     live_total = sum(1 for uc in use_cases if uc.stage == "u6")
     total_dbus = round(sum(uc.estimated_monthly_dbus for uc in use_cases), 2)
     pp_off_total = sum(1 for a in accounts if a.pp_status == "off")
-    aim_off_total = sum(1 for a in accounts if a.aim_status == "off")
+    # "Provisioning off" = no user provisioning at all (neither AIM nor SCIM).
+    aim_off_total = sum(1 for a in accounts if a.provisioning_status == "off")
     all_issues = session.exec(select(AccountIssue)).all()
     open_issue_total = sum(1 for i in all_issues if _issue_is_open(i.status))
     accounts_with_issues = len(

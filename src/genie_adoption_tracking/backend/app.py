@@ -4,6 +4,8 @@ from .core import create_app
 # Its lifespan runs after lakebase's (which populates app.state.engine) because the
 # lakebase dependency is imported/registered earlier via .core.
 from . import migrations  # noqa: F401
+from .campaigns import router as campaigns_router
+from .genie import router as genie_router
 from .router import router
 
-app = create_app(routers=[router])
+app = create_app(routers=[router, genie_router, campaigns_router])

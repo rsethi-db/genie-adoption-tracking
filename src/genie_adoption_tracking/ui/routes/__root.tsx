@@ -2,6 +2,7 @@ import { ThemeProvider } from "@/components/apx/theme-provider";
 import { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import { Toaster } from "sonner";
+import { GenieChat } from "@/components/genie-chat";
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -10,6 +11,7 @@ export const Route = createRootRouteWithContext<{
     <ThemeProvider defaultTheme="dark" storageKey="apx-ui-theme">
       <Outlet />
       <Toaster richColors />
+      <GenieChat />
     </ThemeProvider>
   ),
 });
