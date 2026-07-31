@@ -5,10 +5,11 @@ import { selector } from "@/lib/selector";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ExternalLink } from "lucide-react";
-import { LANE_LABELS, LANE_ORDER, LANE_DOT } from "@/lib/playbook-ui";
+import { ExternalLink, Sparkles } from "lucide-react";
+import { openGenieChat } from "@/components/genie-chat";
 
 export const Route = createFileRoute("/playbook")({
   component: () => <PlaybookPage />,
@@ -18,27 +19,46 @@ function PlaybookPage() {
   return (
     <AppShell>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Genie Field Adoption Playbook</h1>
+        <h1 className="text-2xl font-bold">Getting Help</h1>
         <p className="text-sm text-muted-foreground">
-          The full playbook, encoded from the FINS FE Huddle deck. Version{" "}
-          <PlaybookVersion />.
+          Ask Genie for anything you need mid-engagement, or browse the playbook's
+          blocker plays and go/ resources. Version <PlaybookVersion />.
         </p>
       </div>
+
+      {/* Ask Genie is the primary "how do I…" surface — the chat reads this playbook
+          plus the docs and answers tailored to the account you're on. */}
+      <Card className="mb-6 border-primary/40">
+        <CardContent className="py-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold">Ask Genie</div>
+              <div className="text-sm text-muted-foreground">
+                What demo to show, how to handle an objection, hackathon prereqs — ask
+                in plain English.
+              </div>
+            </div>
+          </div>
+          <Button className="gap-2 shrink-0" onClick={() => openGenieChat()}>
+            <Sparkles className="h-4 w-4" /> Ask Genie
+          </Button>
+        </CardContent>
+      </Card>
+
       <Suspense fallback={<Skeleton className="h-96 w-full" />}>
-        <Tabs defaultValue="matrix">
+        <Tabs defaultValue="resources">
           <TabsList>
-            <TabsTrigger value="matrix">Adoption Workflow</TabsTrigger>
-            <TabsTrigger value="blockers">Getting Unstuck</TabsTrigger>
             <TabsTrigger value="resources">Assets & Resources</TabsTrigger>
+            <TabsTrigger value="blockers">Getting Unstuck</TabsTrigger>
           </TabsList>
-          <TabsContent value="matrix" className="mt-4">
-            <MatrixView />
+          <TabsContent value="resources" className="mt-4">
+            <ResourcesView />
           </TabsContent>
           <TabsContent value="blockers" className="mt-4">
             <BlockersView />
-          </TabsContent>
-          <TabsContent value="resources" className="mt-4">
-            <ResourcesView />
           </TabsContent>
         </Tabs>
       </Suspense>
@@ -51,50 +71,6 @@ function PlaybookVersion() {
   return <span className="font-mono">{data.version}</span>;
 }
 
-function MatrixView() {
-  const { data } = useGetPlaybookSuspense(selector());
-  const ordered = [...data.stages].sort((a, b) => a.order - b.order);
-  return (
-    <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-      {ordered.map((stage) => {
-        const items = data.checklist.filter((c) => c.stage === stage.key);
-        const byLane: Record<string, typeof items> = {};
-        for (const it of items) (byLane[it.lane] ||= []).push(it);
-        return (
-          <Card key={stage.key}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Badge variant="secondary" className="font-mono text-xs">
-                  {stage.code}
-                </Badge>
-                {stage.name}
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">{stage.summary}</p>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {LANE_ORDER.filter((l) => byLane[l]?.length).map((lane) => (
-                <div key={lane}>
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground mb-1">
-                    <span className={`h-2 w-2 rounded-full ${LANE_DOT[lane]}`} />
-                    {LANE_LABELS[lane]}
-                  </div>
-                  <ul className="space-y-1">
-                    {byLane[lane].map((it) => (
-                      <li key={it.key} className="text-sm flex gap-1.5">
-                        <span className="text-muted-foreground">·</span>
-                        {it.label}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
 
 function BlockersView() {
   const { data } = useGetPlaybookSuspense(selector());
