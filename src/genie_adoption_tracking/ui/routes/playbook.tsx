@@ -53,12 +53,16 @@ function PlaybookPage() {
           <TabsList>
             <TabsTrigger value="resources">Assets & Resources</TabsTrigger>
             <TabsTrigger value="blockers">Getting Unstuck</TabsTrigger>
+            <TabsTrigger value="contacts">Still stuck? Contacts</TabsTrigger>
           </TabsList>
           <TabsContent value="resources" className="mt-4">
             <ResourcesView />
           </TabsContent>
           <TabsContent value="blockers" className="mt-4">
             <BlockersView />
+          </TabsContent>
+          <TabsContent value="contacts" className="mt-4">
+            <ContactsView />
           </TabsContent>
         </Tabs>
       </Suspense>
@@ -69,6 +73,78 @@ function PlaybookPage() {
 function PlaybookVersion() {
   const { data } = useGetPlaybookSuspense(selector());
   return <span className="font-mono">{data.version}</span>;
+}
+
+// Escalation paths when the field is still stuck after the playbook + Ask Genie.
+// Update these links/handles as the support model evolves.
+const CONTACTS: {
+  title: string;
+  desc: string;
+  action: string;
+  url: string;
+}[] = [
+  {
+    title: "Genie SME / SSA team",
+    desc: "Deep technical help on a specific Genie engagement — accuracy, modeling, evaluation, tricky setups.",
+    action: "Post in #fins-genie-ssa",
+    url: "https://databricks.slack.com/channels/fins-genie-ssa",
+  },
+  {
+    title: "Open an ASQ (Specialist Request)",
+    desc: "Formal specialist help routed to the right SME when you need hands-on support on an account.",
+    action: "Raise an ASQ",
+    url: "https://go/asq",
+  },
+  {
+    title: "Product / Brickroad (PM help)",
+    desc: "Product gaps, roadmap questions, or a blocker that needs PM/engineering attention.",
+    action: "File on Brickroad",
+    url: "https://go/brickroad",
+  },
+  {
+    title: "Security & Trust review",
+    desc: "Questions on Partner-Powered AI enablement, the AI Security Review, or trust/compliance.",
+    action: "Security Authority Review guide",
+    url: "https://docs.databricks.com/aws/en/databricks-ai/databricks-ai-trust",
+  },
+  {
+    title: "App feedback / issues",
+    desc: "Something wrong in this Navigator, a data gap, or an idea to make it better? Let us know.",
+    action: "Share feedback",
+    url: "mailto:?subject=Genie%20Adoption%20Navigator%20feedback",
+  },
+];
+
+function ContactsView() {
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Worked the playbook and asked Genie, but still stuck? Here's who to reach —
+        pick the path that fits.
+      </p>
+      <div className="grid md:grid-cols-2 gap-4">
+        {CONTACTS.map((c) => (
+          <Card key={c.title}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">{c.title}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-sm text-muted-foreground">{c.desc}</p>
+              <a
+                href={c.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                {c.action}
+              </a>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 
