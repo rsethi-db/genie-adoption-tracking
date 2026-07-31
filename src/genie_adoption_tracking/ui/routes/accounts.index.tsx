@@ -12,12 +12,6 @@ export const Route = createFileRoute("/accounts/")({
   component: () => <AccountsPage />,
 });
 
-function fmtDbus(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}k`;
-  return `$${n.toFixed(0)}`;
-}
-
 function AccountsPage() {
   return (
     <AppShell>
@@ -40,19 +34,6 @@ function AccountLookup() {
   const { data: accounts } = useListAccountsSuspense(selector());
   const [q, setQ] = useState("");
 
-  const stats = useMemo(() => {
-    const genie = accounts.filter((a) => (a.use_case_count ?? 0) > 0).length;
-    const ppOff = accounts.filter((a) => a.pp_status === "off").length;
-    const pipeline = accounts.reduce((s, a) => s + (a.monthly_dbus ?? 0), 0);
-    return {
-      total: accounts.length,
-      genie,
-      whitespace: accounts.length - genie,
-      ppOff,
-      pipeline,
-    };
-  }, [accounts]);
-
   const results = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return [];
@@ -71,19 +52,7 @@ function AccountLookup() {
 
   return (
     <div className="space-y-5">
-      {/* Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <StatChip label="FINS accounts" value={String(stats.total)} />
-        <StatChip label="Running Genie" value={String(stats.genie)} />
-        <StatChip label="Whitespace" value={String(stats.whitespace)} />
-        <StatChip
-          label="PP AI Off"
-          value={String(stats.ppOff)}
-          tone={stats.ppOff > 0 ? "bad" : undefined}
-        />
-        <StatChip label="Est. pipeline" value={`${fmtDbus(stats.pipeline)}/mo`} />
-      </div>
-
+      {/* Aggregate metrics live on the Signals page; Accounts is a lookup surface. */}
       {/* Search box */}
       <div className="relative max-w-2xl">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -91,7 +60,7 @@ function AccountLookup() {
           autoFocus
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Type an account name, AE, SA, DSA, or sub-vertical…"
+          placeholder="Type an account name, AE, SA, or DSA…"
           className="pl-9 h-11"
         />
       </div>
@@ -135,38 +104,9 @@ function AccountLookup() {
   );
 }
 
-function StatChip({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "bad";
-}) {
-  return (
-    <div className="rounded-lg border p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div
-        className={[
-          "text-xl font-bold mt-0.5",
-          tone === "bad" ? "text-destructive" : "",
-        ].join(" ")}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
 function Fallback() {
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {[0, 1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} className="h-16 w-full" />
-        ))}
-      </div>
       <Skeleton className="h-11 w-full max-w-2xl" />
     </div>
   );

@@ -160,8 +160,6 @@ function AccountDetail({ accountId }: { accountId: string }) {
           plan={data.plan ?? []}
           issues={data.issues ?? []}
         />
-
-        {hasIssues && <AccountIssues issues={data.issues ?? []} />}
       </section>
     </div>
   );
