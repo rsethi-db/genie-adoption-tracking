@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Suspense, useState } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 import {
   useGetAccountSuspense,
   useToggleAccountPlanItem,
@@ -37,6 +37,7 @@ import {
   ChevronDown,
   Lock,
   Unlock,
+  Ban,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -151,10 +152,6 @@ function AccountDetail({ accountId }: { accountId: string }) {
         plan={data.plan ?? []}
         issues={data.issues ?? []}
       />
-
-      {(data.issues ?? []).length > 0 && (
-        <AccountIssues issues={data.issues ?? []} />
-      )}
     </div>
   );
 }
@@ -184,13 +181,10 @@ const SEVERITY_META: Record<
 function AccountIssues({ issues }: { issues: AccountIssueOut[] }) {
   const openCount = issues.filter((i) => i.is_open).length;
   return (
-    <div className="mt-8">
-      <h2 className="text-lg font-semibold mb-3">
-        Genie issues{" "}
-        <span className="text-sm font-normal text-muted-foreground">
-          ({openCount} open of {issues.length})
-        </span>
-      </h2>
+    <div className="mt-3">
+      <p className="text-xs text-muted-foreground mb-2">
+        {openCount} open of {issues.length}
+      </p>
       <div className="grid gap-2">
         {issues.map((iss) => {
           const sev = SEVERITY_META[iss.severity] ?? {
@@ -240,6 +234,9 @@ const ADOPTION_STATUSES: { value: string; label: string }[] = [
   { value: "in_progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
 ];
+const BLOCKED_STATUS = { value: "blocked", label: "Blocked" };
+// Only these tasks also offer a "Blocked" status (red).
+const BLOCKABLE_TASKS = new Set(["rec_u3_workbench", "hp_u5_aim_ready"]);
 
 // Lane tone → color: Happy Path = green, Recommended = blue, As Needed = orange.
 const LANE_ACCENT: Record<string, string> = {
@@ -267,16 +264,39 @@ const TASK_RESOURCES: Record<string, { label: string; url: string }[]> = {
   ],
 };
 
+// Collapsed-by-default section with a click-to-expand label + chevron
+// (same pattern as the Genie use cases box).
+function Collapsible({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 text-xs font-semibold uppercase text-muted-foreground hover:text-foreground"
+      >
+        {label}
+        <ChevronDown
+          className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {open && <div className="mt-1.5">{children}</div>}
+    </div>
+  );
+}
+
 function StatusRadio({
   value,
+  options,
   onPick,
 }: {
   value: string;
+  options: { value: string; label: string }[];
   onPick: (v: string) => void;
 }) {
   return (
     <div role="radiogroup" className="flex flex-wrap gap-1.5 mt-2">
-      {ADOPTION_STATUSES.map((s) => {
+      {options.map((s) => {
         const selected = value === s.value;
         return (
           <button
@@ -315,6 +335,8 @@ function AdoptionStatusIcon({ status }: { status: string }) {
     return <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />;
   if (status === "na")
     return <MinusCircle className="h-4 w-4 shrink-0 text-muted-foreground" />;
+  if (status === "blocked")
+    return <Ban className="h-4 w-4 shrink-0 text-red-600" />;
   return null; // not_initiated → blank
 }
 
@@ -329,6 +351,9 @@ function AdoptionTaskCard({
   value: { status: string; note: string };
   onChange: (patch: { status?: string; note?: string }) => void;
 }) {
+  const statusOptions = BLOCKABLE_TASKS.has(task.key)
+    ? [...ADOPTION_STATUSES, BLOCKED_STATUS]
+    : ADOPTION_STATUSES;
   return (
     <div
       className={cn(
@@ -340,7 +365,11 @@ function AdoptionTaskCard({
         <AdoptionStatusIcon status={value.status} />
         <div className="text-xs font-medium leading-snug">{task.label}</div>
       </div>
-      <StatusRadio value={value.status} onPick={(v) => onChange({ status: v })} />
+      <StatusRadio
+        value={value.status}
+        options={statusOptions}
+        onPick={(v) => onChange({ status: v })}
+      />
       <Textarea
         value={value.note}
         onChange={(e) => onChange({ note: e.target.value })}
@@ -430,8 +459,8 @@ function AdoptionWorkflow({
 
   const gridCols = `repeat(${workflow.stages.length}, minmax(230px, 1fr))`;
 
-  // Prerequisites (Pre-Reqs banner + Security & Review questions) only show when
-  // Partner-Powered AI is NOT enabled; hidden entirely for PP-on accounts.
+  // Pre-Reqs eligibility banner shows only when Partner-Powered AI is not enabled;
+  // Security & Review (below) shows for ALL accounts.
   const showPrereqs = !isPpEnabled(ppStatus);
   const securityTasks = workflow.tasks.filter((t) => t.lane === "security");
 
@@ -454,34 +483,34 @@ function AdoptionWorkflow({
         </Button>
       </CardHeader>
       <CardContent>
-        {/* Prerequisites — only for accounts where Partner-Powered AI is not on. */}
+        {/* Pre-Reqs eligibility banner — only when Partner-Powered AI is not on. */}
         {showPrereqs && (
+          <div className="rounded-md bg-[#0B2026] text-white px-4 py-2.5 mb-4 text-sm">
+            <span className="font-mono font-semibold tracking-wide mr-2">
+              PRE-REQS · READY?
+            </span>
+            <span className="text-white/80">
+              Determine eligibility — do they have the foundational tech blocks to
+              proceed?
+            </span>
+          </div>
+        )}
+
+        {/* Security & Review — shown for ALL accounts. */}
+        {securityTasks.length > 0 && (
           <div className="mb-4">
-            <div className="rounded-md bg-[#0B2026] text-white px-4 py-2.5 text-sm">
-              <span className="font-mono font-semibold tracking-wide mr-2">
-                PRE-REQS · READY?
-              </span>
-              <span className="text-white/80">
-                Determine eligibility — do they have the foundational tech blocks to
-                proceed?
-              </span>
+            <h3 className="text-sm font-semibold mb-2">Security &amp; Review</h3>
+            <div className="grid gap-2 md:grid-cols-2">
+              {securityTasks.map((t) => (
+                <AdoptionTaskCard
+                  key={t.key}
+                  task={t}
+                  tone=""
+                  value={edits[t.key] ?? { status: "not_initiated", note: "" }}
+                  onChange={(patch) => setField(t.key, patch)}
+                />
+              ))}
             </div>
-            {securityTasks.length > 0 && (
-              <div className="mt-3">
-                <h3 className="text-sm font-semibold mb-2">Security &amp; Review</h3>
-                <div className="grid gap-2 md:grid-cols-2">
-                  {securityTasks.map((t) => (
-                    <AdoptionTaskCard
-                      key={t.key}
-                      task={t}
-                      tone=""
-                      value={edits[t.key] ?? { status: "not_initiated", note: "" }}
-                      onChange={(patch) => setField(t.key, patch)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -672,7 +701,6 @@ function ObjectionsBlockers({
   plan: AccountPlanItemOut[];
   issues: AccountIssueOut[];
 }) {
-  const openIssues = issues.filter((i) => i.is_open);
   const qc = useQueryClient();
   const toggle = useToggleAccountPlanItem({
     mutation: {
@@ -683,13 +711,16 @@ function ObjectionsBlockers({
       onError: () => toast.error("Could not update"),
     },
   });
-  const items = plan.filter((p) => p.group === "objections");
-  if (items.length === 0) return null;
+  // Keep only "Customer objections captured & handled" (with its note); drop
+  // "Open blockers triaged" — it duplicated the Genie issues list, which now
+  // renders as-is directly beneath, inside this card.
+  const items = plan.filter((p) => p.key === "objections");
+  if (items.length === 0 && issues.length === 0) return null;
 
   return (
     <Card className="mb-6">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Objections &amp; Blockers</CardTitle>
+        <CardTitle className="text-lg font-semibold">Objections &amp; Blockers</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         {items.map((item) => (
@@ -697,7 +728,6 @@ function ObjectionsBlockers({
             key={item.key}
             accountId={accountId}
             item={item}
-            issues={item.key === "other_blockers" ? openIssues : []}
             onToggle={(done, note) =>
               toggle.mutate({
                 params: { account_id: accountId },
@@ -706,6 +736,7 @@ function ObjectionsBlockers({
             }
           />
         ))}
+        {issues.length > 0 && <AccountIssues issues={issues} />}
       </CardContent>
     </Card>
   );
@@ -903,10 +934,7 @@ function PartnerPoweredBanner({
       )}
       <WsCounts on={wsOn} off={wsOff} total={wsTotal} />
 
-      <div className="mt-3">
-        <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">
-          Next steps
-        </div>
+      <Collapsible label="Next steps">
         <ul className="space-y-1.5">
           {PP_OFF_NEXT_STEPS.map((step, i) => (
             <li key={i} className="flex gap-2 text-sm">
@@ -915,28 +943,27 @@ function PartnerPoweredBanner({
             </li>
           ))}
         </ul>
-      </div>
-
-      <div className="flex flex-wrap gap-4 mt-3 text-sm">
-        <a
-          href={PP_SECURITY_REVIEW_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-primary hover:underline"
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-          AI Security Review play
-        </a>
-        <a
-          href={PP_DOCS_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-primary hover:underline"
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-          How to enable Partner-Powered AI (docs)
-        </a>
-      </div>
+        <div className="flex flex-wrap gap-4 mt-3 text-sm">
+          <a
+            href={PP_SECURITY_REVIEW_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-primary hover:underline"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            AI Security Review play
+          </a>
+          <a
+            href={PP_DOCS_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-primary hover:underline"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            How to enable Partner-Powered AI (docs)
+          </a>
+        </div>
+      </Collapsible>
     </div>
   );
 }
@@ -1059,10 +1086,7 @@ function AimBanner({
           : "Automatic Identity Management: Unknown"}
         {count}
       </div>
-      <div className="mt-3">
-        <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">
-          Next steps
-        </div>
+      <Collapsible label="Next steps">
         <ul className="space-y-1.5">
           {AIM_OFF_NEXT_STEPS.map((step, i) => (
             <li key={i} className="flex gap-2 text-sm">
@@ -1071,16 +1095,16 @@ function AimBanner({
             </li>
           ))}
         </ul>
-      </div>
-      <a
-        href={AIM_DOCS_URL}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center gap-1 text-primary hover:underline text-sm mt-3"
-      >
-        <ExternalLink className="h-3.5 w-3.5" />
-        Enable Automatic Identity Management (docs)
-      </a>
+        <a
+          href={AIM_DOCS_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-primary hover:underline text-sm mt-3"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Enable Automatic Identity Management (docs)
+        </a>
+      </Collapsible>
     </div>
   );
 }
