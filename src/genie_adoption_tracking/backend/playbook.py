@@ -265,6 +265,8 @@ BLOCKERS: list[dict] = [
 # contextual resource panel. `bucket` groups them on the resources view.
 # --------------------------------------------------------------------------------------
 
+# URLs sourced from the FINS Genie Field Adoption Playbook deck
+# (docs.google.com/presentation/d/1Vbwoj1dHBIGW1t3yIeKT4_9qY0faOTZpa2UsSHp5ojs).
 RESOURCES: list[dict] = [
     # ---- Demo Assets ------------------------------------------------------------------
     {"key": "demo-industry", "bucket": "Demo Assets", "label": "Existing Industry demos",
@@ -272,45 +274,47 @@ RESOURCES: list[dict] = [
     {"key": "demo-solution-builder", "bucket": "Demo Assets", "label": "Build a new demo (Solution Builder)",
      "url": "https://go/solution-builder", "stages": ["u1", "u2"]},
     {"key": "demo-gtm-rooms", "bucket": "Demo Assets", "label": "FS GTM Genie Rooms",
-     "url": "https://go/genie", "stages": ["u1"]},
-    {"key": "demo-mobile", "bucket": "Demo Assets", "label": "Mobile Demos",
-     "url": "https://go/genie", "stages": ["u1"]},
+     "url": "https://fsgtm-genie-7474644662581786.aws.databricksapps.com/", "stages": ["u1"]},
+    {"key": "demo-fevm", "bucket": "Demo Assets", "label": "FINS FEVM Demos",
+     "url": "https://docs.google.com/presentation/d/1uRPa7H39lhRV3xuP1a5GHgGsH4kNYPvInGRw7QV-rhE/edit", "stages": ["u1"]},
     {"key": "demo-workbench", "bucket": "Demo Assets", "label": "Optimizing Genie: Genie Workbench",
-     "url": "https://go/genie", "stages": ["u3", "u5"]},
+     "url": "https://go/genie-workbench", "stages": ["u3", "u5"]},
 
     # ---- Plays ------------------------------------------------------------------------
     {"key": "plays-win-business-user", "bucket": "Plays", "label": "Win Business User Play",
-     "url": "https://go/genie", "stages": ["u1", "u2"]},
+     "url": "https://docs.google.com/presentation/d/1qgix9HjPgRWu-HHUJtf6KArsH3hUDcQI15BLqyz4sns/edit?usp=sharing", "stages": ["u1", "u2"]},
     {"key": "plays-enablement", "bucket": "Plays", "label": "Enablement Resources",
-     "url": "https://go/genie", "stages": ["prereqs", "u1"]},
+     "url": "https://docs.google.com/spreadsheets/d/1BLnZckGYIfH8mTF10-Z9mpXUttrJzkv_PGpfjrUW23M/edit?gid=0#gid=0", "stages": ["prereqs", "u1"]},
     {"key": "plays-aim-migration", "bucket": "Plays", "label": "AIM Migration (Azure)",
-     "url": "https://go/genie", "stages": ["u3", "u4"]},
+     "url": "https://docs.google.com/document/d/10qJClzrZTQLXJULS8nOkB2pveQLwd2JsCRjjWbMIAOI/edit", "stages": ["u3", "u4"]},
     {"key": "plays-aibi-migration", "bucket": "Plays", "label": "AI/BI Dashboard Migration",
-     "url": "https://go/genie", "stages": ["u3", "u4"]},
+     "url": "https://go/bi-migration", "stages": ["u3", "u4"]},
     {"key": "plays-partner-powered", "bucket": "Plays", "label": "Partner Powered Genie Play",
-     "url": "https://go/genie", "stages": ["u2", "u5"]},
+     "url": "https://docs.google.com/presentation/d/1OGrtaSGBACAUBombw_xOCoBs30dD-GEXilVUwaL2Al0/edit", "stages": ["u2", "u5"]},
     {"key": "plays-sts", "bucket": "Plays", "label": "STS Genie Play",
-     "url": "https://go/genie", "stages": ["u2", "u5"]},
+     "url": "https://docs.google.com/presentation/d/1EcxZB5Q5bT3waYUMDM72OcxCEpz6XaXtmJzzPqwSu0E/edit", "stages": ["u2", "u5"]},
 
     # ---- Workshops --------------------------------------------------------------------
     {"key": "workshops-geniewish", "bucket": "Workshops", "label": "Best Practices Genie Workshop",
-     "url": "https://go/geniewish", "stages": ["u2"]},
+     "url": "https://docs.google.com/presentation/d/1qz0vIUW0QsIhGNFDHOVvtUf-g4CPnf9IjN1_P64qt2Q/edit", "stages": ["u2"]},
+    {"key": "workshops-genie-workshop", "bucket": "Workshops", "label": "Genie Workshop",
+     "url": "https://docs.google.com/presentation/d/1Hch4DwjZyvupg8rAhlfPBneKLZBGw04JtELWDNPJzag/edit", "stages": ["u2"]},
+    {"key": "workshops-workshop-in-box", "bucket": "Workshops", "label": "Genie Workshop in a Box",
+     "url": "https://cso-workshop-7474655716427570.aws.databricksapps.com/", "stages": ["u2"]},
     {"key": "workshops-hackathon-box", "bucket": "Workshops", "label": "Hackathon in a Box",
-     "url": "https://go/genie", "stages": ["u4"]},
-    {"key": "workshops-acceleration-hackathon", "bucket": "Workshops", "label": "Genie Acceleration Hackathon",
-     "url": "https://go/genie", "stages": ["u4"]},
+     "url": "https://docs.google.com/document/d/1xbGJAaMS1MGy4Lq53axPOHQpyEXZWNzVIDDPZ1UgWmE/edit", "stages": ["u4"]},
     {"key": "workshops-bia", "bucket": "Workshops", "label": "Business Impact Accelerator",
-     "url": "https://go/genie", "stages": ["u3", "u4"]},
+     "url": "https://go/business-impact-accelerator", "stages": ["u3", "u4"]},
     {"key": "workshops-pricing", "bucket": "Workshops", "label": "Pricing",
      "url": "https://go/geniepricing", "stages": ["u3"]},
 
     # ---- Proof ------------------------------------------------------------------------
     {"key": "proof-genie-ready-dashboard", "bucket": "Proof", "label": "Genie-Ready Dashboard",
-     "url": "https://go/genie", "stages": ["u3"]},
+     "url": "https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f10313a17e11d6b0b11abfa2736836/published/pages/92049d91?o=2548836972759138", "stages": ["u3"]},
     {"key": "proof-blockers-dashboard", "bucket": "Proof", "label": "Blockers Dashboard",
-     "url": "https://go/genie", "stages": ["u5", "u6"]},
-    {"key": "proof-customer-stories", "bucket": "Proof", "label": "Customer Stories (coming soon)",
-     "url": "https://go/genie", "stages": ["u4", "u6"]},
+     "url": "https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f014ecfb601fa19ed40df16a1110ae/published/pages/1e023696?o=2548836972759138", "stages": ["u5", "u6"]},
+    {"key": "proof-customer-stories", "bucket": "Proof", "label": "Customer Stories",
+     "url": "https://docs.google.com/presentation/d/1hLUBBrJ7oC2c5e8IiJiuvonbZ9u7ysw_bh21OFc0TYk/edit?usp=sharing", "stages": ["u4", "u6"]},
 ]
 
 
