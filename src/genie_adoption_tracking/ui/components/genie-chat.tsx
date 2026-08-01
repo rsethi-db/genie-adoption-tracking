@@ -1,8 +1,96 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMatches } from "@tanstack/react-router";
 import { Sparkles, X, Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+// --- Minimal markdown renderer -------------------------------------------------------
+// Genie returns markdown (## headers, **bold**, bullets, [links](url)); render it
+// rather than showing the raw syntax. Small + dependency-free — covers the subset the
+// assistant emits. Inline: **bold** and [text](url).
+function renderInline(text: string, keyBase: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  // Tokenize on **bold** and [label](url).
+  const re = /\*\*([^*]+)\*\*|\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let i = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    if (m[1] !== undefined) {
+      nodes.push(<strong key={`${keyBase}-b${i}`}>{m[1]}</strong>);
+    } else {
+      nodes.push(
+        <a
+          key={`${keyBase}-l${i}`}
+          href={m[3]}
+          target="_blank"
+          rel="noreferrer"
+          className="text-primary underline hover:no-underline"
+        >
+          {m[2]}
+        </a>,
+      );
+    }
+    last = m.index + m[0].length;
+    i++;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
+function Markdown({ text }: { text: string }) {
+  const lines = text.split("\n");
+  const blocks: ReactNode[] = [];
+  let bullets: string[] = [];
+  let key = 0;
+
+  const flushBullets = () => {
+    if (bullets.length === 0) return;
+    const items = bullets;
+    bullets = [];
+    blocks.push(
+      <ul key={`ul${key++}`} className="list-disc pl-5 space-y-1 my-1.5">
+        {items.map((b, j) => (
+          <li key={j}>{renderInline(b, `li${key}-${j}`)}</li>
+        ))}
+      </ul>,
+    );
+  };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const h = /^(#{1,4})\s+(.*)$/.exec(line);
+    const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
+    const numbered = /^\s*\d+\.\s+(.*)$/.exec(line);
+    if (h) {
+      flushBullets();
+      const lvl = h[1].length;
+      const cls =
+        lvl <= 2
+          ? "text-sm font-bold mt-3 mb-1"
+          : "text-xs font-semibold uppercase tracking-wide text-muted-foreground mt-2 mb-1";
+      blocks.push(
+        <div key={`h${key++}`} className={cls}>
+          {renderInline(h[2], `h${key}`)}
+        </div>,
+      );
+    } else if (bullet || numbered) {
+      bullets.push((bullet ?? numbered)![1]);
+    } else if (line.trim() === "") {
+      flushBullets();
+    } else {
+      flushBullets();
+      blocks.push(
+        <p key={`p${key++}`} className="my-1.5">
+          {renderInline(line, `p${key}`)}
+        </p>,
+      );
+    }
+  }
+  flushBullets();
+  return <div className="text-sm leading-relaxed">{blocks}</div>;
+}
 
 // The chat talks to the backend Genie proxy directly via fetch (rather than the
 // generated OpenAPI client) so it stays self-contained and doesn't require a client
@@ -183,13 +271,13 @@ export function GenieChat() {
             >
               <div
                 className={cn(
-                  "rounded-lg px-3 py-2 text-sm max-w-[85%] whitespace-pre-wrap",
+                  "rounded-lg px-3 py-2 text-sm max-w-[85%]",
                   t.role === "user"
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-primary text-primary-foreground whitespace-pre-wrap"
                     : "bg-muted text-foreground",
                 )}
               >
-                {t.text}
+                {t.role === "assistant" ? <Markdown text={t.text} /> : t.text}
                 {t.sql && (
                   <details className="mt-2 text-xs opacity-80">
                     <summary className="cursor-pointer">SQL</summary>
