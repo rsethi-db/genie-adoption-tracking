@@ -272,9 +272,11 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _run_query(ws, statement: str, max_wait_s: int = 600) -> list:
-    """Run a SQL statement and poll until it finishes (heavy queries exceed the
-    50s inline wait). Raises on FAILED/CANCELED so the guard can abort cleanly."""
+def _run_query(ws, statement: str, max_wait_s: int = 1200) -> list:
+    """Run a SQL statement and poll until it finishes. Heavy queries (the
+    prod_settings_log workspace-counts query especially) can exceed 10min on a cold
+    warehouse, so we allow up to 20min. Raises on FAILED/CANCELED so the guard aborts
+    cleanly."""
     import time
 
     resp = ws.statement_execution.execute_statement(
