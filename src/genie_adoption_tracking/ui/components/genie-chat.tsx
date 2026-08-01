@@ -113,16 +113,18 @@ export function GenieChat() {
 
   return (
     <>
-      {/* Launcher */}
-      {!open && (
-        <Button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-6 right-6 z-50 h-12 rounded-full shadow-lg gap-2 pl-4 pr-5"
-        >
-          <Sparkles className="h-4 w-4" />
-          Ask Genie
-        </Button>
-      )}
+      {/* Launcher — toggles the panel (click again to close). Hidden while the panel
+          is open on small screens where the full-width panel covers it. */}
+      <Button
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "fixed bottom-6 right-6 z-[60] h-12 rounded-full shadow-lg gap-2 pl-4 pr-5",
+          open && "hidden sm:inline-flex"
+        )}
+      >
+        {open ? <X className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+        {open ? "Close" : "Ask Genie"}
+      </Button>
 
       {/* Slide-over panel */}
       <div

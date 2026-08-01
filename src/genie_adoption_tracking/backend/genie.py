@@ -108,6 +108,8 @@ def _strip_internal_citations(text: str) -> str:
         return "" if label.strip().isdigit() else label
 
     text = re.sub(r"\[([^\]]*)\]\((https?://[^)]+)\)", _link_repl, text)
+    # Strip bare citation markers Genie leaves behind: \[1\], [2], \[1\]\[2\], etc.
+    text = re.sub(r"(\\?\[\d+\\?\])+", "", text)
     # Clean up the leftover citation scaffolding: "\[ \]", "[]", stray " []".
     text = re.sub(r"\\?\[\s*\\?\]", "", text)
     text = re.sub(r"[ \t]*\[\s*\]", "", text)

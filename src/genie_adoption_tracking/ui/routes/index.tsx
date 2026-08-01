@@ -69,7 +69,7 @@ function Index() {
         <FeatureCard
           icon={<BookOpen className="h-5 w-5" />}
           title="Getting Help"
-          desc="The full stage-by-stage matrix, the five 'Getting Unstuck' blocker categories, and every go/ resource link."
+          desc="Ask Genie for anything, browse the go/ assets & resources and the five 'Getting Unstuck' blocker plays, or find who to contact when you're still stuck."
           to="/playbook"
           cta="Open Getting Help"
         />
