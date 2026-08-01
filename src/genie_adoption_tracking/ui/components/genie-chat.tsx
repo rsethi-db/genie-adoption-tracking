@@ -43,7 +43,11 @@ function Markdown({ text }: { text: string }) {
   const lines = text.split("\n");
   const blocks: ReactNode[] = [];
   let bullets: string[] = [];
+  let tableRows: string[] = [];
   let key = 0;
+
+  const splitCells = (row: string) =>
+    row.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map((c) => c.trim());
 
   const flushBullets = () => {
     if (bullets.length === 0) return;
@@ -58,11 +62,60 @@ function Markdown({ text }: { text: string }) {
     );
   };
 
+  const flushTable = () => {
+    if (tableRows.length === 0) return;
+    const rows = tableRows;
+    tableRows = [];
+    // Drop the separator row (|---|---|).
+    const body = rows.filter((r) => !/^\s*\|?[\s:|-]+\|?\s*$/.test(r));
+    if (body.length === 0) return;
+    const header = splitCells(body[0]);
+    const dataRows = body.slice(1).map(splitCells);
+    blocks.push(
+      <div key={`tbl${key++}`} className="my-2 overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr>
+              {header.map((c, j) => (
+                <th
+                  key={j}
+                  className="border border-border bg-muted/50 px-2 py-1 text-left font-semibold align-top"
+                >
+                  {renderInline(c, `th${key}-${j}`)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {dataRows.map((r, ri) => (
+              <tr key={ri}>
+                {r.map((c, ci) => (
+                  <td key={ci} className="border border-border px-2 py-1 align-top">
+                    {renderInline(c, `td${key}-${ri}-${ci}`)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>,
+    );
+  };
+
+  const isTableRow = (l: string) => /^\s*\|.*\|\s*$/.test(l);
+
   for (const raw of lines) {
     const line = raw.trimEnd();
     const h = /^(#{1,4})\s+(.*)$/.exec(line);
     const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
     const numbered = /^\s*\d+\.\s+(.*)$/.exec(line);
+    if (isTableRow(line)) {
+      flushBullets();
+      tableRows.push(line);
+      continue;
+    }
+    // Any non-table line ends a table in progress.
+    if (tableRows.length) flushTable();
     if (h) {
       flushBullets();
       const lvl = h[1].length;
@@ -89,6 +142,7 @@ function Markdown({ text }: { text: string }) {
     }
   }
   flushBullets();
+  flushTable();
   return <div className="text-sm leading-relaxed">{blocks}</div>;
 }
 
