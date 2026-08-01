@@ -1,16 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Suspense, useMemo, useState } from "react";
-import { useListAccountsSuspense } from "@/lib/api";
-import { selector } from "@/lib/selector";
+import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { Search, ArrowRight } from "lucide-react";
+import { Search, ArrowRight, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/accounts/")({
   component: () => <AccountsPage />,
 });
+
+interface AccountResult {
+  id: string;
+  name: string;
+  sub_vertical?: string;
+  ae_owner?: string;
+  sa_owner?: string;
+  dsa_owner?: string;
+}
 
 function AccountsPage() {
   return (
@@ -21,39 +27,50 @@ function AccountsPage() {
           Look up a FINS account to pull up its Genie adoption workflow.
         </p>
       </div>
-      <Suspense fallback={<Fallback />}>
-        <AccountLookup />
-      </Suspense>
+      <AccountLookup />
     </AppShell>
   );
 }
 
-// Metrics up top, then a search box. Nothing is listed until you search; picking a
-// match pulls up that account's detail page.
+// Server-side search: nothing loads until you type, so the page opens instantly and
+// only the matches (not all ~500 accounts) come over the wire. Queries are debounced.
 function AccountLookup() {
-  const { data: accounts } = useListAccountsSuspense(selector());
   const [q, setQ] = useState("");
+  const [results, setResults] = useState<AccountResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const seq = useRef(0);
 
-  const results = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return [];
-    return accounts
-      .filter(
-        (a) =>
-          a.name.toLowerCase().includes(needle) ||
-          (a.ae_owner ?? "").toLowerCase().includes(needle) ||
-          (a.sa_owner ?? "").toLowerCase().includes(needle) ||
-          (a.dsa_owner ?? "").toLowerCase().includes(needle) ||
-          (a.sub_vertical ?? "").toLowerCase().includes(needle)
-      )
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .slice(0, 25);
-  }, [accounts, q]);
+  useEffect(() => {
+    const needle = q.trim();
+    if (!needle) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const mine = ++seq.current;
+    const t = setTimeout(() => {
+      fetch(`/api/accounts?q=${encodeURIComponent(needle)}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((d) => {
+          // Ignore out-of-order responses (only apply the latest query's result).
+          if (mine === seq.current) {
+            setResults(Array.isArray(d) ? d : []);
+            setLoading(false);
+          }
+        })
+        .catch(() => {
+          if (mine === seq.current) {
+            setResults([]);
+            setLoading(false);
+          }
+        });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q]);
 
   return (
     <div className="space-y-5">
-      {/* Aggregate metrics live on the Signals page; Accounts is a lookup surface. */}
-      {/* Search box */}
       <div className="relative max-w-2xl">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
@@ -63,25 +80,23 @@ function AccountLookup() {
           placeholder="Type an account name, AE, SA, or DSA…"
           className="pl-9 h-11"
         />
+        {loading && (
+          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+        )}
       </div>
 
-      {/* Results (only when searching) */}
       {q.trim() === "" ? (
         <p className="text-sm text-muted-foreground px-1">
           Start typing to look up an account.
         </p>
-      ) : results.length === 0 ? (
+      ) : !loading && results.length === 0 ? (
         <p className="text-sm text-muted-foreground px-1">
           No account matches “{q}”.
         </p>
       ) : (
         <div className="grid gap-2 max-w-2xl">
           {results.map((a) => (
-            <Link
-              key={a.id}
-              to="/accounts/$accountId"
-              params={{ accountId: a.id }}
-            >
+            <Link key={a.id} to="/accounts/$accountId" params={{ accountId: a.id }}>
               <Card className="hover:border-primary/50 transition-colors">
                 <CardContent className="py-3 flex items-center gap-4">
                   <div className="flex-1 min-w-0">
@@ -100,14 +115,6 @@ function AccountLookup() {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function Fallback() {
-  return (
-    <div className="space-y-5">
-      <Skeleton className="h-11 w-full max-w-2xl" />
     </div>
   );
 }

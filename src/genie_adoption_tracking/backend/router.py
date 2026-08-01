@@ -341,9 +341,28 @@ def get_playbook():
 
 
 @router.get("/accounts", response_model=list[AccountOut], operation_id="listAccounts")
-def list_accounts(session: Dependencies.Session):
-    accounts = session.exec(select(Account)).all()
-    use_cases = session.exec(select(UseCase)).all()
+def list_accounts(session: Dependencies.Session, q: str = "", limit: int = 25):
+    """Account lookup. Server-side search: pass `q` to filter by name/owner/sub-vertical
+    (returns up to `limit` matches). Empty `q` returns nothing, so the page loads
+    instantly instead of transferring all ~500 accounts up front."""
+    needle = q.strip().lower()
+    if not needle:
+        return []
+    all_accounts = session.exec(select(Account)).all()
+    accounts = [
+        a
+        for a in all_accounts
+        if needle in a.name.lower()
+        or needle in (a.ae_owner or "").lower()
+        or needle in (a.sa_owner or "").lower()
+        or needle in (a.dsa_owner or "").lower()
+        or needle in (a.sub_vertical or "").lower()
+    ]
+    accounts = sorted(accounts, key=lambda x: x.name.lower())[:limit]
+    matched_ids = {a.id for a in accounts}
+    use_cases = [
+        uc for uc in session.exec(select(UseCase)).all() if uc.account_id in matched_ids
+    ]
     open_blockers = session.exec(
         select(Blocker).where(Blocker.resolved == False)  # noqa: E712
     ).all()

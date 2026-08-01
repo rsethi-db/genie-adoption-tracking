@@ -394,10 +394,19 @@ export interface ValidationError {
 export interface VersionOut {
     version: string;
 }
-export const listAccounts = async (options?: RequestInit): Promise<{
+export interface ListAccountsParams {
+    q?: string;
+    limit?: number;
+}
+export const listAccounts = async (params?: ListAccountsParams, options?: RequestInit): Promise<{
     data: AccountOut[];
 }> =>{
-    const res = await fetch("/api/accounts", {
+    const searchParams = new URLSearchParams();
+    if (params?.q != null) searchParams.set("q", String(params?.q));
+    if (params?.limit != null) searchParams.set("limit", String(params?.limit));
+    const queryString = searchParams.toString();
+    const url = queryString ? `/api/accounts?${queryString}` : "/api/accounts";
+    const res = await fetch(url, {
         ...options,
         method: "GET"
     });
@@ -415,34 +424,37 @@ export const listAccounts = async (options?: RequestInit): Promise<{
         data: await res.json()
     };
 };
-export const listAccountsKey = ()=>{
+export const listAccountsKey = (params?: ListAccountsParams)=>{
     return [
-        "/api/accounts"
+        "/api/accounts",
+        params
     ] as const;
 };
 export function useListAccounts<TData = {
     data: AccountOut[];
 }>(options?: {
+    params?: ListAccountsParams;
     query?: Omit<UseQueryOptions<{
         data: AccountOut[];
     }, ApiError, TData>, "queryKey" | "queryFn">;
 }) {
     return useQuery({
-        queryKey: listAccountsKey(),
-        queryFn: ()=>listAccounts(),
+        queryKey: listAccountsKey(options?.params),
+        queryFn: ()=>listAccounts(options?.params),
         ...options?.query
     });
 }
 export function useListAccountsSuspense<TData = {
     data: AccountOut[];
 }>(options?: {
+    params?: ListAccountsParams;
     query?: Omit<UseSuspenseQueryOptions<{
         data: AccountOut[];
     }, ApiError, TData>, "queryKey" | "queryFn">;
 }) {
     return useSuspenseQuery({
-        queryKey: listAccountsKey(),
-        queryFn: ()=>listAccounts(),
+        queryKey: listAccountsKey(options?.params),
+        queryFn: ()=>listAccounts(options?.params),
         ...options?.query
     });
 }
