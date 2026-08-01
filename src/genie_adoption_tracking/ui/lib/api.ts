@@ -691,6 +691,64 @@ export function useSaveAdoptionTasks(options?: {
         ...options?.mutation
     });
 }
+export interface ListAccountCampaignsParams {
+    account_id: string;
+}
+export const listAccountCampaigns = async (params: ListAccountCampaignsParams, options?: RequestInit): Promise<{
+    data: CampaignOut[];
+}> =>{
+    const res = await fetch(`/api/accounts/${params.account_id}/campaigns`, {
+        ...options,
+        method: "GET"
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export const listAccountCampaignsKey = (params?: ListAccountCampaignsParams)=>{
+    return [
+        "/api/accounts/{account_id}/campaigns",
+        params
+    ] as const;
+};
+export function useListAccountCampaigns<TData = {
+    data: CampaignOut[];
+}>(options: {
+    params: ListAccountCampaignsParams;
+    query?: Omit<UseQueryOptions<{
+        data: CampaignOut[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useQuery({
+        queryKey: listAccountCampaignsKey(options.params),
+        queryFn: ()=>listAccountCampaigns(options.params),
+        ...options?.query
+    });
+}
+export function useListAccountCampaignsSuspense<TData = {
+    data: CampaignOut[];
+}>(options: {
+    params: ListAccountCampaignsParams;
+    query?: Omit<UseSuspenseQueryOptions<{
+        data: CampaignOut[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useSuspenseQuery({
+        queryKey: listAccountCampaignsKey(options.params),
+        queryFn: ()=>listAccountCampaigns(options.params),
+        ...options?.query
+    });
+}
 export interface ToggleAccountPlanItemParams {
     account_id: string;
     "X-Forwarded-Host"?: string | null;

@@ -10,16 +10,16 @@ import { cn } from "@/lib/utils";
 function BrandMark() {
   const [ok, setOk] = useState(true);
   return (
-    <div className="h-8 w-8 rounded-lg bg-white flex items-center justify-center shadow-sm ring-1 ring-black/5">
+    <div className="h-11 w-11 rounded-xl bg-white flex items-center justify-center shadow-sm ring-1 ring-black/5">
       {ok ? (
         <img
           src="/logo.svg"
           alt="Genie Adoption"
-          className="h-6 w-6 object-contain"
+          className="h-8 w-8 object-contain"
           onError={() => setOk(false)}
         />
       ) : (
-        <Sparkles className="h-4 w-4 text-primary" />
+        <Sparkles className="h-6 w-6 text-primary" />
       )}
     </div>
   );
@@ -51,8 +51,8 @@ export function AppShell({
           <Link to="/" className="flex items-center gap-2.5 mr-4">
             <BrandMark />
             <div className="flex flex-col leading-tight">
-              <span className="text-sm font-semibold">Genie Adoption</span>
-              <span className="text-[10px] text-muted-foreground -mt-0.5">
+              <span className="text-lg font-bold">Genie Adoption</span>
+              <span className="text-xs text-muted-foreground -mt-0.5">
                 Navigator
               </span>
             </div>

@@ -36,8 +36,6 @@ import {
   Circle,
   MinusCircle,
   ChevronDown,
-  Lock,
-  Unlock,
   Ban,
   Megaphone,
   CalendarClock,
@@ -52,8 +50,6 @@ import {
   GENIE_READY_DOC_URL,
   GENIE_READY_DASHBOARD_URL,
   enforceImplication,
-  enforceLabel,
-  enforceTone,
   isPpEnabled,
 } from "@/lib/partner-powered";
 import { openGenieChat } from "@/components/genie-chat";
@@ -880,30 +876,54 @@ function ObjectionsBlockers({
   // "Open blockers triaged" — it duplicated the Genie issues list, which now
   // renders as-is directly beneath, inside this card.
   const items = plan.filter((p) => p.key === "objections");
+  const openIssues = issues.filter((i) => i.is_open).length;
   if (items.length === 0 && issues.length === 0) return null;
 
+  const [open, setOpen] = useState(false);
+
   return (
-    <Card className="mb-6">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg font-semibold">Objections &amp; Blockers</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {items.map((item) => (
-          <PlanRow
-            key={item.key}
-            accountId={accountId}
-            item={item}
-            onToggle={(done, note) =>
-              toggle.mutate({
-                params: { account_id: accountId },
-                data: { item_key: item.key, done, note },
-              })
-            }
-          />
-        ))}
-        {issues.length > 0 && <AccountIssues issues={issues} />}
-      </CardContent>
-    </Card>
+    <div className="mb-6">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between rounded-lg border bg-card px-4 py-3 text-left hover:border-primary/50 transition-colors"
+      >
+        <span className="text-lg font-semibold">
+          Objections &amp; Blockers{" "}
+          {openIssues > 0 && (
+            <span className="font-normal text-muted-foreground">
+              ({openIssues} open issue{openIssues === 1 ? "" : "s"})
+            </span>
+          )}
+        </span>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+      {open && (
+        <Card className="mt-3">
+          <CardContent className="space-y-2 pt-4">
+            {items.map((item) => (
+              <PlanRow
+                key={item.key}
+                accountId={accountId}
+                item={item}
+                onToggle={(done, note) =>
+                  toggle.mutate({
+                    params: { account_id: accountId },
+                    data: { item_key: item.key, done, note },
+                  })
+                }
+              />
+            ))}
+            {issues.length > 0 && <AccountIssues issues={issues} />}
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
 
@@ -1062,13 +1082,6 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
   const ppTone: RowTone = ppEnabled ? "good" : pp === "off" ? "bad" : "warn";
   const provTone: RowTone =
     prov === "on" ? "good" : prov === "off" ? "bad" : "warn";
-  const showEnforce = pp === "off";
-  const enfTone: RowTone =
-    enforceTone(data.pp_enforce ?? "unknown") === "bad"
-      ? "bad"
-      : enforceTone(data.pp_enforce ?? "unknown") === "warn"
-        ? "warn"
-        : "muted";
 
   return (
     <Card className="mb-6">
@@ -1148,22 +1161,6 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
               bare
             />
           </EligibilityRow>
-
-          {showEnforce && (
-            <EligibilityRow
-              tone={enfTone}
-              label="PP enforce"
-              value={enforceLabel(data.pp_enforce ?? "unknown")}
-              open={expanded === "enforce"}
-              onToggle={() => toggle("enforce")}
-            >
-              <EnforceStatus
-                status={pp}
-                enforce={data.pp_enforce ?? "unknown"}
-                bare
-              />
-            </EligibilityRow>
-          )}
 
           <EligibilityRow
             tone={provTone}
@@ -1349,57 +1346,6 @@ function PartnerPoweredBanner({
   );
 }
 
-// Enforce status — shown only when Partner-Powered AI is off, directly below the
-// PP banner (mirrors the enforce badge from the old accounts list).
-function EnforceStatus({
-  status,
-  enforce,
-  bare = false,
-}: {
-  status: string;
-  enforce: string;
-  bare?: boolean;
-}) {
-  if (status !== "off") return null;
-  // Shown for every PP-off account, including enforce = unknown.
-  const tone = enforceTone(enforce); // bad (on) | warn (off) | muted (unknown)
-  const cls =
-    tone === "bad"
-      ? "border-destructive/50 bg-destructive/5"
-      : tone === "warn"
-        ? "border-amber-600/40 bg-amber-600/5"
-        : "border-border bg-muted/30";
-  const iconCls =
-    tone === "bad"
-      ? "text-destructive"
-      : tone === "warn"
-        ? "text-amber-700 dark:text-amber-400"
-        : "text-muted-foreground";
-  const msg =
-    enforceImplication(enforce, status) ??
-    "Enforce setting is unknown for this account — confirm the account-level Partner-Powered AI enforce setting.";
-  return (
-    <div
-      className={cn(
-        bare
-          ? "flex items-start gap-2 text-sm"
-          : "rounded-lg border p-3 mb-4 flex items-start gap-2 text-sm",
-        bare ? "" : cls
-      )}
-    >
-      {enforce === "on" ? (
-        <Lock className={cn("h-4 w-4 shrink-0 mt-0.5", iconCls)} />
-      ) : (
-        <Unlock className={cn("h-4 w-4 shrink-0 mt-0.5", iconCls)} />
-      )}
-      <div>
-        <span className="font-medium">{enforceLabel(enforce)}</span>{" "}
-        <span className="text-muted-foreground">{msg}</span>
-      </div>
-    </div>
-  );
-}
-
 // User provisioning readiness = AIM OR SCIM. `status` is the broader provisioning
 // signal; `aimStatus` tells us whether the preferred method (AIM) is in use so we can
 // name the path and still nudge SCIM→AIM where it helps.
@@ -1416,11 +1362,15 @@ function ProvisioningBanner({
   total: number;
   bare?: boolean;
 }) {
+  // provisioning_ws_enabled (from the Genie-ready report) and ws_total (from the PP
+  // workspace query) come from different sources/scoping, so the raw fraction can
+  // read e.g. 62/61. Clamp the numerator to total so it never exceeds 100%.
+  const shownEnabled = Math.min(enabled, total);
   const count =
     total > 0 ? (
       <span className="text-muted-foreground">
         {" "}
-        ({enabled.toLocaleString()}/{total.toLocaleString()} workspaces)
+        ({shownEnabled.toLocaleString()}/{total.toLocaleString()} workspaces)
       </span>
     ) : null;
   const viaAim = aimStatus === "on" || aimStatus === "partial";
