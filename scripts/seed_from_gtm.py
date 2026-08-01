@@ -23,6 +23,7 @@ Requires the fevm-richasethi and logfood CLI profiles to be authenticated.
 
 from __future__ import annotations
 
+import os
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -49,6 +50,35 @@ LOGFOOD_PROFILE = "logfood"
 LOGFOOD_WAREHOUSE = "927ac096f9833442"  # Shared SQL Endpoint - Stable
 INSTANCE = "genie-adoption-tracking"
 SEED_MARKER = "gtm-seed"
+
+# fevm workspace URL (where the Lakebase lives). The nightly job (running in logfood)
+# reaches fevm via a token read from a secret and injected as GAT_FEVM_TOKEN.
+FEVM_HOST = "https://fevm-richasethi-ws.cloud.databricks.com"
+
+
+def _fevm_ws() -> "WorkspaceClient":
+    """WorkspaceClient for fevm (Lakebase writes).
+
+    Unattended job: authenticate with GAT_FEVM_HOST/GAT_FEVM_TOKEN env vars (the token
+    comes from a Databricks secret — see scripts/README nightly-job section).
+    Local run: fall back to the fevm-richasethi CLI profile.
+    """
+    token = os.environ.get("GAT_FEVM_TOKEN")
+    if token:
+        host = os.environ.get("GAT_FEVM_HOST", FEVM_HOST)
+        return WorkspaceClient(host=host, token=token)
+    return WorkspaceClient(profile=FEVM_PROFILE)
+
+
+def _logfood_ws() -> "WorkspaceClient":
+    """WorkspaceClient for logfood (GTM reads).
+
+    When running as a job inside logfood, GAT_IN_LOGFOOD=1 selects native (default)
+    auth; locally fall back to the logfood CLI profile.
+    """
+    if os.environ.get("GAT_IN_LOGFOOD"):
+        return WorkspaceClient()
+    return WorkspaceClient(profile=LOGFOOD_PROFILE)
 
 STAGE_MAP = {
     "U1": "u1",
@@ -458,7 +488,7 @@ def fetch_aim(ws) -> dict[str, dict]:
 
 
 def build_engine():
-    ws = WorkspaceClient(profile=FEVM_PROFILE)
+    ws = _fevm_ws()
     inst = ws.database.get_database_instance(INSTANCE)
     host = inst.read_write_dns
     user = ws.config.client_id or ws.current_user.me().user_name
@@ -480,7 +510,7 @@ def build_engine():
 
 
 def main() -> None:
-    ws = WorkspaceClient(profile=LOGFOOD_PROFILE)
+    ws = _logfood_ws()
     accounts = fetch_accounts(ws)
     use_cases = fetch_use_cases(ws)
     pp = fetch_pp(ws)
