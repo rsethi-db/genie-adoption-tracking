@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMatches } from "@tanstack/react-router";
-import { Sparkles, X, Send, Loader2 } from "lucide-react";
+import { Sparkles, X, Send, Loader2, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -117,6 +117,15 @@ interface ChatTurn {
   sql?: string | null;
 }
 
+interface HistoryEntry {
+  id: string;
+  question: string;
+  answer: string;
+  account_name?: string;
+  asked_by?: string;
+  created_at: string;
+}
+
 // Pull the current account id out of the route match params, if we're on an
 // account-detail page — so the assistant can tailor answers to that engagement.
 function useCurrentAccountId(): string | undefined {
@@ -135,8 +144,19 @@ export function GenieChat() {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const accountId = useCurrentAccountId();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  function openHistory() {
+    setShowHistory(true);
+    setHistory(null);
+    fetch("/api/genie/history")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setHistory(Array.isArray(d) ? d : []))
+      .catch(() => setHistory([]));
+  }
 
   // Check once whether a Genie Space is configured; hide the launcher if not.
   useEffect(() => {
@@ -230,16 +250,68 @@ export function GenieChat() {
               {accountId ? "Answering for this account" : "Field adoption assistant"}
             </span>
           </div>
-          {turns.length > 0 && (
-            <Button variant="ghost" size="sm" className="text-xs" onClick={resetConversation}>
-              New chat
+          {showHistory ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs"
+              onClick={() => setShowHistory(false)}
+            >
+              Back to chat
             </Button>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs gap-1"
+                onClick={openHistory}
+              >
+                <History className="h-3.5 w-3.5" /> History
+              </Button>
+              {turns.length > 0 && (
+                <Button variant="ghost" size="sm" className="text-xs" onClick={resetConversation}>
+                  New chat
+                </Button>
+              )}
+            </>
           )}
           <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
             <X className="h-4 w-4" />
           </Button>
         </div>
 
+        {showHistory ? (
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+            <p className="text-sm font-semibold">Ask Genie history</p>
+            {history === null ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : history.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No questions asked yet.
+              </p>
+            ) : (
+              history.map((h) => (
+                <div key={h.id} className="rounded-lg border p-3 space-y-1.5">
+                  <div className="text-sm font-medium">{h.question}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(h.created_at).toLocaleString()}
+                    {h.asked_by ? ` · ${h.asked_by}` : ""}
+                    {h.account_name ? ` · ${h.account_name}` : ""}
+                  </div>
+                  <details className="text-sm">
+                    <summary className="cursor-pointer text-primary text-xs">
+                      Show answer
+                    </summary>
+                    <div className="mt-1.5">
+                      <Markdown text={h.answer} />
+                    </div>
+                  </details>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
           {turns.length === 0 && (
             <div className="text-sm text-muted-foreground space-y-3">
@@ -294,6 +366,7 @@ export function GenieChat() {
             </div>
           )}
         </div>
+        )}
 
         <div className="border-t p-3 shrink-0">
           <div className="flex items-end gap-2">

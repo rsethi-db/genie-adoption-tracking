@@ -266,6 +266,16 @@ export interface GenieAskIn {
     conversation_id?: string | null;
     question: string;
 }
+export interface GenieHistoryEntryOut {
+    account_id?: string | null;
+    account_name?: string;
+    answer: string;
+    asked_by?: string;
+    conversation_id: string;
+    created_at: string;
+    id: string;
+    question: string;
+}
 export interface GenieStatusOut {
     enabled: boolean;
 }
@@ -1394,7 +1404,15 @@ export function useGetDashboardSuspense<TData = {
         ...options?.query
     });
 }
-export const askGenie = async (data: GenieAskIn, options?: RequestInit): Promise<{
+export interface AskGenieParams {
+    "X-Forwarded-Host"?: string | null;
+    "X-Forwarded-Preferred-Username"?: string | null;
+    "X-Forwarded-User"?: string | null;
+    "X-Forwarded-Email"?: string | null;
+    "X-Request-Id"?: string | null;
+    "X-Forwarded-Access-Token"?: string | null;
+}
+export const askGenie = async (data: GenieAskIn, params?: AskGenieParams, options?: RequestInit): Promise<{
     data: GenieAnswerOut;
 }> =>{
     const res = await fetch("/api/genie/ask", {
@@ -1402,6 +1420,24 @@ export const askGenie = async (data: GenieAskIn, options?: RequestInit): Promise
         method: "POST",
         headers: {
             "Content-Type": "application/json",
+            ...(params?.["X-Forwarded-Host"] != null && {
+                "X-Forwarded-Host": params["X-Forwarded-Host"]
+            }),
+            ...(params?.["X-Forwarded-Preferred-Username"] != null && {
+                "X-Forwarded-Preferred-Username": params["X-Forwarded-Preferred-Username"]
+            }),
+            ...(params?.["X-Forwarded-User"] != null && {
+                "X-Forwarded-User": params["X-Forwarded-User"]
+            }),
+            ...(params?.["X-Forwarded-Email"] != null && {
+                "X-Forwarded-Email": params["X-Forwarded-Email"]
+            }),
+            ...(params?.["X-Request-Id"] != null && {
+                "X-Request-Id": params["X-Request-Id"]
+            }),
+            ...(params?.["X-Forwarded-Access-Token"] != null && {
+                "X-Forwarded-Access-Token": params["X-Forwarded-Access-Token"]
+            }),
             ...options?.headers
         },
         body: JSON.stringify(data)
@@ -1423,11 +1459,78 @@ export const askGenie = async (data: GenieAskIn, options?: RequestInit): Promise
 export function useAskGenie(options?: {
     mutation?: UseMutationOptions<{
         data: GenieAnswerOut;
-    }, ApiError, GenieAskIn>;
+    }, ApiError, {
+        params: AskGenieParams;
+        data: GenieAskIn;
+    }>;
 }) {
     return useMutation({
-        mutationFn: (data)=>askGenie(data),
+        mutationFn: (vars)=>askGenie(vars.data, vars.params),
         ...options?.mutation
+    });
+}
+export interface GetGenieHistoryParams {
+    conversation_id?: string;
+    limit?: number;
+}
+export const getGenieHistory = async (params?: GetGenieHistoryParams, options?: RequestInit): Promise<{
+    data: GenieHistoryEntryOut[];
+}> =>{
+    const searchParams = new URLSearchParams();
+    if (params?.conversation_id != null) searchParams.set("conversation_id", String(params?.conversation_id));
+    if (params?.limit != null) searchParams.set("limit", String(params?.limit));
+    const queryString = searchParams.toString();
+    const url = queryString ? `/api/genie/history?${queryString}` : "/api/genie/history";
+    const res = await fetch(url, {
+        ...options,
+        method: "GET"
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export const getGenieHistoryKey = (params?: GetGenieHistoryParams)=>{
+    return [
+        "/api/genie/history",
+        params
+    ] as const;
+};
+export function useGetGenieHistory<TData = {
+    data: GenieHistoryEntryOut[];
+}>(options?: {
+    params?: GetGenieHistoryParams;
+    query?: Omit<UseQueryOptions<{
+        data: GenieHistoryEntryOut[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useQuery({
+        queryKey: getGenieHistoryKey(options?.params),
+        queryFn: ()=>getGenieHistory(options?.params),
+        ...options?.query
+    });
+}
+export function useGetGenieHistorySuspense<TData = {
+    data: GenieHistoryEntryOut[];
+}>(options?: {
+    params?: GetGenieHistoryParams;
+    query?: Omit<UseSuspenseQueryOptions<{
+        data: GenieHistoryEntryOut[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useSuspenseQuery({
+        queryKey: getGenieHistoryKey(options?.params),
+        queryFn: ()=>getGenieHistory(options?.params),
+        ...options?.query
     });
 }
 export const getGenieStatus = async (options?: RequestInit): Promise<{

@@ -201,6 +201,23 @@ class ResourceClick(SQLModel, table=True):
     created_by: str = Field(default="")
 
 
+class GenieQuery(SQLModel, table=True):
+    """One Ask-Genie turn: the user's question + Genie's answer, with who asked, when,
+    and (optionally) which account it was scoped to. Powers the in-app chat history and
+    a usage signal (what the field is asking / stuck on)."""
+
+    __tablename__ = "gat_genie_query"
+
+    id: str = Field(primary_key=True)
+    conversation_id: str = Field(default="", index=True)
+    account_id: str | None = Field(default=None, index=True)
+    account_name: str = Field(default="")
+    question: str = Field(default="")
+    answer: str = Field(default="")
+    asked_by: str = Field(default="", index=True)
+    created_at: datetime = Field(default_factory=_utcnow, index=True)
+
+
 class Campaign(SQLModel, table=True):
     """A leadership 'push' to account teams: a targeted ask with a clear call-to-action
     and deadline, aimed at a segment of accounts (e.g. PP AI off, no provisioning).

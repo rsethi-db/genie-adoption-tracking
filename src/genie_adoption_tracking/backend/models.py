@@ -444,3 +444,14 @@ class GenieAnswerOut(BaseModel):
     sql: str | None = None
     columns: list[str] = []
     rows: list[list[str]] = []
+
+
+class GenieHistoryEntryOut(BaseModel):
+    id: str
+    conversation_id: str
+    account_id: str | None = None
+    account_name: str = ""
+    question: str
+    answer: str
+    asked_by: str = ""
+    created_at: datetime

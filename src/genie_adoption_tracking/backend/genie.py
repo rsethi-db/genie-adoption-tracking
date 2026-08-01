@@ -24,11 +24,15 @@ import json
 import requests
 from sqlmodel import Session, select
 
+import uuid
+from datetime import datetime, timezone
+
 from .core import Dependencies, create_router
-from .db import Account, AccountIssue, Blocker, UseCase
+from .db import Account, AccountIssue, Blocker, GenieQuery, UseCase
 from .models import (
     GenieAnswerOut,
     GenieAskIn,
+    GenieHistoryEntryOut,
     GenieStatusOut,
 )
 from . import playbook
@@ -228,12 +232,14 @@ def ask_genie(
     ws: Dependencies.Client,
     session: Dependencies.Session,
     config: Dependencies.Config,
+    user_ws: Dependencies.UserClient,
 ):
     """Ask the Genie assistant a question.
 
     Starts a new conversation, or continues one when `conversation_id` is supplied.
     When `account_id` is set, the account's context is prepended to the first
-    question so answers are tailored to that engagement.
+    question so answers are tailored to that engagement. Each turn is logged to
+    gat_genie_query for the in-app chat history.
     """
     if not config.genie_space_id:
         # Surface a friendly, actionable message instead of a 500.
@@ -249,14 +255,75 @@ def ask_genie(
             rows=[],
         )
 
-    question = body.question.strip()
+    original_question = body.question.strip()
+    question = original_question
     space_id = config.genie_space_id
 
     # Enrich the first turn of a conversation with account context if given.
+    account_name = ""
+    if body.account_id:
+        acct = session.get(Account, body.account_id)
+        account_name = acct.name if acct else ""
     if not body.conversation_id and body.account_id:
         ctx = _account_context(session, body.account_id)
         if ctx:
             question = f"{ctx}\n\nQuestion: {question}"
 
     events = _agent_responses(ws, space_id, question, body.conversation_id)
-    return _extract_answer(events)
+    answer = _extract_answer(events)
+
+    # Log the turn (best-effort — never fail the response on a logging error).
+    try:
+        asked_by = ""
+        try:
+            asked_by = user_ws.current_user.me().user_name or ""
+        except Exception:
+            asked_by = ""
+        session.add(
+            GenieQuery(
+                id=uuid.uuid4().hex,
+                conversation_id=answer.conversation_id,
+                account_id=body.account_id,
+                account_name=account_name,
+                question=original_question,
+                answer=answer.text,
+                asked_by=asked_by,
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+
+    return answer
+
+
+@router.get(
+    "/genie/history",
+    response_model=list[GenieHistoryEntryOut],
+    operation_id="getGenieHistory",
+)
+def genie_history(
+    session: Dependencies.Session,
+    conversation_id: str = "",
+    limit: int = 100,
+):
+    """Ask-Genie history, newest first. Pass conversation_id to get one thread; omit
+    for the full recent history across the app."""
+    rows = session.exec(select(GenieQuery)).all()
+    if conversation_id:
+        rows = [r for r in rows if r.conversation_id == conversation_id]
+    rows = sorted(rows, key=lambda r: r.created_at, reverse=True)[:limit]
+    return [
+        GenieHistoryEntryOut(
+            id=r.id,
+            conversation_id=r.conversation_id,
+            account_id=r.account_id,
+            account_name=r.account_name,
+            question=r.question,
+            answer=r.answer,
+            asked_by=r.asked_by,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
