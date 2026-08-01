@@ -105,6 +105,14 @@ export interface AccountPlanToggleIn {
 export interface AdoptionBulkSaveIn {
     items: AdoptionTaskUpdateIn[];
 }
+export interface AdoptionHistoryEntryOut {
+    changed_at: string;
+    changed_by: string;
+    note: string;
+    status: string;
+    task_key: string;
+    task_label: string;
+}
 export interface AdoptionLaneOut {
     key: string;
     name: string;
@@ -625,6 +633,64 @@ export function useUpdateAdoptionTask(options?: {
     return useMutation({
         mutationFn: (vars)=>updateAdoptionTask(vars.params, vars.data),
         ...options?.mutation
+    });
+}
+export interface GetAdoptionHistoryParams {
+    account_id: string;
+}
+export const getAdoptionHistory = async (params: GetAdoptionHistoryParams, options?: RequestInit): Promise<{
+    data: AdoptionHistoryEntryOut[];
+}> =>{
+    const res = await fetch(`/api/accounts/${params.account_id}/adoption/history`, {
+        ...options,
+        method: "GET"
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export const getAdoptionHistoryKey = (params?: GetAdoptionHistoryParams)=>{
+    return [
+        "/api/accounts/{account_id}/adoption/history",
+        params
+    ] as const;
+};
+export function useGetAdoptionHistory<TData = {
+    data: AdoptionHistoryEntryOut[];
+}>(options: {
+    params: GetAdoptionHistoryParams;
+    query?: Omit<UseQueryOptions<{
+        data: AdoptionHistoryEntryOut[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useQuery({
+        queryKey: getAdoptionHistoryKey(options.params),
+        queryFn: ()=>getAdoptionHistory(options.params),
+        ...options?.query
+    });
+}
+export function useGetAdoptionHistorySuspense<TData = {
+    data: AdoptionHistoryEntryOut[];
+}>(options: {
+    params: GetAdoptionHistoryParams;
+    query?: Omit<UseSuspenseQueryOptions<{
+        data: AdoptionHistoryEntryOut[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useSuspenseQuery({
+        queryKey: getAdoptionHistoryKey(options.params),
+        queryFn: ()=>getAdoptionHistory(options.params),
+        ...options?.query
     });
 }
 export interface SaveAdoptionTasksParams {

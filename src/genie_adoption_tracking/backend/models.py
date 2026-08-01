@@ -138,6 +138,15 @@ class AdoptionTaskUpdateIn(BaseModel):
     note: str | None = None
 
 
+class AdoptionHistoryEntryOut(BaseModel):
+    task_key: str
+    task_label: str
+    status: str
+    note: str
+    changed_at: datetime
+    changed_by: str
+
+
 class AdoptionBulkSaveIn(BaseModel):
     """Save the whole questionnaire in one shot (Save button)."""
 

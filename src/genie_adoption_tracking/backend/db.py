@@ -154,6 +154,23 @@ class AdoptionTaskState(SQLModel, table=True):
     updated_by: str = Field(default="")
 
 
+class AdoptionTaskHistory(SQLModel, table=True):
+    """Append-only audit log — one row per change to an Adoption Workflow task, so the
+    account team can see the full history (who changed what, when) rather than only the
+    latest value in AdoptionTaskState. Written on every save; never updated or deleted.
+    FK to gat_account (stable id) so the nightly refresh preserves it."""
+
+    __tablename__ = "gat_adoption_task_history"
+
+    id: str = Field(primary_key=True)
+    account_id: str = Field(index=True, foreign_key="gat_account.id")
+    task_key: str = Field(index=True)
+    status: str = Field(default="")
+    note: str = Field(default="")
+    changed_at: datetime = Field(default_factory=_utcnow, index=True)
+    changed_by: str = Field(default="")
+
+
 class AccountIssue(SQLModel, table=True):
     """Genie-related Brickroad issues per account (all severities), synced from GTM.
     Read-only reference data (like use cases), not user-editable signal."""

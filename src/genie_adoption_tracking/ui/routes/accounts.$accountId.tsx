@@ -149,6 +149,7 @@ function AccountDetail({ accountId }: { accountId: string }) {
             ppStatus={data.pp_status ?? "unknown"}
           />
         )}
+        <AdoptionHistory accountId={data.id} />
       </section>
 
       <section id="sec-usecases" className="scroll-mt-32">
@@ -524,6 +525,104 @@ function AdoptionTaskCard({
             </a>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+// Append-only edit history for the account's Adoption Workflow tasks — who changed
+// what, when. Collapsed by default; fetched on expand.
+interface HistoryEntry {
+  task_key: string;
+  task_label: string;
+  status: string;
+  note: string;
+  changed_at: string;
+  changed_by: string;
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  not_initiated: "Not Initiated",
+  na: "NA",
+  in_progress: "In Progress",
+  completed: "Completed",
+  blocked: "Blocked",
+};
+
+function AdoptionHistory({ accountId }: { accountId: string }) {
+  const [open, setOpen] = useState(false);
+  const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
+
+  async function expand() {
+    if (!open && entries === null) {
+      try {
+        const res = await fetch(`/api/accounts/${accountId}/adoption/history`);
+        setEntries(res.ok ? await res.json() : []);
+      } catch {
+        setEntries([]);
+      }
+    }
+    setOpen((o) => !o);
+  }
+
+  return (
+    <div className="mb-6">
+      <button
+        type="button"
+        onClick={expand}
+        className="w-full flex items-center justify-between rounded-lg border bg-card px-4 py-3 text-left hover:border-primary/50 transition-colors"
+      >
+        <span className="text-base font-semibold">
+          Adoption activity{" "}
+          {entries !== null && (
+            <span className="font-normal text-muted-foreground">
+              ({entries.length} change{entries.length === 1 ? "" : "s"})
+            </span>
+          )}
+        </span>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+      {open && (
+        <Card className="mt-3">
+          <CardContent className="pt-4">
+            {entries === null ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : entries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No changes recorded yet — edits to the Adoption Workflow will appear
+                here.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {entries.map((e, i) => (
+                  <li key={i} className="flex gap-3 text-sm">
+                    <div className="mt-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-x-2">
+                        <span className="font-medium">{e.task_label}</span>
+                        <Badge variant="outline" className="text-[10px]">
+                          {STATUS_LABEL[e.status] ?? e.status}
+                        </Badge>
+                      </div>
+                      {e.note && (
+                        <p className="text-muted-foreground mt-0.5">“{e.note}”</p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {new Date(e.changed_at).toLocaleString()}
+                        {e.changed_by ? ` · ${e.changed_by}` : ""}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   );

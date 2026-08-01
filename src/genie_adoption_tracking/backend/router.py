@@ -25,6 +25,7 @@ from .db import (
     AccountIssue,
     AccountPlanItem,
     AdoptionTaskState,
+    AdoptionTaskHistory,
     Blocker,
     ChecklistProgress,
     ResourceClick,
@@ -39,6 +40,7 @@ from .models import (
     AccountPlanItemOut,
     AccountPlanToggleIn,
     AdoptionBulkSaveIn,
+    AdoptionHistoryEntryOut,
     AdoptionLaneOut,
     AdoptionStageOut,
     AdoptionTaskOut,
@@ -542,13 +544,25 @@ def update_adoption_task(
         existing = AdoptionTaskState(
             id=_uid(), account_id=account_id, task_key=body.task_key
         )
+    new_status = body.status if body.status is not None else existing.status
+    new_note = body.note if body.note is not None else existing.note
+    changed = (new_status != existing.status) or (new_note != existing.note)
     if body.status is not None:
         existing.status = body.status
     if body.note is not None:
         existing.note = body.note
-    existing.updated_at = _utcnow()
-    existing.updated_by = _actor(user_ws)
+    now = _utcnow()
+    actor = _actor(user_ws)
+    existing.updated_at = now
+    existing.updated_by = actor
     session.add(existing)
+    if changed:
+        session.add(
+            AdoptionTaskHistory(
+                id=_uid(), account_id=account_id, task_key=body.task_key,
+                status=new_status, note=new_note, changed_at=now, changed_by=actor,
+            )
+        )
     session.commit()
     return get_account(account_id, session)
 
@@ -590,6 +604,11 @@ def save_adoption_tasks(
                 id=_uid(), account_id=account_id, task_key=item.task_key
             )
             existing[item.task_key] = row
+        new_status = item.status if item.status is not None else row.status
+        new_note = item.note if item.note is not None else row.note
+        # Only log history when something actually changed (avoid noise from Save
+        # re-writing untouched tasks).
+        changed = (new_status != row.status) or (new_note != row.note)
         if item.status is not None:
             row.status = item.status
         if item.note is not None:
@@ -597,8 +616,42 @@ def save_adoption_tasks(
         row.updated_at = now
         row.updated_by = actor
         session.add(row)
+        if changed:
+            session.add(
+                AdoptionTaskHistory(
+                    id=_uid(), account_id=account_id, task_key=item.task_key,
+                    status=new_status, note=new_note, changed_at=now, changed_by=actor,
+                )
+            )
     session.commit()
     return get_account(account_id, session)
+
+
+@router.get(
+    "/accounts/{account_id}/adoption/history",
+    response_model=list[AdoptionHistoryEntryOut],
+    operation_id="getAdoptionHistory",
+)
+def adoption_history(account_id: str, session: Dependencies.Session):
+    """Append-only edit history for an account's Adoption Workflow tasks, newest first."""
+    labels = {t["key"]: t["label"] for t in adoption_workflow.TASKS}
+    rows = session.exec(
+        select(AdoptionTaskHistory).where(
+            AdoptionTaskHistory.account_id == account_id
+        )
+    ).all()
+    rows = sorted(rows, key=lambda r: r.changed_at, reverse=True)
+    return [
+        AdoptionHistoryEntryOut(
+            task_key=r.task_key,
+            task_label=labels.get(r.task_key, r.task_key),
+            status=r.status,
+            note=r.note,
+            changed_at=r.changed_at,
+            changed_by=r.changed_by,
+        )
+        for r in rows
+    ]
 
 
 @router.post(
