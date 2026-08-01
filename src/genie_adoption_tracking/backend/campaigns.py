@@ -219,6 +219,24 @@ def list_segments():
     return [SegmentOut(**s) for s in SEGMENTS]
 
 
+@router.get("/accounts/{account_id}/campaigns", response_model=list[CampaignOut],
+            operation_id="listAccountCampaigns")
+def account_campaigns(account_id: str, session: Dependencies.Session):
+    """Active campaigns whose segment currently targets this account — so the account
+    team sees the leadership ask (with CTA + deadline) right on the account page."""
+    campaigns = [
+        c
+        for c in session.exec(select(Campaign)).all()
+        if c.active
+    ]
+    out: list[CampaignOut] = []
+    for c in sorted(campaigns, key=lambda c: c.created_at, reverse=True):
+        target_ids = {a.id for a in _resolve_targets(session, c.segment, c.sub_vertical)}
+        if account_id in target_ids:
+            out.append(_to_out(session, c, with_targets=False))
+    return out
+
+
 @router.get("/campaigns/preview", response_model=CampaignPreviewOut,
             operation_id="previewCampaignSegment")
 def preview_segment(

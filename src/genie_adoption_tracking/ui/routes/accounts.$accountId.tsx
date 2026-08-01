@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Suspense, useState, type ReactNode } from "react";
+import { Suspense, useState, useEffect, type ReactNode } from "react";
 import {
   useGetAccountSuspense,
   useToggleAccountPlanItem,
@@ -39,6 +39,8 @@ import {
   Lock,
   Unlock,
   Ban,
+  Megaphone,
+  CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -131,6 +133,9 @@ function AccountDetail({ accountId }: { accountId: string }) {
         </div>
       </div>
 
+      {/* Active leadership campaigns targeting this account */}
+      <AccountCampaigns accountId={data.id} />
+
       {/* Sticky in-page section nav */}
       <SectionNav hasIssues={hasIssues} />
 
@@ -161,6 +166,75 @@ function AccountDetail({ accountId }: { accountId: string }) {
           issues={data.issues ?? []}
         />
       </section>
+    </div>
+  );
+}
+
+// Active leadership campaigns targeting this account — shown as a banner so the
+// account team sees the ask (CTA + deadline) right where they work the account.
+interface AccountCampaign {
+  id: string;
+  title: string;
+  ask: string;
+  cta: string;
+  deadline?: string;
+  priority: string;
+}
+
+function AccountCampaigns({ accountId }: { accountId: string }) {
+  const [campaigns, setCampaigns] = useState<AccountCampaign[]>([]);
+  useEffect(() => {
+    fetch(`/api/accounts/${accountId}/campaigns`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setCampaigns(Array.isArray(d) ? d : []))
+      .catch(() => setCampaigns([]));
+  }, [accountId]);
+  if (campaigns.length === 0) return null;
+  return (
+    <div className="mb-4 space-y-2">
+      {campaigns.map((c) => (
+        <div
+          key={c.id}
+          className={cn(
+            "rounded-lg border p-3 flex items-start gap-3",
+            c.priority === "high"
+              ? "border-destructive/50 bg-destructive/5"
+              : "border-primary/40 bg-primary/5"
+          )}
+        >
+          <Megaphone
+            className={cn(
+              "h-4 w-4 mt-0.5 shrink-0",
+              c.priority === "high" ? "text-destructive" : "text-primary"
+            )}
+          />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold flex items-center gap-2">
+              {c.title}
+              {c.priority === "high" && (
+                <Badge variant="destructive" className="text-[10px]">
+                  High
+                </Badge>
+              )}
+              <Badge variant="outline" className="text-[10px]">
+                Leadership ask
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground mt-0.5">{c.ask}</p>
+            {c.cta && (
+              <p className="text-sm mt-1">
+                <span className="font-medium">Action: </span>
+                {c.cta}
+              </p>
+            )}
+            {c.deadline && (
+              <p className="text-xs text-muted-foreground mt-1 inline-flex items-center gap-1">
+                <CalendarClock className="h-3 w-3" /> Due {c.deadline}
+              </p>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
