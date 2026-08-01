@@ -31,6 +31,7 @@ export interface AccountDetailOut {
     pp_status?: string;
     provisioning_status?: string;
     provisioning_ws_enabled?: number;
+    provisioning_ws_total?: number;
     readiness_pct?: number;
     sa_owner: string;
     sub_vertical: string;
@@ -74,6 +75,7 @@ export interface AccountOut {
     pp_status?: string;
     provisioning_status?: string;
     provisioning_ws_enabled?: number;
+    provisioning_ws_total?: number;
     readiness_pct?: number;
     sa_owner: string;
     sub_vertical: string;

@@ -54,6 +54,9 @@ class Account(SQLModel, table=True):
     # "on"/"partial"/"off"/"unknown" from the share of workspaces with any provisioning.
     provisioning_status: str = Field(default="unknown")
     provisioning_ws_enabled: int = Field(default=0)
+    # Denominator provisioning_status was derived against (the Genie-ready report's own
+    # total_workspaces) — kept separate from ws_total so the banner fraction is consistent.
+    provisioning_ws_total: int = Field(default=0)
     # True if the account consumed Genie in the trailing 2 years (active footprint).
     genie_active: bool = Field(default=False)
     created_at: datetime = Field(default_factory=_utcnow)

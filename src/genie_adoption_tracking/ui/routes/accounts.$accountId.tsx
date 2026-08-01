@@ -1183,7 +1183,7 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
               status={prov}
               aimStatus={aim}
               enabled={data.provisioning_ws_enabled ?? 0}
-              total={data.ws_total ?? 0}
+              total={data.provisioning_ws_total ?? 0}
               bare
             />
           </EligibilityRow>
@@ -1362,9 +1362,9 @@ function ProvisioningBanner({
   total: number;
   bare?: boolean;
 }) {
-  // provisioning_ws_enabled (from the Genie-ready report) and ws_total (from the PP
-  // workspace query) come from different sources/scoping, so the raw fraction can
-  // read e.g. 62/61. Clamp the numerator to total so it never exceeds 100%.
+  // `total` is the Genie-ready report's own total_workspaces (the same denominator
+  // provisioning_status was derived from), so the fraction is self-consistent —
+  // Partial reads <100%, On reads full. Math.min is a defensive guard only.
   const shownEnabled = Math.min(enabled, total);
   const count =
     total > 0 ? (

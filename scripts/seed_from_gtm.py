@@ -30,7 +30,7 @@ from pathlib import Path
 
 from databricks.sdk import WorkspaceClient
 from sqlalchemy import create_engine, text
-from sqlmodel import Session, SQLModel, delete  # noqa: F401
+from sqlmodel import Session, SQLModel, delete, select  # noqa: F401
 
 # Make the backend package importable when run as a script.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -454,6 +454,10 @@ def fetch_aim(ws) -> dict[str, dict]:
                 "aim_ws_enabled": aim_ws,
                 "provisioning_status": _prov_status(total_ws, prov_ws),
                 "provisioning_ws_enabled": prov_ws,
+                # The report's OWN total — the denominator provisioning_status was
+                # derived against — so the banner fraction stays self-consistent
+                # (distinct from ws_total, which comes from the PP workspace query).
+                "provisioning_ws_total": total_ws,
             }
     return out
 
@@ -614,6 +618,7 @@ def main() -> None:
                     aim_ws_enabled=aim_row.get("aim_ws_enabled", 0),
                     provisioning_status=aim_row.get("provisioning_status", "unknown"),
                     provisioning_ws_enabled=aim_row.get("provisioning_ws_enabled", 0),
+                    provisioning_ws_total=aim_row.get("provisioning_ws_total", 0),
                     genie_active=pp_row.get("genie_active", False),
                     created_by=SEED_MARKER,
                 )

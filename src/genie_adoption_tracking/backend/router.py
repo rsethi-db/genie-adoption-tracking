@@ -381,6 +381,7 @@ def list_accounts(session: Dependencies.Session):
             aim_ws_enabled=a.aim_ws_enabled,
             provisioning_status=a.provisioning_status,
             provisioning_ws_enabled=a.provisioning_ws_enabled,
+            provisioning_ws_total=a.provisioning_ws_total,
             genie_active=a.genie_active,
             # Not shown on the account lookup; skip the per-account plan resolve
             # (it was an N+1 that ran several Lakebase queries per account).
@@ -499,6 +500,7 @@ def get_account(account_id: str, session: Dependencies.Session):
         aim_ws_enabled=acct.aim_ws_enabled,
         provisioning_status=acct.provisioning_status,
         provisioning_ws_enabled=acct.provisioning_ws_enabled,
+        provisioning_ws_total=acct.provisioning_ws_total,
         genie_active=acct.genie_active,
         readiness_pct=plan_pct,
         created_at=acct.created_at,

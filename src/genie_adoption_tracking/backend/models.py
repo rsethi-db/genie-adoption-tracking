@@ -90,6 +90,7 @@ class AccountOut(BaseModel):
     aim_ws_enabled: int = 0
     provisioning_status: str = "unknown"
     provisioning_ws_enabled: int = 0
+    provisioning_ws_total: int = 0
     genie_active: bool = False
     readiness_pct: int = 0
     open_issues: int = 0
@@ -174,6 +175,7 @@ class AccountDetailOut(BaseModel):
     aim_ws_enabled: int = 0
     provisioning_status: str = "unknown"
     provisioning_ws_enabled: int = 0
+    provisioning_ws_total: int = 0
     genie_active: bool = False
     readiness_pct: int = 0
     created_at: datetime
