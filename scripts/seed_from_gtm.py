@@ -38,11 +38,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from genie_adoption_tracking.backend.db import (  # noqa: E402
     Account,
     AccountIssue,
-    AccountPlanItem,
-    AdoptionTaskState,
-    Blocker,
-    ChecklistProgress,
-    ResourceClick,
     StageTransition,
     UseCase,
 )
@@ -541,69 +536,32 @@ def main() -> None:
             "so its startup migration adds the column, then re-run this seed."
         )
 
+    # UPSERT-BY-NAME + TRANSACTIONAL refresh.
+    #   * Accounts are matched by NAME: existing rows keep their id and get their GTM
+    #     fields updated in place; new accounts are inserted. IDs never change, so
+    #     user-entered data (gat_adoption_task_state, gat_account_plan_item) keeps its
+    #     FK and is never touched — old entries are ALWAYS maintained.
+    #   * GTM-mirror children (use_case + its stage_transition, account_issue) are
+    #     rebuilt fresh (they carry no user data).
+    #   * The ENTIRE refresh runs in ONE transaction: if anything fails midway it rolls
+    #     back to the previous good state — a dropped connection can never empty the DB.
+    n_accounts = n_new = n_use_cases = n_issues = 0
     with Session(engine) as session:
-        # PRESERVE user-entered signal across the reset. Accounts/use cases mirror GTM
-        # and are safe to rebuild, but the Adoption Workflow responses and account-plan
-        # notes are hand-entered by the field — a reseed must NOT lose them. We snapshot
-        # them keyed by ACCOUNT NAME (stable across reseeds; the ids are regenerated),
-        # then restore after accounts are rebuilt. See note re: Marsh entry loss.
-        _acct_name_by_id = {a.id: a.name for a in session.exec(select(Account)).all()}
-        saved_tasks: list[dict] = []
-        for t in session.exec(select(AdoptionTaskState)).all():
-            nm = _acct_name_by_id.get(t.account_id)
-            if nm:
-                saved_tasks.append({
-                    "account_name": nm, "task_key": t.task_key,
-                    "status": t.status, "note": t.note,
-                    "updated_at": t.updated_at, "updated_by": t.updated_by,
-                })
-        saved_plan: list[dict] = []
-        for p in session.exec(select(AccountPlanItem)).all():
-            nm = _acct_name_by_id.get(p.account_id)
-            # Only worth preserving rows the user actually touched (done or a note).
-            if nm and (p.done or (p.note or "").strip()):
-                saved_plan.append({
-                    "account_name": nm, "item_key": p.item_key,
-                    "done": p.done, "note": p.note,
-                })
-        print(
-            f"Preserving {len(saved_tasks)} adoption-task responses and "
-            f"{len(saved_plan)} account-plan entries across reseed."
-        )
+        with session.begin():  # atomic: commit-all-or-rollback
+            existing = {a.name: a for a in session.exec(select(Account)).all()}
+            account_ids: dict[str, str] = {}
 
-        # Full reset: accounts/use cases mirror GTM. Wipe everything (children first
-        # for FKs), then re-seed from GTM and restore the preserved user signal.
-        for model in (
-            ResourceClick,
-            ChecklistProgress,
-            Blocker,
-            StageTransition,
-            AccountIssue,
-            AccountPlanItem,
-            AdoptionTaskState,  # FK to gat_account; clear before accounts
-            UseCase,
-            Account,
-        ):
-            session.exec(delete(model))
-        session.commit()
-
-        # Build ALL FINS accounts (the full universe, incl. whitespace).
-        account_ids: dict[str, str] = {}
-        n_accounts = 0
-        n_use_cases = 0
-        for a in accounts:
-            name = a["name"]
-            if name in account_ids:
-                continue
-            aid = _uid()
-            account_ids[name] = aid
-            pp_row = pp.get(name, {})
-            ws_row = wsc.get(name, {})
-            aim_row = aim.get(name, {})
-            session.add(
-                Account(
-                    id=aid,
-                    name=name,
+            # --- Accounts: update in place by name, or insert new ---
+            seen: set[str] = set()
+            for a in accounts:
+                name = a["name"]
+                if name in seen:
+                    continue
+                seen.add(name)
+                pp_row = pp.get(name, {})
+                ws_row = wsc.get(name, {})
+                aim_row = aim.get(name, {})
+                fields = dict(
                     sub_vertical=a["sub_vertical"],
                     ae_owner=a["ae"],
                     sa_owner=a["sa"],
@@ -620,108 +578,69 @@ def main() -> None:
                     provisioning_ws_enabled=aim_row.get("provisioning_ws_enabled", 0),
                     provisioning_ws_total=aim_row.get("provisioning_ws_total", 0),
                     genie_active=pp_row.get("genie_active", False),
-                    created_by=SEED_MARKER,
                 )
-            )
-            n_accounts += 1
-        session.flush()
-
-        # One use case per GTM row, with its real name/description/stage/$DBU.
-        for row in use_cases:
-            gtm_stage = row["stage"]
-            stage = STAGE_MAP.get(gtm_stage)
-            if stage is None:
-                continue
-            aid = account_ids.get(row["name"])
-            if aid is None:
-                continue  # use case's account not in the FINS customer universe
-            ucid = _uid()
-            session.add(
-                UseCase(
-                    id=ucid,
-                    account_id=aid,
-                    title=row["usecase_name"],
-                    description=row["description"],
-                    stage=stage,
-                    estimated_monthly_dbus=row["dbus"],
-                    created_by=SEED_MARKER,
-                )
-            )
+                acct = existing.get(name)
+                if acct is None:
+                    acct = Account(id=_uid(), name=name, created_by=SEED_MARKER, **fields)
+                    session.add(acct)
+                    n_new += 1
+                else:
+                    for k, v in fields.items():
+                        setattr(acct, k, v)
+                    session.add(acct)
+                account_ids[name] = acct.id
+                n_accounts += 1
             session.flush()
-            session.add(
-                StageTransition(
-                    id=_uid(),
-                    use_case_id=ucid,
-                    from_stage="",
-                    to_stage=stage,
-                    created_by=SEED_MARKER,
-                )
-            )
-            n_use_cases += 1
 
-        # Genie Brickroad issues (all severities) per account.
-        n_issues = 0
-        for row in issues:
-            aid = account_ids.get(row["account_name"])
-            if aid is None:
-                continue
-            session.add(
-                AccountIssue(
-                    id=str(row["id"]),
-                    account_id=aid,
-                    display_id=row["display_id"],
-                    title=row["title"],
-                    severity=row["severity"],
-                    status=row["status"],
-                    product_area=row["product_area"],
-                    revenue_impact=row["revenue_impact"],
-                    investigator=row["investigator"],
-                    synced_by=SEED_MARKER,
-                )
-            )
-            n_issues += 1
-        session.flush()
+            # --- GTM-mirror children: rebuild fresh (no user data on these) ---
+            # Safe inside the txn — rolled back with everything else on failure.
+            session.exec(delete(StageTransition))
+            session.exec(delete(UseCase))
+            session.exec(delete(AccountIssue))
+            session.flush()
 
-        # Restore preserved user-entered signal, re-keyed to the rebuilt accounts by
-        # name. Entries for accounts no longer in the FINS universe are dropped.
-        n_tasks_restored = 0
-        for t in saved_tasks:
-            aid = account_ids.get(t["account_name"])
-            if aid is None:
-                continue
-            session.add(
-                AdoptionTaskState(
-                    id=_uid(),
-                    account_id=aid,
-                    task_key=t["task_key"],
-                    status=t["status"],
-                    note=t["note"],
-                    updated_at=t["updated_at"],
-                    updated_by=t["updated_by"],
+            for row in use_cases:
+                stage = STAGE_MAP.get(row["stage"])
+                if stage is None:
+                    continue
+                aid = account_ids.get(row["name"])
+                if aid is None:
+                    continue
+                ucid = _uid()
+                session.add(
+                    UseCase(
+                        id=ucid, account_id=aid, title=row["usecase_name"],
+                        description=row["description"], stage=stage,
+                        estimated_monthly_dbus=row["dbus"], created_by=SEED_MARKER,
+                    )
                 )
-            )
-            n_tasks_restored += 1
-        n_plan_restored = 0
-        for p in saved_plan:
-            aid = account_ids.get(p["account_name"])
-            if aid is None:
-                continue
-            session.add(
-                AccountPlanItem(
-                    id=_uid(),
-                    account_id=aid,
-                    item_key=p["item_key"],
-                    done=p["done"],
-                    note=p["note"],
+                session.add(
+                    StageTransition(
+                        id=_uid(), use_case_id=ucid, from_stage="", to_stage=stage,
+                        created_by=SEED_MARKER,
+                    )
                 )
-            )
-            n_plan_restored += 1
-        session.commit()
+                n_use_cases += 1
+
+            for row in issues:
+                aid = account_ids.get(row["account_name"])
+                if aid is None:
+                    continue
+                session.add(
+                    AccountIssue(
+                        id=str(row["id"]), account_id=aid, display_id=row["display_id"],
+                        title=row["title"], severity=row["severity"], status=row["status"],
+                        product_area=row["product_area"], revenue_impact=row["revenue_impact"],
+                        investigator=row["investigator"], synced_by=SEED_MARKER,
+                    )
+                )
+                n_issues += 1
+            # session.begin() commits here on success, or rolls back on any exception.
 
     print(
-        f"Seeded {n_accounts} accounts, {n_use_cases} use cases, {n_issues} issues. "
-        f"Restored {n_tasks_restored} adoption-task responses, "
-        f"{n_plan_restored} account-plan entries."
+        f"Refreshed {n_accounts} accounts ({n_new} new), {n_use_cases} use cases, "
+        f"{n_issues} issues. User entries (adoption tasks + plan notes) preserved "
+        f"in place — IDs unchanged."
     )
 
 
