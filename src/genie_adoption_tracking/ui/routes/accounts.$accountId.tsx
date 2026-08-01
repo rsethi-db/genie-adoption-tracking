@@ -87,8 +87,6 @@ function AccountDetail({ accountId }: { accountId: string }) {
     query: { select: (d) => d.data },
   });
 
-  const hasIssues = (data.issues ?? []).length > 0;
-
   return (
     <div>
       {/* Header */}
@@ -132,37 +130,26 @@ function AccountDetail({ accountId }: { accountId: string }) {
       {/* Active leadership campaigns targeting this account */}
       <AccountCampaigns accountId={data.id} />
 
-      {/* Sticky in-page section nav */}
-      <SectionNav hasIssues={hasIssues} />
-
       {/* Readiness & eligibility — one compact card replacing the 3 stacked banners */}
-      <section id="sec-overview" className="scroll-mt-32">
-        <ReadinessEligibility data={data} />
-      </section>
+      <ReadinessEligibility data={data} />
 
-      <section id="sec-workflow" className="scroll-mt-32">
-        {data.adoption && (
-          <AdoptionWorkflow
-            accountId={data.id}
-            accountName={data.name}
-            workflow={data.adoption}
-            ppStatus={data.pp_status ?? "unknown"}
-          />
-        )}
-        <AdoptionHistory accountId={data.id} />
-      </section>
-
-      <section id="sec-usecases" className="scroll-mt-32">
-        <UseCaseFlow useCases={data.use_cases} />
-      </section>
-
-      <section id="sec-risks" className="scroll-mt-32">
-        <ObjectionsBlockers
+      {data.adoption && (
+        <AdoptionWorkflow
           accountId={data.id}
-          plan={data.plan ?? []}
-          issues={data.issues ?? []}
+          accountName={data.name}
+          workflow={data.adoption}
+          ppStatus={data.pp_status ?? "unknown"}
         />
-      </section>
+      )}
+      <AdoptionHistory accountId={data.id} />
+
+      <UseCaseFlow useCases={data.use_cases} />
+
+      <ObjectionsBlockers
+        accountId={data.id}
+        plan={data.plan ?? []}
+        issues={data.issues ?? []}
+      />
     </div>
   );
 }
@@ -233,30 +220,6 @@ function AccountCampaigns({ accountId }: { accountId: string }) {
         </div>
       ))}
     </div>
-  );
-}
-
-// Sticky within-page navigation so the SA can jump straight to the workflow rather
-// than scrolling past the eligibility banners every time.
-function SectionNav({ hasIssues }: { hasIssues: boolean }) {
-  const links: { id: string; label: string }[] = [
-    { id: "sec-overview", label: "Overview" },
-    { id: "sec-workflow", label: "Workflow" },
-    { id: "sec-usecases", label: "Use cases" },
-    { id: "sec-risks", label: hasIssues ? "Risks & issues" : "Risks" },
-  ];
-  return (
-    <nav className="sticky top-16 z-30 -mx-4 px-4 py-2 bg-background/90 backdrop-blur-sm border-b mb-4 flex flex-wrap gap-1">
-      {links.map((l) => (
-        <a
-          key={l.id}
-          href={`#${l.id}`}
-          className="px-3 py-1.5 text-sm rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-        >
-          {l.label}
-        </a>
-      ))}
-    </nav>
   );
 }
 
