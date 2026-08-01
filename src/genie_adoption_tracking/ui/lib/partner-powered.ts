@@ -15,6 +15,20 @@ export function isPpEnabled(status: string): boolean {
   return status === "on" || status === "on_default";
 }
 
+// Effective consumption ability, considering enforce + workspace-level overrides:
+// even when the account default is "off", if enforce is NOT on and at least one
+// workspace has PP on, those workspaces can still consume Genie — so don't flag it as
+// blocked. Only enforce="on" (or off everywhere) truly blocks consumption.
+export function isPpEffectivelyEnabled(
+  status: string,
+  enforce: string,
+  wsOn: number,
+): boolean {
+  if (isPpEnabled(status)) return true;
+  if (status === "off" && enforce !== "on" && wsOn > 0) return true;
+  return false;
+}
+
 export function ppLabel(status: string): string {
   if (status === "on") return "Partner-Powered AI: On";
   if (status === "on_default") return "Partner-Powered AI: On (default)";

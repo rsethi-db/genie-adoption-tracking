@@ -1110,7 +1110,13 @@ def get_dashboard(session: Dependencies.Session):
     open_blocker_total = sum(1 for b in blockers if not b.resolved)
     live_total = sum(1 for uc in use_cases if uc.stage == "u6")
     total_dbus = round(sum(uc.estimated_monthly_dbus for uc in use_cases), 2)
-    pp_off_total = sum(1 for a in accounts if a.pp_status == "off")
+    # PP genuinely blocked: default off AND (enforce on, or no workspace has it on).
+    # Enforce-off with some workspaces on can still consume Genie → not counted.
+    pp_off_total = sum(
+        1
+        for a in accounts
+        if a.pp_status == "off" and (a.pp_enforce == "on" or (a.ws_pp_on or 0) == 0)
+    )
     # "Provisioning off" = no user provisioning at all (neither AIM nor SCIM).
     aim_off_total = sum(1 for a in accounts if a.provisioning_status == "off")
     all_issues = session.exec(select(AccountIssue)).all()

@@ -51,6 +51,7 @@ import {
   GENIE_READY_DASHBOARD_URL,
   enforceImplication,
   isPpEnabled,
+  isPpEffectivelyEnabled,
 } from "@/lib/partner-powered";
 import { openGenieChat } from "@/components/genie-chat";
 
@@ -200,9 +201,6 @@ function AccountCampaigns({ accountId }: { accountId: string }) {
                   High
                 </Badge>
               )}
-              <Badge variant="outline" className="text-[10px]">
-                Leadership ask
-              </Badge>
             </div>
             <p className="text-sm text-muted-foreground mt-0.5">{c.ask}</p>
             {c.cta && (
@@ -1154,7 +1152,8 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const pp = data.pp_status ?? "unknown";
-  const ppEnabled = isPpEnabled(pp);
+  // Effective consumption: account default OR workspace-level (enforce off + some on).
+  const ppEnabled = isPpEffectivelyEnabled(pp, data.pp_enforce ?? "unknown", data.ws_pp_on ?? 0);
   const aim = data.aim_status ?? "unknown";
   // User-provisioning readiness = AIM OR SCIM (provisioning_status is the broader
   // "any provisioning" signal); aim tells us whether the preferred method is used.
@@ -1342,8 +1341,11 @@ function PartnerPoweredBanner({
   bare?: boolean;
 }) {
   const implication = enforceImplication(enforce, status);
+  // Account default off, but enforce not on and some workspaces on → those workspaces
+  // can still consume Genie, so treat as enabled (no "blocked" warning).
+  const consumeViaWs = !isPpEnabled(status) && isPpEffectivelyEnabled(status, enforce, wsOn);
 
-  if (isPpEnabled(status)) {
+  if (isPpEnabled(status) || consumeViaWs) {
     return (
       <div
         className={
@@ -1354,11 +1356,20 @@ function PartnerPoweredBanner({
       >
         <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-medium">
           <ShieldCheck className="h-4 w-4" />
-          {status === "on_default"
-            ? "Partner-Powered AI is On (platform default) — Genie can consume."
-            : "Partner-Powered AI is On — Genie can consume."}
+          {consumeViaWs
+            ? "Partner-Powered AI is on for some workspaces — Genie can consume there."
+            : status === "on_default"
+              ? "Partner-Powered AI is On (platform default) — Genie can consume."
+              : "Partner-Powered AI is On — Genie can consume."}
         </div>
-        {implication && (
+        {consumeViaWs && (
+          <p className="text-sm text-muted-foreground mt-1">
+            The account default is off but enforce is not set, so workspaces with it
+            enabled can still use Genie. Turn it on at the account level (with enforce)
+            to cover all workspaces.
+          </p>
+        )}
+        {implication && !consumeViaWs && (
           <p className="text-sm text-muted-foreground mt-1">{implication}</p>
         )}
         <WsCounts on={wsOn} off={wsOff} total={wsTotal} />

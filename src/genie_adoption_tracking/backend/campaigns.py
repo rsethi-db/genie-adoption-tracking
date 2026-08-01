@@ -118,7 +118,15 @@ def _resolve_targets(
     if segment == "all":
         return list(accounts)
     if segment == "pp_off":
-        return [a for a in accounts if a.pp_status == "off"]
+        # PP genuinely blocked: account default off AND (enforce on, or no workspace
+        # has it on). If enforce is off and some workspaces are on, they can still
+        # consume Genie there — not blocked, so exclude them.
+        return [
+            a
+            for a in accounts
+            if a.pp_status == "off"
+            and (a.pp_enforce == "on" or (a.ws_pp_on or 0) == 0)
+        ]
     if segment == "no_provisioning":
         return [a for a in accounts if a.provisioning_status == "off"]
     if segment == "whitespace":
