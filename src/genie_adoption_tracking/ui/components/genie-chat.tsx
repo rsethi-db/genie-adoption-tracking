@@ -372,16 +372,22 @@ export function GenieChat() {
           <div className="flex items-end gap-2">
             <textarea
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                // Auto-grow with content.
+                const el = e.currentTarget;
+                el.style.height = "auto";
+                el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   send();
                 }
               }}
-              rows={1}
-              placeholder="Ask a question…"
-              className="flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring max-h-32"
+              rows={3}
+              placeholder="Ask a question…  (Enter to send, Shift+Enter for a new line)"
+              className="flex-1 resize-y rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[72px] max-h-60"
             />
             <Button size="icon" onClick={send} disabled={busy || !input.trim()}>
               <Send className="h-4 w-4" />
