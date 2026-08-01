@@ -1036,7 +1036,7 @@ function ObjectionsBlockers({
                 <ExternalLink className="h-3.5 w-3.5" /> File a blocker on Brickroad (PM help)
               </a>
               <a
-                href="https://go/asq"
+                href="https://databricks.lightning.force.com/lightning/page/home"
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 text-primary hover:underline"

@@ -87,6 +87,36 @@ def _account_context(session: Session, account_id: str) -> str:
     return " ".join(parts)
 
 
+import re
+
+# Genie appends inline citation links to internal workspace URLs (the genie-room /
+# UC-volume explorer), e.g.  \[[1](https://fevm-...databricks.com/genie/rooms/...)\].
+# Those only resolve on-network and clutter the answer, so we strip them.
+_INTERNAL_HOSTS = ("databricks.com", "databricksapps.com", "azuredatabricks.net")
+
+
+def _strip_internal_citations(text: str) -> str:
+    def _is_internal(url: str) -> bool:
+        return any(h in url for h in _INTERNAL_HOSTS)
+
+    # Remove markdown links [label](url) that point at internal hosts, keeping the
+    # label only when it's meaningful (not a bare citation number).
+    def _link_repl(m: re.Match) -> str:
+        label, url = m.group(1), m.group(2)
+        if not _is_internal(url):
+            return m.group(0)  # keep external links (go/, docs.google, etc.)
+        return "" if label.strip().isdigit() else label
+
+    text = re.sub(r"\[([^\]]*)\]\((https?://[^)]+)\)", _link_repl, text)
+    # Clean up the leftover citation scaffolding: "\[ \]", "[]", stray " []".
+    text = re.sub(r"\\?\[\s*\\?\]", "", text)
+    text = re.sub(r"[ \t]*\[\s*\]", "", text)
+    # Collapse 3+ newlines and trailing spaces left behind.
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def _extract_answer(events: list[dict]) -> GenieAnswerOut:
     """Flatten a Genie Agent Responses stream into text + optional SQL.
 
@@ -117,10 +147,12 @@ def _extract_answer(events: list[dict]) -> GenieAnswerOut:
             if isinstance(q, str) and q:
                 sql = q
 
+    text = "\n\n".join(t for t in text_parts if t)
+    text = _strip_internal_citations(text) if text else "(no answer)"
     return GenieAnswerOut(
         conversation_id=conversation_id,
         message_id=message_id,
-        text="\n\n".join(t for t in text_parts if t) or "(no answer)",
+        text=text or "(no answer)",
         sql=sql,
         columns=[],
         rows=[],

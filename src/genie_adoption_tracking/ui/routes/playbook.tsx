@@ -53,7 +53,7 @@ function PlaybookPage() {
           <TabsList>
             <TabsTrigger value="resources">Assets & Resources</TabsTrigger>
             <TabsTrigger value="blockers">Getting Unstuck</TabsTrigger>
-            <TabsTrigger value="contacts">Still stuck? Contacts</TabsTrigger>
+            <TabsTrigger value="contacts">Still stuck?</TabsTrigger>
           </TabsList>
           <TabsContent value="resources" className="mt-4">
             <ResourcesView />
@@ -93,7 +93,7 @@ const CONTACTS: {
     title: "Open an ASQ (Specialist Request)",
     desc: "Formal specialist help routed to the right SME when you need hands-on support on an account.",
     action: "Raise an ASQ",
-    url: "https://go/asq",
+    url: "https://databricks.lightning.force.com/lightning/page/home",
   },
   {
     title: "Product / Brickroad (PM help)",
