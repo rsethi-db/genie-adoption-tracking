@@ -282,13 +282,25 @@ const SEVERITY_META: Record<
   },
 };
 
+const BRICKROAD_URL = "https://go/brickroad";
+
 function AccountIssues({ issues }: { issues: AccountIssueOut[] }) {
   const openCount = issues.filter((i) => i.is_open).length;
   return (
     <div className="mt-3">
-      <p className="text-xs text-muted-foreground mb-2">
-        {openCount} open of {issues.length}
-      </p>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs text-muted-foreground">
+          {openCount} open of {issues.length} · from Brickroad
+        </p>
+        <a
+          href={BRICKROAD_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+        >
+          <ExternalLink className="h-3 w-3" /> Open in Brickroad
+        </a>
+      </div>
       <div className="grid gap-2">
         {issues.map((iss) => {
           const sev = SEVERITY_META[iss.severity] ?? {
@@ -334,14 +346,10 @@ function AccountIssues({ issues }: { issues: AccountIssueOut[] }) {
 
 const ADOPTION_STATUSES: { value: string; label: string }[] = [
   { value: "not_initiated", label: "Not Initiated" },
-  { value: "na", label: "NA" },
   { value: "in_progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
   { value: "blocked", label: "Blocked" },
 ];
-const BLOCKED_STATUS = { value: "blocked", label: "Blocked" };
-// Only these tasks also offer a "Blocked" status (red).
-const BLOCKABLE_TASKS = new Set(["rec_u3_workbench", "hp_u5_aim_ready"]);
 
 // Lane tone → color: Happy Path = green, Recommended = blue, As Needed = orange.
 const LANE_ACCENT: Record<string, string> = {
@@ -469,9 +477,8 @@ function AdoptionTaskCard({
   accountName: string;
 }) {
   const blocked = value.status === "blocked";
-  const statusOptions = BLOCKABLE_TASKS.has(task.key)
-    ? [...ADOPTION_STATUSES, BLOCKED_STATUS]
-    : ADOPTION_STATUSES;
+  // All five statuses (incl. Blocked) are available on every task.
+  const statusOptions = ADOPTION_STATUSES;
   return (
     <div
       className={cn(
@@ -1019,6 +1026,24 @@ function ObjectionsBlockers({
               />
             ))}
             {issues.length > 0 && <AccountIssues issues={issues} />}
+            <div className="pt-2 border-t flex flex-wrap gap-4 text-sm">
+              <a
+                href={BRICKROAD_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5" /> File a blocker on Brickroad (PM help)
+              </a>
+              <a
+                href="https://go/asq"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5" /> Open an ASQ (SME help)
+              </a>
+            </div>
           </CardContent>
         </Card>
       )}
