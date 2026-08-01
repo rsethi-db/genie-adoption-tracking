@@ -39,6 +39,7 @@ from genie_adoption_tracking.backend.db import (  # noqa: E402
     Account,
     AccountIssue,
     AccountPlanItem,
+    AdoptionTaskState,
     Blocker,
     ChecklistProgress,
     ResourceClick,
@@ -548,6 +549,7 @@ def main() -> None:
             StageTransition,
             AccountIssue,
             AccountPlanItem,
+            AdoptionTaskState,  # FK to gat_account; clear before accounts
             UseCase,
             Account,
         ):
