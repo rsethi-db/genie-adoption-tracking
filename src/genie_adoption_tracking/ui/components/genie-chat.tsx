@@ -321,7 +321,7 @@ export function GenieChat() {
           </div>
           <div className="flex flex-col leading-tight flex-1">
             <span className="text-sm font-semibold">Ask Genie</span>
-            <span className="text-[10px] text-muted-foreground -mt-0.5">
+            <span className="text-xs text-muted-foreground -mt-0.5">
               {accountId ? "Answering for this account" : "Field adoption assistant"}
             </span>
           </div>

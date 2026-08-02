@@ -196,7 +196,7 @@ function AccountCampaigns({ accountId }: { accountId: string }) {
             <div className="text-sm font-semibold flex items-center gap-2">
               {c.title}
               {c.priority === "high" && (
-                <Badge variant="destructive" className="text-[10px]">
+                <Badge variant="destructive" className="text-xs">
                   High
                 </Badge>
               )}
@@ -517,7 +517,7 @@ function StatusRadio({
             aria-checked={selected}
             onClick={() => onPick(s.value)}
             className={cn(
-              "flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors",
+              "flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs transition-colors",
               selected
                 ? isBlocked
                   ? "border-destructive bg-destructive/10 text-destructive font-medium"
@@ -593,7 +593,7 @@ function AdoptionTaskCard({
           reasons), then the note, then the Ask-Genie link. */}
       {blocked && (
         <div className="mt-2">
-          <label className="text-[10px] font-medium uppercase tracking-wide text-destructive">
+          <label className="text-xs font-medium uppercase tracking-wide text-destructive">
             What's blocking this?
           </label>
           <select
@@ -740,7 +740,7 @@ function AdoptionHistory({ accountId }: { accountId: string }) {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-x-2">
                         <span className="font-medium">{e.task_label}</span>
-                        <Badge variant="outline" className="text-[10px]">
+                        <Badge variant="outline" className="text-xs">
                           {STATUS_LABEL[e.status] ?? e.status}
                         </Badge>
                       </div>
@@ -871,7 +871,7 @@ function AdoptionWorkflow({
                 : "Save"}
           </Button>
           {dirty && !save.isPending && (
-            <span className="text-[10px] text-muted-foreground">Unsaved changes</span>
+            <span className="text-xs text-muted-foreground">Unsaved changes</span>
           )}
         </div>
       </CardHeader>
@@ -1223,20 +1223,20 @@ function PlanRow({
             {item.label}
           </span>
           {item.auto && (
-            <Badge variant="outline" className="gap-1 text-[10px]">
+            <Badge variant="outline" className="gap-1 text-xs">
               <Sparkles className="h-2.5 w-2.5" />
               auto
             </Badge>
           )}
           {isNa && (
-            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+            <Badge variant="outline" className="text-xs text-muted-foreground">
               N/A
             </Badge>
           )}
           {item.status === "in_progress" && (
             <Badge
               variant="outline"
-              className="text-[10px] border-amber-600/50 text-amber-700 dark:text-amber-400"
+              className="text-xs border-amber-600/50 text-amber-700 dark:text-amber-400"
             >
               in progress
             </Badge>
@@ -1253,7 +1253,7 @@ function PlanRow({
                 <li key={iss.id} className="flex items-center gap-2 text-xs">
                   <Badge
                     variant="outline"
-                    className={`shrink-0 text-[10px] ${sev?.cls ?? "text-muted-foreground"}`}
+                    className={`shrink-0 text-xs ${sev?.cls ?? "text-muted-foreground"}`}
                   >
                     {sev?.label ?? iss.severity}
                   </Badge>
@@ -1394,7 +1394,7 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
           <Progress value={readinessPct} className="h-2.5" />
           {showBreakdown && (
             <>
-              <p className="text-[11px] text-muted-foreground mt-1.5">
+              <p className="text-xs text-muted-foreground mt-1.5">
                 By stage — from the Adoption Workflow the team fills below.{" "}
                 <span className="font-medium">{done.length}/{applicable.length}</span>{" "}
                 tasks done.

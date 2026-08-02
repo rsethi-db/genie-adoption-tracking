@@ -349,14 +349,14 @@ function CampaignCard({
         <div className="flex items-start justify-between gap-3">
           <CardTitle className="text-sm flex items-center gap-2">
             {campaign.priority === "high" && (
-              <Badge variant="destructive" className="text-[10px]">
+              <Badge variant="destructive" className="text-xs">
                 High
               </Badge>
             )}
             {campaign.title}
           </CardTitle>
           {!campaign.active && (
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
               Archived
             </Badge>
           )}
