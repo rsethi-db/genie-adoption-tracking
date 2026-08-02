@@ -104,8 +104,9 @@ const CONTACTS: {
   },
 ];
 
-const FEEDBACK_MAILTO =
-  "mailto:richa.sethi@databricks.com,amee.vora@databricks.com?subject=Genie%20Adoption%20Navigator%20feedback";
+const FEEDBACK_SUBJECT = "?subject=Genie%20Adoption%20Navigator%20feedback";
+const RICHA_MAILTO = `mailto:richa.sethi@databricks.com${FEEDBACK_SUBJECT}`;
+const AMEE_MAILTO = `mailto:amee.vora@databricks.com${FEEDBACK_SUBJECT}`;
 
 function ContactsView() {
   return (
@@ -137,11 +138,11 @@ function ContactsView() {
       </div>
       <p className="text-sm text-muted-foreground pt-1">
         Feedback on this Navigator — a data gap, a bug, or an idea? Email{" "}
-        <a href={FEEDBACK_MAILTO} className="text-primary hover:underline">
+        <a href={RICHA_MAILTO} className="text-primary hover:underline">
           Richa Sethi
         </a>{" "}
-        and{" "}
-        <a href={FEEDBACK_MAILTO} className="text-primary hover:underline">
+        or{" "}
+        <a href={AMEE_MAILTO} className="text-primary hover:underline">
           Amee Vora
         </a>
         .
