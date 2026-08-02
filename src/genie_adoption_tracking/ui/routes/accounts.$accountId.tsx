@@ -1551,14 +1551,14 @@ function EligibilityRow({
         className="w-full flex items-center gap-2.5 py-2.5 text-left"
       >
         <span className={cn("h-2 w-2 rounded-full shrink-0", ROW_DOT[tone])} />
-        <span className="text-sm flex-1">{label}</span>
-        <span className="text-sm font-medium">{value}</span>
+        <span className="text-sm">{label}</span>
         <ChevronDown
           className={cn(
-            "h-4 w-4 text-muted-foreground transition-transform",
+            "h-4 w-4 text-muted-foreground transition-transform shrink-0",
             open && "rotate-180"
           )}
         />
+        <span className="text-sm font-medium ml-auto">{value}</span>
       </button>
       {open && <div className="pb-3">{children}</div>}
     </div>
