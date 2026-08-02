@@ -79,6 +79,12 @@ const CONTACTS: {
   url: string;
 }[] = [
   {
+    title: "General Genie / AI-BI Slack",
+    desc: "Broad Genie & AI/BI questions, community help, and product discussion.",
+    action: "Join #apa-genie-aibi",
+    url: "https://databricks.enterprise.slack.com/archives/C077N5FSZDL",
+  },
+  {
     title: "FINS Genie SME",
     desc: "Deep technical help on a specific Genie engagement — accuracy, modeling, evaluation, tricky setups.",
     action: "Post in #sme-genie-fins-amer",
@@ -97,16 +103,10 @@ const CONTACTS: {
     url: "https://go/brickroad",
   },
   {
-    title: "Security & Trust review",
-    desc: "Questions on Partner-Powered AI enablement, the AI Security Review, or trust/compliance.",
-    action: "Security Authority Review guide",
-    url: "https://docs.databricks.com/aws/en/databricks-ai/databricks-ai-trust",
-  },
-  {
     title: "App feedback / issues",
     desc: "Something wrong in this Navigator, a data gap, or an idea to make it better? Let us know.",
     action: "Share feedback",
-    url: "mailto:?subject=Genie%20Adoption%20Navigator%20feedback",
+    url: "mailto:richa.sethi@databricks.com,amee.vora@databricks.com?subject=Genie%20Adoption%20Navigator%20feedback",
   },
 ];
 
