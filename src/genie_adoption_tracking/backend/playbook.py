@@ -295,15 +295,13 @@ RESOURCES: list[dict] = [
      "url": "https://docs.google.com/presentation/d/1EcxZB5Q5bT3waYUMDM72OcxCEpz6XaXtmJzzPqwSu0E/edit", "stages": ["u2", "u5"]},
 
     # ---- Workshops --------------------------------------------------------------------
-    {"key": "workshops-geniewish", "bucket": "Workshops", "label": "Best Practices Genie Workshop",
+    {"key": "workshops-geniewish", "bucket": "Workshops", "label": "Genie Agents Implementation Guide",
      "url": "https://docs.google.com/presentation/d/1qz0vIUW0QsIhGNFDHOVvtUf-g4CPnf9IjN1_P64qt2Q/edit", "stages": ["u2"]},
     {"key": "workshops-genie-workshop", "bucket": "Workshops", "label": "Genie Workshop",
      "url": "https://docs.google.com/presentation/d/1Hch4DwjZyvupg8rAhlfPBneKLZBGw04JtELWDNPJzag/edit", "stages": ["u2"]},
     {"key": "workshops-workshop-in-box", "bucket": "Workshops", "label": "Genie Workshop in a Box",
      "url": "https://cso-workshop-7474655716427570.aws.databricksapps.com/", "stages": ["u2"]},
-    {"key": "workshops-hackathon-box", "bucket": "Workshops", "label": "Hackathon in a Box",
-     "url": "https://docs.google.com/document/d/1xbGJAaMS1MGy4Lq53axPOHQpyEXZWNzVIDDPZ1UgWmE/edit", "stages": ["u4"]},
-    {"key": "workshops-genie-hackathon", "bucket": "Workshops", "label": "Genie Hackathon",
+    {"key": "workshops-genie-hackathon", "bucket": "Workshops", "label": "Genie Acceleration Hackathon",
      "url": "https://go/genie-hackathon", "stages": ["u2", "u4"]},
     {"key": "workshops-training-investment", "bucket": "Workshops", "label": "Training Investment (>100 learners)",
      "url": "https://docs.google.com/presentation/d/1uDVzOgot6vRzK_dupJK7FJaFYrypYdC5oDtF8CpOnOs", "stages": ["u2", "u5"]},

@@ -469,7 +469,7 @@ const TASK_RESOURCES: Record<string, { label: string; url: string }[]> = {
   ],
   hp_u2_workshop: [
     {
-      label: "Best-practices workshop deck",
+      label: "Genie Agents Implementation Guide",
       url: "https://docs.google.com/presentation/d/1qz0vIUW0QsIhGNFDHOVvtUf-g4CPnf9IjN1_P64qt2Q/edit?slide=id.g3d4e81e3100_0_662#slide=id.g3d4e81e3100_0_662",
     },
   ],
