@@ -1309,6 +1309,13 @@ function WsCounts({
 function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [openStages, setOpenStages] = useState<Set<string>>(new Set());
+  const toggleStage = (k: string) =>
+    setOpenStages((prev) => {
+      const next = new Set(prev);
+      next.has(k) ? next.delete(k) : next.add(k);
+      return next;
+    });
 
   const pp = data.pp_status ?? "unknown";
   // Effective consumption: account default OR workspace-level (enforce off + some on).
@@ -1396,9 +1403,27 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
               <div className="mt-2 space-y-2 text-xs">
                 {stageGroups.map((g) => {
                   const complete = g.done === g.total;
+                  const isOpen = openStages.has(g.key);
                   return (
                     <div key={g.key}>
-                      <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => g.notDone.length > 0 && toggleStage(g.key)}
+                        className={cn(
+                          "w-full flex items-center gap-2 text-left",
+                          g.notDone.length > 0 && "hover:text-foreground"
+                        )}
+                      >
+                        {g.notDone.length > 0 ? (
+                          <ChevronDown
+                            className={cn(
+                              "h-3 w-3 shrink-0 text-muted-foreground transition-transform",
+                              isOpen && "rotate-180"
+                            )}
+                          />
+                        ) : (
+                          <span className="w-3 shrink-0" />
+                        )}
                         <span className="font-bold text-red-600 w-7 shrink-0">
                           {g.code}
                         </span>
@@ -1416,9 +1441,9 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
                         {complete && (
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                         )}
-                      </div>
-                      {g.notDone.length > 0 && (
-                        <ul className="ml-9 mt-0.5 space-y-0.5 text-muted-foreground">
+                      </button>
+                      {isOpen && g.notDone.length > 0 && (
+                        <ul className="ml-12 mt-0.5 space-y-0.5 text-muted-foreground">
                           {g.notDone.map((t) => (
                             <li key={t.key} className="flex items-center gap-1.5" title={t.label}>
                               <Circle className="h-2.5 w-2.5 shrink-0" />

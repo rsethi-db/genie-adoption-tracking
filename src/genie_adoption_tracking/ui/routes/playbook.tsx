@@ -81,7 +81,7 @@ const CONTACTS: {
   {
     title: "General Genie / AI-BI Slack",
     desc: "Broad Genie & AI/BI questions, community help, and product discussion.",
-    action: "Join #apa-genie-aibi",
+    action: "Post in #apa-genie-aibi",
     url: "https://databricks.enterprise.slack.com/archives/C077N5FSZDL",
   },
   {
@@ -102,13 +102,10 @@ const CONTACTS: {
     action: "File on Brickroad",
     url: "https://go/brickroad",
   },
-  {
-    title: "App feedback / issues",
-    desc: "Something wrong in this Navigator, a data gap, or an idea to make it better? Let us know.",
-    action: "Share feedback",
-    url: "mailto:richa.sethi@databricks.com,amee.vora@databricks.com?subject=Genie%20Adoption%20Navigator%20feedback",
-  },
 ];
+
+const FEEDBACK_MAILTO =
+  "mailto:richa.sethi@databricks.com,amee.vora@databricks.com?subject=Genie%20Adoption%20Navigator%20feedback";
 
 function ContactsView() {
   return (
@@ -138,6 +135,17 @@ function ContactsView() {
           </Card>
         ))}
       </div>
+      <p className="text-sm text-muted-foreground pt-1">
+        Feedback on this Navigator — a data gap, a bug, or an idea? Email{" "}
+        <a href={FEEDBACK_MAILTO} className="text-primary hover:underline">
+          Richa Sethi
+        </a>{" "}
+        and{" "}
+        <a href={FEEDBACK_MAILTO} className="text-primary hover:underline">
+          Amee Vora
+        </a>
+        .
+      </p>
     </div>
   );
 }
