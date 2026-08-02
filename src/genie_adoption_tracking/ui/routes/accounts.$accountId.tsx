@@ -1324,11 +1324,23 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
   const workflowTasks = (data.adoption?.tasks ?? []).filter((t) => t.lane !== "security");
   const applicable = workflowTasks;
   const done = workflowTasks.filter((t) => t.status === "completed");
-  const remaining = workflowTasks.filter((t) => t.status !== "completed");
   const readinessPct =
     workflowTasks.length > 0
       ? Math.round((done.length / workflowTasks.length) * 100)
       : 0;
+  // Consolidate the breakdown by stage (U1–U6): one row per stage with done/total +
+  // the tasks still open, instead of a flat 28-item list.
+  const stageGroups = (data.adoption?.stages ?? []).map((s) => {
+    const tasks = workflowTasks.filter((t) => t.stage === s.key);
+    return {
+      key: s.key,
+      code: s.code,
+      name: s.name,
+      total: tasks.length,
+      done: tasks.filter((t) => t.status === "completed").length,
+      notDone: tasks.filter((t) => t.status !== "completed"),
+    };
+  }).filter((g) => g.total > 0);
 
   const toggle = (k: string) => setExpanded((e) => (e === k ? null : k));
 
@@ -1377,47 +1389,47 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
           {showBreakdown && (
             <>
               <p className="text-[11px] text-muted-foreground mt-1.5">
-                Based on the Adoption Workflow tasks the team has marked below.
+                By stage — from the Adoption Workflow the team fills below.{" "}
+                <span className="font-medium">{done.length}/{applicable.length}</span>{" "}
+                tasks done.
               </p>
-              <div className="mt-2 grid sm:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <div className="font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5">
-                    Done ({done.length})
-                  </div>
-                  {done.length === 0 ? (
-                    <p className="text-muted-foreground">
-                      Nothing marked completed yet.
-                    </p>
-                  ) : (
-                    <ul className="space-y-1">
-                      {done.map((t) => (
-                        <li key={t.key} className="flex items-center gap-1.5" title={t.label}>
+              <div className="mt-2 space-y-2 text-xs">
+                {stageGroups.map((g) => {
+                  const complete = g.done === g.total;
+                  return (
+                    <div key={g.key}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-red-600 w-7 shrink-0">
+                          {g.code}
+                        </span>
+                        <span className="flex-1 truncate">{g.name}</span>
+                        <span
+                          className={cn(
+                            "font-medium shrink-0",
+                            complete
+                              ? "text-emerald-700 dark:text-emerald-400"
+                              : "text-muted-foreground"
+                          )}
+                        >
+                          {g.done}/{g.total}
+                        </span>
+                        {complete && (
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                          <span className="truncate">{t.label}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <div>
-                  <div className="font-semibold text-muted-foreground mb-1.5">
-                    Not done ({remaining.length})
-                  </div>
-                  {remaining.length === 0 ? (
-                    <p className="text-emerald-700 dark:text-emerald-400">
-                      All workflow tasks completed. 🎉
-                    </p>
-                  ) : (
-                    <ul className="space-y-1">
-                      {remaining.map((t) => (
-                        <li key={t.key} className="flex items-center gap-1.5" title={t.label}>
-                          <Circle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="truncate">{t.label}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                        )}
+                      </div>
+                      {g.notDone.length > 0 && (
+                        <ul className="ml-9 mt-0.5 space-y-0.5 text-muted-foreground">
+                          {g.notDone.map((t) => (
+                            <li key={t.key} className="flex items-center gap-1.5" title={t.label}>
+                              <Circle className="h-2.5 w-2.5 shrink-0" />
+                              <span className="truncate">{t.label}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}
