@@ -711,6 +711,12 @@ def main() -> None:
             session.exec(delete(AccountIssue))
             session.flush()
 
+            # Insert use cases first and FLUSH before their stage_transition children:
+            # there's no ORM relationship between them, so SQLAlchemy orders inserts by
+            # mapper sort key — and gat_stage_transition sorts before gat_use_case, which
+            # would violate the FK. Two passes with a flush between guarantee the parent
+            # rows exist first.
+            pending_transitions: list[tuple[str, str]] = []  # (use_case_id, stage)
             for row in use_cases:
                 stage = STAGE_MAP.get(row["stage"])
                 if stage is None:
@@ -726,13 +732,17 @@ def main() -> None:
                         estimated_monthly_dbus=row["dbus"], created_by=SEED_MARKER,
                     )
                 )
+                pending_transitions.append((ucid, stage))
+                n_use_cases += 1
+            session.flush()  # parents committed to the FK's satisfaction
+
+            for ucid, stage in pending_transitions:
                 session.add(
                     StageTransition(
                         id=_uid(), use_case_id=ucid, from_stage="", to_stage=stage,
                         created_by=SEED_MARKER,
                     )
                 )
-                n_use_cases += 1
 
             for row in issues:
                 aid = account_ids.get(row["account_name"])
