@@ -1137,8 +1137,8 @@ function WsCounts({
   if (total <= 0) return null;
   return (
     <p className="text-xs text-muted-foreground mt-1">
-      Active workspaces: {on.toLocaleString()} on · {off.toLocaleString()} off
-      (of {total.toLocaleString()})
+      Partner-Powered active workspaces: {on.toLocaleString()} on ·{" "}
+      {off.toLocaleString()} off (of {total.toLocaleString()})
     </p>
   );
 }

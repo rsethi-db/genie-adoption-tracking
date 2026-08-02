@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Search, ArrowRight, Loader2 } from "lucide-react";
+import { Search, ArrowRight, Loader2, Megaphone } from "lucide-react";
 
 export const Route = createFileRoute("/accounts/")({
   component: () => <AccountsPage />,
@@ -27,6 +27,27 @@ function AccountsPage() {
           Look up a FINS account to pull up its Genie adoption workflow.
         </p>
       </div>
+
+      {/* Leadership push */}
+      <div className="mb-6 rounded-lg border border-primary/40 bg-primary/5 p-4 flex items-start gap-3 max-w-3xl">
+        <Megaphone className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+        <div>
+          <div className="text-sm font-semibold">
+            Genie adoption push — action needed
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Team — as we drive Genie adoption across FINS this quarter, please make
+            sure your accounts are moving through the Field Adoption Playbook. Take a
+            few minutes to update each account's Adoption Workflow in the Navigator so
+            we have an accurate read on where everyone is.
+          </p>
+          <p className="text-sm mt-2">
+            <span className="font-medium">Action:</span> Choose an account below and
+            review &amp; update its Adoption Workflow.
+          </p>
+        </div>
+      </div>
+
       <AccountLookup />
     </AppShell>
   );
