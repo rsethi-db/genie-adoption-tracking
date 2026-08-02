@@ -461,6 +461,18 @@ const LANE_DOT: Record<string, string> = {
 
 // Reference links shown under specific workflow/security questions (by task key).
 const TASK_RESOURCES: Record<string, { label: string; url: string }[]> = {
+  hp_u1_demo: [
+    {
+      label: "Existing Industry Demos (dbdemos catalog)",
+      url: "https://dbdemos-demo-catalog-2556758628403379.aws.databricksapps.com/",
+    },
+  ],
+  hp_u2_workshop: [
+    {
+      label: "Best-practices workshop deck",
+      url: "https://docs.google.com/presentation/d/1qz0vIUW0QsIhGNFDHOVvtUf-g4CPnf9IjN1_P64qt2Q/edit?slide=id.g3d4e81e3100_0_662#slide=id.g3d4e81e3100_0_662",
+    },
+  ],
   sec_authority_review: [
     {
       label: "Security Authority Review guide",

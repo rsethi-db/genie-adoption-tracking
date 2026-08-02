@@ -270,7 +270,7 @@ BLOCKERS: list[dict] = [
 RESOURCES: list[dict] = [
     # ---- Demo Assets ------------------------------------------------------------------
     {"key": "demo-industry", "bucket": "Demo Assets", "label": "Existing Industry demos",
-     "url": "https://go/industry-demos", "stages": ["u1"]},
+     "url": "https://dbdemos-demo-catalog-2556758628403379.aws.databricksapps.com/", "stages": ["u1"]},
     {"key": "demo-solution-builder", "bucket": "Demo Assets", "label": "Build a new demo (Solution Builder)",
      "url": "https://go/solution-builder", "stages": ["u1", "u2"]},
     {"key": "demo-gtm-rooms", "bucket": "Demo Assets", "label": "FS GTM Genie Rooms",
@@ -303,6 +303,8 @@ RESOURCES: list[dict] = [
      "url": "https://cso-workshop-7474655716427570.aws.databricksapps.com/", "stages": ["u2"]},
     {"key": "workshops-hackathon-box", "bucket": "Workshops", "label": "Hackathon in a Box",
      "url": "https://docs.google.com/document/d/1xbGJAaMS1MGy4Lq53axPOHQpyEXZWNzVIDDPZ1UgWmE/edit", "stages": ["u4"]},
+    {"key": "workshops-genie-hackathon", "bucket": "Workshops", "label": "Genie Hackathon",
+     "url": "https://go/genie-hackathon", "stages": ["u2", "u4"]},
     {"key": "workshops-bia", "bucket": "Workshops", "label": "Business Impact Accelerator",
      "url": "https://go/business-impact-accelerator", "stages": ["u3", "u4"]},
     {"key": "workshops-pricing", "bucket": "Workshops", "label": "Pricing",
