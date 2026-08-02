@@ -77,12 +77,16 @@ const CONTACTS: {
   desc: string;
   action: string;
   url: string;
+  action2?: string;
+  url2?: string;
 }[] = [
   {
-    title: "General Genie Slack",
-    desc: "Broad Genie & AI/BI questions, community help, and product discussion.",
+    title: "General Genie Questions",
+    desc: "Broad Genie & AI/BI questions, community help, and product discussion. For pricing / pay-go questions, use #genie-paygo.",
     action: "Post in #apa-genie-aibi",
     url: "https://databricks.enterprise.slack.com/archives/C077N5FSZDL",
+    action2: "Pricing questions — #genie-paygo",
+    url2: "https://docs.google.com/document/d/15VSQ95Kejw0bPzz24g7OKoAFmM6vYkYpkNJT4pXV52E/edit?tab=t.0#heading=h.g8pdpmh1xa4i",
   },
   {
     title: "FINS Genie SME",
@@ -132,6 +136,17 @@ function ContactsView() {
                 <ExternalLink className="h-3.5 w-3.5" />
                 {c.action}
               </a>
+              {c.action2 && c.url2 && (
+                <a
+                  href={c.url2}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1 text-sm text-primary hover:underline"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  {c.action2}
+                </a>
+              )}
             </CardContent>
           </Card>
         ))}

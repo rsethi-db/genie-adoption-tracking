@@ -275,6 +275,8 @@ RESOURCES: list[dict] = [
      "url": "https://docs.databricks.com/aws/en/genie-agents/best-practices", "stages": ["u2", "u3", "u5"]},
     {"key": "workshops-pricing", "bucket": "Product & Reference", "label": "Pricing",
      "url": "https://go/geniepricing", "stages": ["u3"]},
+    {"key": "ref-pricing-faq", "bucket": "Product & Reference", "label": "Genie Products Pricing FAQ",
+     "url": "https://docs.google.com/document/d/15VSQ95Kejw0bPzz24g7OKoAFmM6vYkYpkNJT4pXV52E/edit?tab=t.0#heading=h.l2pl401c73g6", "stages": ["u3"]},
 
     # ---- Demo Assets ------------------------------------------------------------------
     {"key": "demo-industry", "bucket": "Demo Assets", "label": "Existing Industry demos",
@@ -323,6 +325,8 @@ RESOURCES: list[dict] = [
      "url": "https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f014ecfb601fa19ed40df16a1110ae/published/pages/1e023696?o=2548836972759138", "stages": ["u5", "u6"]},
     {"key": "proof-customer-stories", "bucket": "Proof", "label": "Customer Stories",
      "url": "https://docs.google.com/presentation/d/1hLUBBrJ7oC2c5e8IiJiuvonbZ9u7ysw_bh21OFc0TYk/edit?usp=sharing", "stages": ["u4", "u6"]},
+    {"key": "proof-genie-cost-dashboard", "bucket": "Proof", "label": "Genie Cost Dashboard (go/aibi/genie-api-pricing)",
+     "url": "https://logfood.azuredatabricks.net/dashboardsv3/01f14a6ac7361099a4ae71135c942a45/published?o=2548836972759138", "stages": ["u5", "u6"]},
 ]
 
 
