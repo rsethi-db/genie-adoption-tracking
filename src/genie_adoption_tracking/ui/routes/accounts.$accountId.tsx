@@ -996,14 +996,6 @@ function ObjectionsBlockers({
               >
                 <ExternalLink className="h-3.5 w-3.5" /> File a blocker on Brickroad (PM help)
               </a>
-              <a
-                href="https://databricks.lightning.force.com/lightning/page/home"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                <ExternalLink className="h-3.5 w-3.5" /> Open an ASQ (SME help)
-              </a>
             </div>
           </CardContent>
         </Card>
@@ -1154,6 +1146,8 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
   const pp = data.pp_status ?? "unknown";
   // Effective consumption: account default OR workspace-level (enforce off + some on).
   const ppEnabled = isPpEffectivelyEnabled(pp, data.pp_enforce ?? "unknown", data.ws_pp_on ?? 0);
+  // Account default off, but enabled on select workspaces (enforce off + some on).
+  const ppConsumeViaWs = !isPpEnabled(pp) && ppEnabled;
   const aim = data.aim_status ?? "unknown";
   // User-provisioning readiness = AIM OR SCIM (provisioning_status is the broader
   // "any provisioning" signal); aim tells us whether the preferred method is used.
@@ -1165,7 +1159,14 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
 
   const toggle = (k: string) => setExpanded((e) => (e === k ? null : k));
 
-  const ppTone: RowTone = ppEnabled ? "good" : pp === "off" ? "bad" : "warn";
+  // Fully on = good; on only for select workspaces = warn (nudge to enable account-wide).
+  const ppTone: RowTone = ppConsumeViaWs
+    ? "warn"
+    : ppEnabled
+      ? "good"
+      : pp === "off"
+        ? "bad"
+        : "warn";
   const provTone: RowTone =
     prov === "on" ? "good" : prov === "off" ? "bad" : "warn";
 
@@ -1201,22 +1202,43 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
           </div>
           <Progress value={data.readiness_pct ?? 0} />
           {showBreakdown && (
-            <div className="mt-2 grid gap-1 text-xs">
-              {remaining.length === 0 ? (
-                <span className="text-emerald-700 dark:text-emerald-400">
-                  All applicable readiness items are done.
-                </span>
-              ) : (
-                <>
-                  <span className="text-muted-foreground">Still to do:</span>
-                  {remaining.map((p) => (
-                    <span key={p.key} className="flex items-center gap-1.5">
-                      <Circle className="h-3 w-3 text-muted-foreground shrink-0" />
-                      {p.label}
-                    </span>
-                  ))}
-                </>
-              )}
+            <div className="mt-3 grid sm:grid-cols-2 gap-4 text-xs">
+              <div>
+                <div className="font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5">
+                  Done ({done.length})
+                </div>
+                {done.length === 0 ? (
+                  <p className="text-muted-foreground">Nothing done yet.</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {done.map((p) => (
+                      <li key={p.key} className="flex items-start gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-px" />
+                        <span>{p.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <div className="font-semibold text-muted-foreground mb-1.5">
+                  Not done ({remaining.length})
+                </div>
+                {remaining.length === 0 ? (
+                  <p className="text-emerald-700 dark:text-emerald-400">
+                    All applicable items are done. 🎉
+                  </p>
+                ) : (
+                  <ul className="space-y-1">
+                    {remaining.map((p) => (
+                      <li key={p.key} className="flex items-start gap-1.5">
+                        <Circle className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-px" />
+                        <span>{p.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1227,13 +1249,15 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
             tone={ppTone}
             label="Partner-Powered AI"
             value={
-              ppEnabled
-                ? pp === "on_default"
-                  ? "On (default)"
-                  : "On"
-                : pp === "off"
-                  ? "Off"
-                  : "Unknown"
+              ppConsumeViaWs
+                ? "On (select workspaces)"
+                : isPpEnabled(pp)
+                  ? pp === "on_default"
+                    ? "On (default)"
+                    : "On"
+                  : pp === "off"
+                    ? "Off"
+                    : "Unknown"
             }
             open={expanded === "pp"}
             onToggle={() => toggle("pp")}
@@ -1346,27 +1370,33 @@ function PartnerPoweredBanner({
   const consumeViaWs = !isPpEnabled(status) && isPpEffectivelyEnabled(status, enforce, wsOn);
 
   if (isPpEnabled(status) || consumeViaWs) {
+    // Fully on → green. On only for select workspaces → amber (nudge to account-wide).
+    const wrapCls = bare
+      ? "px-0"
+      : consumeViaWs
+        ? "rounded-lg border border-amber-600/40 bg-amber-600/5 p-4 mb-4"
+        : "rounded-lg border border-emerald-600/40 bg-emerald-600/5 p-4 mb-4";
+    const titleCls = consumeViaWs
+      ? "flex items-center gap-2 text-amber-700 dark:text-amber-400 font-medium"
+      : "flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-medium";
     return (
-      <div
-        className={
-          bare
-            ? "px-0"
-            : "rounded-lg border border-emerald-600/40 bg-emerald-600/5 p-4 mb-4"
-        }
-      >
-        <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-medium">
-          <ShieldCheck className="h-4 w-4" />
+      <div className={wrapCls}>
+        <div className={titleCls}>
+          {consumeViaWs ? (
+            <ShieldAlert className="h-4 w-4" />
+          ) : (
+            <ShieldCheck className="h-4 w-4" />
+          )}
           {consumeViaWs
-            ? "Partner-Powered AI is on for some workspaces — Genie can consume there."
+            ? "Partner-Powered AI: account default Off, On for select workspaces — Genie can consume there, but not account-wide."
             : status === "on_default"
               ? "Partner-Powered AI is On (platform default) — Genie can consume."
               : "Partner-Powered AI is On — Genie can consume."}
         </div>
         {consumeViaWs && (
           <p className="text-sm text-muted-foreground mt-1">
-            The account default is off but enforce is not set, so workspaces with it
-            enabled can still use Genie. Enable it at the account level to cover all
-            workspaces.
+            Enforce is not set, so workspaces with it enabled can still use Genie.
+            Enable it at the account level (with enforce) to cover all workspaces.
           </p>
         )}
         {implication && !consumeViaWs && (
@@ -1374,16 +1404,29 @@ function PartnerPoweredBanner({
         )}
         <WsCounts on={wsOn} off={wsOff} total={wsTotal} />
         {consumeViaWs && (
-          <Collapsible label="Next steps to enable account-wide">
-            <ul className="space-y-1.5">
-              {PP_OFF_NEXT_STEPS.map((step, i) => (
-                <li key={i} className="flex gap-2 text-sm">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
-                  {step}
-                </li>
-              ))}
-            </ul>
-          </Collapsible>
+          <>
+            <Collapsible label="Next steps to enable account-wide">
+              <ul className="space-y-1.5">
+                {PP_OFF_NEXT_STEPS.map((step, i) => (
+                  <li key={i} className="flex gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
+                    {step}
+                  </li>
+                ))}
+              </ul>
+            </Collapsible>
+            <div className="flex flex-wrap gap-4 mt-3 text-sm">
+              <a
+                href={PP_DOCS_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                How to enable Partner-Powered AI (docs)
+              </a>
+            </div>
+          </>
         )}
       </div>
     );
