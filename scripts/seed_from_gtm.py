@@ -255,6 +255,42 @@ GROUP BY f.account_name
 HAVING genie_90d > 0
 """
 
+# Genie T30D consumption per FINS account: genie $DBU (trailing 30 days) and the
+# count of Genie spaces with usage in the trailing 30 days — the two figures the
+# logfood PP-off page reports at the account level (fins_genie_account_view), but
+# computed for ALL FINS accounts (not just PP-off) so Signals can show them app-wide.
+GENIE_T30D_QUERY = """
+WITH fins AS (
+  SELECT DISTINCT account_id AS sfdc_account_id, account_name
+  FROM main.gtm_silver.account_dim
+  WHERE sales_business_unit='AMER Industries' AND sales_subregion_level_1='FINS'
+    AND account_status LIKE '%Customer%' AND account_name IS NOT NULL
+),
+genie_space_counts AS (
+  SELECT workspace_id,
+    COUNT(DISTINCT CASE WHEN ds >= date_sub(current_date(), 30)
+      THEN dim_data_room_id END) AS genie_spaces_with_usage
+  FROM main.metric_store.fct_data_room_messages_daily
+  WHERE ds >= '2025-04-13'
+  GROUP BY workspace_id
+),
+per_ws AS (
+  SELECT f.account_name, fd.workspaceId,
+    SUM(fd.genie_dbu_dollars) AS genie_dollars,
+    MAX(COALESCE(gc.genie_spaces_with_usage, 0)) AS spaces
+  FROM main.field_usage_dashboard.fins_data fd
+    JOIN fins f ON fd.accountId = f.sfdc_account_id
+    LEFT JOIN genie_space_counts gc ON fd.workspaceId = gc.workspace_id
+  WHERE fd.date BETWEEN date_sub(fd.max_date, 29) AND fd.max_date
+  GROUP BY f.account_name, fd.workspaceId
+)
+SELECT account_name,
+  ROUND(SUM(genie_dollars), 2) AS genie_dollars_t30d,
+  SUM(spaces) AS active_genie_spaces
+FROM per_ws
+GROUP BY account_name
+"""
+
 # Genie-related Brickroad issues (ALL severities) per FINS account. customer_id on
 # the issue is the Salesforce account id (matches account_dim.account_id).
 ISSUES_QUERY = """
@@ -516,6 +552,17 @@ def fetch_genie_spend(ws) -> dict[str, float]:
     return out
 
 
+def fetch_genie_t30d(ws) -> dict[str, dict]:
+    """Map account_name -> {genie_dollars_t30d, active_genie_spaces} (trailing 30d)."""
+    out: dict[str, dict] = {}
+    for r in _run_query(ws, GENIE_T30D_QUERY):
+        out[r[0]] = {
+            "genie_dollars_t30d": float(r[1] or 0),
+            "active_genie_spaces": int(r[2] or 0),
+        }
+    return out
+
+
 def build_engine():
     ws = _fevm_ws()
     inst = ws.database.get_database_instance(INSTANCE)
@@ -546,6 +593,7 @@ def main() -> None:
     wsc = fetch_ws(ws)
     aim = fetch_aim(ws)
     spend = fetch_genie_spend(ws)
+    t30d = fetch_genie_t30d(ws)
     issues = fetch_issues(ws)
     pp_off = sum(1 for v in pp.values() if v["pp_status"] == "off")
     aim_off = sum(1 for v in aim.values() if v["aim_status"] == "off")
@@ -639,6 +687,8 @@ def main() -> None:
                     provisioning_ws_total=aim_row.get("provisioning_ws_total", 0),
                     readiness_tier=aim_row.get("readiness_tier", "unknown"),
                     genie_spend_90d=spend.get(name, 0.0),
+                    genie_dollars_t30d=t30d.get(name, {}).get("genie_dollars_t30d", 0.0),
+                    active_genie_spaces=t30d.get(name, {}).get("active_genie_spaces", 0),
                     genie_active=pp_row.get("genie_active", False),
                 )
                 acct = existing.get(name)

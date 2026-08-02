@@ -64,6 +64,12 @@ class Account(SQLModel, table=True):
     readiness_tier: str = Field(default="unknown", index=True)
     # Genie-specific spend, trailing 90 days (USD), from fins_data.genie_dbu_dollars.
     genie_spend_90d: float = Field(default=0.0)
+    # Genie-specific spend, trailing 30 days (USD) — the T30D figure the logfood
+    # dashboard's PP-off page reports (fins_data.genie_dbu_dollars, last 30 days).
+    genie_dollars_t30d: float = Field(default=0.0)
+    # Active Genie spaces (data rooms with usage in the trailing 30 days), summed
+    # across the account's workspaces (metric_store.fct_data_room_messages_daily).
+    active_genie_spaces: int = Field(default=0)
     created_at: datetime = Field(default_factory=_utcnow)
     created_by: str = Field(default="")
 

@@ -50,19 +50,23 @@ from .models import (
     BlockerDefOut,
     BlockerIn,
     BlockerStateOut,
+    BrickroadIssueOut,
     ChecklistItemOut,
     ChecklistStateOut,
     ChecklistToggleIn,
     DashboardOut,
     FunnelBucketOut,
+    GenieReadyAccountOut,
     OkOut,
     PlaybookOut,
     ResourceClickIn,
     ResourceOut,
+    SpendBucketOut,
     StageAdvanceIn,
     StageOut,
     StalledUseCaseOut,
     TopResourceOut,
+    WhitespaceAccountOut,
     UseCaseDetailOut,
     UseCaseIn,
     UseCaseListOut,
@@ -129,6 +133,42 @@ _CLOSED_ISSUE_STATUSES = {"resolved", "will_not_solve"}
 
 def _issue_is_open(status: str) -> bool:
     return status.lower() not in _CLOSED_ISSUE_STATUSES
+
+
+# Genie T30D-spend buckets, matching the logfood PP-off page's distribution histogram.
+_SPEND_BUCKETS: list[tuple[str, float]] = [
+    ("$0", 0.0),
+    ("$1 - $100", 100.0),
+    ("$100 - $500", 500.0),
+    ("$500 - $1K", 1000.0),
+    ("$1K - $5K", 5000.0),
+    ("$5K - $10K", 10000.0),
+    ("$10K - $30K", 30000.0),
+    ("$30K+", float("inf")),
+]
+
+
+def _spend_bucket_index(dollars: float) -> int:
+    """Index into _SPEND_BUCKETS. $0 is its own bucket; otherwise the first bucket
+    whose upper bound the value falls under."""
+    if dollars <= 0:
+        return 0
+    for i, (_label, upper) in enumerate(_SPEND_BUCKETS):
+        if i == 0:
+            continue  # the $0 bucket
+        if dollars < upper:
+            return i
+    return len(_SPEND_BUCKETS) - 1
+
+
+# Map raw Brickroad severities → the app's blocker vocabulary shown in the UI.
+_SEVERITY_LABEL = {
+    "blocker": "Blocker",
+    "blocked": "Blocker",
+    "risk": "At Risk",
+    "feedback": "Feedback",
+    "nice_to_have": "Nice to have",
+}
 
 
 def _open_issue_count(session: Session, account_id: str) -> int:
@@ -1157,6 +1197,64 @@ def get_dashboard(session: Dependencies.Session):
     for a in accounts:
         tier_counts[a.readiness_tier if a.readiness_tier in tier_counts else "unknown"] += 1
 
+    # --- logfood parity aggregates ------------------------------------------------
+    # Headline / Partner-Powered AI page.
+    genie_revenue_t30d = round(sum(a.genie_dollars_t30d for a in accounts), 2)
+    active_genie_spaces = sum(a.active_genie_spaces for a in accounts)
+    pp_off_enforce_on = sum(
+        1 for a in accounts if a.pp_status == "off" and a.pp_enforce == "on"
+    )
+    pp_off_enforce_off = sum(
+        1 for a in accounts if a.pp_status == "off" and a.pp_enforce != "on"
+    )
+    # Genie-spend distribution (T30D) buckets.
+    bucket_counts = [0] * len(_SPEND_BUCKETS)
+    for a in accounts:
+        bucket_counts[_spend_bucket_index(a.genie_dollars_t30d)] += 1
+    spend_buckets = [
+        SpendBucketOut(label=_SPEND_BUCKETS[i][0], order=i, account_count=bucket_counts[i])
+        for i in range(len(_SPEND_BUCKETS))
+    ]
+
+    # Genie Accounts page — whitespace (no Genie use case), ranked by ARR.
+    accts_with_uc = {uc.account_id for uc in use_cases}
+    whitespace = [a for a in accounts if a.id not in accts_with_uc]
+    whitespace_top = [
+        WhitespaceAccountOut(
+            id=a.id, name=a.name, sub_vertical=a.sub_vertical,
+            ae_owner=a.ae_owner, arr=a.arr,
+        )
+        for a in sorted(whitespace, key=lambda x: x.arr, reverse=True)[:25]
+    ]
+
+    # Brickroad page — Genie issues with severity + revenue impact.
+    open_issues = [i for i in all_issues if _issue_is_open(i.status)]
+    issues_at_risk = sum(
+        1 for i in open_issues if i.severity.lower() in ("risk", "at risk")
+    )
+    total_revenue_impact = round(sum(i.revenue_impact for i in open_issues), 2)
+    brickroad_issues = [
+        BrickroadIssueOut(
+            id=i.id, display_id=i.display_id, title=i.title,
+            account_id=i.account_id,
+            account_name=account_names.get(i.account_id, "(unknown)"),
+            severity=_SEVERITY_LABEL.get(i.severity.lower(), i.severity or "Unknown"),
+            status=i.status, product_area=i.product_area,
+            revenue_impact=i.revenue_impact, investigator=i.investigator,
+        )
+        for i in sorted(open_issues, key=lambda x: x.revenue_impact, reverse=True)[:50]
+    ]
+
+    # Genie-Ready page — tier + provisioning + spend, ranked by ARR (t3m proxy).
+    genie_ready_accounts = [
+        GenieReadyAccountOut(
+            id=a.id, name=a.name, sub_vertical=a.sub_vertical,
+            readiness_tier=a.readiness_tier, provisioning_status=a.provisioning_status,
+            pp_status=a.pp_status, genie_dollars_t30d=a.genie_dollars_t30d, arr=a.arr,
+        )
+        for a in sorted(accounts, key=lambda x: x.arr, reverse=True)[:100]
+    ]
+
     return DashboardOut(
         total_accounts=len(accounts),
         total_use_cases=len(use_cases),
@@ -1171,6 +1269,13 @@ def get_dashboard(session: Dependencies.Session):
         genie_active_accounts=genie_active_total,
         workspaces_with_genie=ws_with_genie,
         genie_spend_90d=genie_spend_total,
+        genie_revenue_t30d=genie_revenue_t30d,
+        active_genie_spaces=active_genie_spaces,
+        pp_off_enforce_on=pp_off_enforce_on,
+        pp_off_enforce_off=pp_off_enforce_off,
+        whitespace_accounts=len(whitespace),
+        issues_at_risk=issues_at_risk,
+        total_revenue_impact=total_revenue_impact,
         tier_green=tier_counts["green"],
         tier_yellow=tier_counts["yellow"],
         tier_red=tier_counts["red"],
@@ -1179,4 +1284,8 @@ def get_dashboard(session: Dependencies.Session):
         blockers_by_category=blockers_by_category,
         stalled=stalled[:10],
         top_resources=top_resources,
+        spend_buckets=spend_buckets,
+        whitespace_top=whitespace_top,
+        brickroad_issues=brickroad_issues,
+        genie_ready_accounts=genie_ready_accounts,
     )

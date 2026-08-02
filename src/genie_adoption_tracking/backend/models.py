@@ -347,6 +347,55 @@ class TopResourceOut(BaseModel):
     clicks: int
 
 
+class SpendBucketOut(BaseModel):
+    """One Genie-spend bucket for the distribution bar (mirrors the logfood PP-off
+    page's 'Genie Spend Distribution' histogram)."""
+
+    label: str  # e.g. "$1 - $100"
+    order: int
+    account_count: int
+
+
+class WhitespaceAccountOut(BaseModel):
+    """A FINS account with NO Genie use case, ranked by ARR (the logfood 'Accounts
+    with No Genie Usage' table). The untapped list leadership works down."""
+
+    id: str
+    name: str
+    sub_vertical: str = ""
+    ae_owner: str = ""
+    arr: float = 0.0
+
+
+class BrickroadIssueOut(BaseModel):
+    """A Genie Brickroad issue for the Brickroad tab (severity + revenue impact)."""
+
+    id: str
+    display_id: str = ""
+    title: str = ""
+    account_id: str = ""
+    account_name: str = ""
+    severity: str = ""
+    status: str = ""
+    product_area: str = ""
+    revenue_impact: float = 0.0
+    investigator: str = ""
+
+
+class GenieReadyAccountOut(BaseModel):
+    """A row in the Genie-Ready tab table (tier + provisioning + spend), sorted by
+    t3m annualized ~ ARR (mirrors rpt_account_genie_ready ordering)."""
+
+    id: str
+    name: str
+    sub_vertical: str = ""
+    readiness_tier: str = "unknown"
+    provisioning_status: str = "unknown"
+    pp_status: str = "unknown"
+    genie_dollars_t30d: float = 0.0
+    arr: float = 0.0
+
+
 class DashboardOut(BaseModel):
     total_accounts: int
     total_use_cases: int
@@ -361,6 +410,16 @@ class DashboardOut(BaseModel):
     genie_active_accounts: int = 0
     workspaces_with_genie: int = 0
     genie_spend_90d: float = 0.0
+    # --- logfood parity: headline / Partner-Powered AI page ---
+    genie_revenue_t30d: float = 0.0  # sum of per-account genie $DBU, trailing 30d
+    active_genie_spaces: int = 0  # sum of per-account active Genie spaces
+    pp_off_enforce_on: int = 0  # PP off + enforce on (hard-blocked)
+    pp_off_enforce_off: int = 0  # PP off + enforce off (can still consume via ws)
+    # --- Genie Accounts page ---
+    whitespace_accounts: int = 0  # FINS accounts with no Genie use case
+    # --- Brickroad page ---
+    issues_at_risk: int = 0  # severity == risk (open)
+    total_revenue_impact: float = 0.0  # sum of open-issue revenue impact
     # Genie-Ready tiers (GTM signal): green / yellow / red / unknown counts.
     tier_green: int = 0
     tier_yellow: int = 0
@@ -370,6 +429,11 @@ class DashboardOut(BaseModel):
     blockers_by_category: list[BlockerAggOut]
     stalled: list[StalledUseCaseOut]
     top_resources: list[TopResourceOut]
+    # logfood-parity detail lists (rendered in the tabbed Signals view)
+    spend_buckets: list[SpendBucketOut] = []
+    whitespace_top: list[WhitespaceAccountOut] = []
+    brickroad_issues: list[BrickroadIssueOut] = []
+    genie_ready_accounts: list[GenieReadyAccountOut] = []
 
 
 # AccountDetailOut forward-references UseCaseListOut (defined above), resolve it.

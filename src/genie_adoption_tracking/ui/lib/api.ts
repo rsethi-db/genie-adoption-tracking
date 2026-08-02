@@ -174,6 +174,18 @@ export interface BlockerStateOut {
     resolved: boolean;
     stage: string;
 }
+export interface BrickroadIssueOut {
+    account_id?: string;
+    account_name?: string;
+    display_id?: string;
+    id: string;
+    investigator?: string;
+    product_area?: string;
+    revenue_impact?: number;
+    severity?: string;
+    status?: string;
+    title?: string;
+}
 export interface CampaignIn {
     ask: string;
     cta: string;
@@ -236,16 +248,24 @@ export interface ComplexValue {
 }
 export interface DashboardOut {
     accounts_with_issues?: number;
+    active_genie_spaces?: number;
     aim_off_accounts?: number;
     avg_readiness_pct?: number;
     blockers_by_category: BlockerAggOut[];
+    brickroad_issues?: BrickroadIssueOut[];
     funnel: FunnelBucketOut[];
     genie_active_accounts?: number;
+    genie_ready_accounts?: GenieReadyAccountOut[];
+    genie_revenue_t30d?: number;
     genie_spend_90d?: number;
+    issues_at_risk?: number;
     live_use_cases: number;
     open_blockers: number;
     open_issues?: number;
     pp_off_accounts?: number;
+    pp_off_enforce_off?: number;
+    pp_off_enforce_on?: number;
+    spend_buckets?: SpendBucketOut[];
     stalled: StalledUseCaseOut[];
     tier_green?: number;
     tier_red?: number;
@@ -254,7 +274,10 @@ export interface DashboardOut {
     top_resources: TopResourceOut[];
     total_accounts: number;
     total_monthly_dbus?: number;
+    total_revenue_impact?: number;
     total_use_cases: number;
+    whitespace_accounts?: number;
+    whitespace_top?: WhitespaceAccountOut[];
     workspaces_with_genie?: number;
 }
 export interface FunnelBucketOut {
@@ -286,6 +309,16 @@ export interface GenieHistoryEntryOut {
     created_at: string;
     id: string;
     question: string;
+}
+export interface GenieReadyAccountOut {
+    arr?: number;
+    genie_dollars_t30d?: number;
+    id: string;
+    name: string;
+    pp_status?: string;
+    provisioning_status?: string;
+    readiness_tier?: string;
+    sub_vertical?: string;
 }
 export interface GenieStatusOut {
     enabled: boolean;
@@ -326,6 +359,11 @@ export interface SegmentOut {
     tpl_ask?: string;
     tpl_cta?: string;
     tpl_title?: string;
+}
+export interface SpendBucketOut {
+    account_count: number;
+    label: string;
+    order: number;
 }
 export interface StageAdvanceIn {
     to_stage: string;
@@ -414,6 +452,13 @@ export interface ValidationError {
 }
 export interface VersionOut {
     version: string;
+}
+export interface WhitespaceAccountOut {
+    ae_owner?: string;
+    arr?: number;
+    id: string;
+    name: string;
+    sub_vertical?: string;
 }
 export interface ListAccountsParams {
     q?: string;
