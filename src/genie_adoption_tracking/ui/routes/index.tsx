@@ -46,7 +46,7 @@ function Index() {
         <FeatureCard
           icon={<BookOpen className="h-5 w-5" />}
           title="Getting Help"
-          desc="Ask Genie for anything, browse the go/ assets & resources, or find who to contact when you're still stuck."
+          desc="Ask Genie for anything, browse the assets and resources, or find who to contact when you're still stuck."
           to="/playbook"
           cta="Open Getting Help"
         />
