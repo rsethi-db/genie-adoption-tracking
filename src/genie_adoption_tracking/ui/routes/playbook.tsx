@@ -85,8 +85,8 @@ const CONTACTS: {
     url: "https://databricks.enterprise.slack.com/archives/C0B1ZRYEUGM",
   },
   {
-    title: "Open an ASQ (Specialist Request)",
-    desc: "Formal specialist help routed to the right SME when you need hands-on support on an account.",
+    title: "SSA — Specialist Solutions Architects (raise an ASQ)",
+    desc: "Advanced, deeply technical expertise in a specific specialization to help customers accelerate Genie adoption — especially 300+/400+ level use cases, evaluations, architecture, tuning, and production guidance.",
     action: "Raise an ASQ",
     url: "https://databricks.lightning.force.com/lightning/page/home",
   },
