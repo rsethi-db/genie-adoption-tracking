@@ -46,8 +46,7 @@ export function ppTone(status: string): "good" | "bad" | "muted" {
 export const PP_OFF_NEXT_STEPS = [
   "Conduct an AI Security Review with the customer to approve Partner-Powered AI.",
   "In the account console → Settings → Feature enablement, set “Enable partner-powered AI features” to On.",
-  "Set the Enforce option so the account value applies to all workspaces (prevents per-workspace override).",
-  "Confirm Genie can reach Partner-Powered models, then start the U1 demo.",
+  "Ensure the Enforce option is set so the account value applies to all workspaces (prevents per-workspace override).",
 ];
 
 // --- User provisioning: AIM or SCIM --------------------------------------------
