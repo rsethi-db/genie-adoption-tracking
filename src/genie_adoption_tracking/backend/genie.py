@@ -85,7 +85,7 @@ def _account_context(session: Session, account_id: str) -> str:
         f"Current account: {account.name} ({account.sub_vertical}).",
         f"Furthest adoption stage: {stage_name}.",
         f"Use cases: {len(use_cases)}. Partner-Powered AI: {pp_label}. "
-        f"AIM: {account.aim_status}.",
+        f"AIM / account-level SCIM: {account.aim_status}.",
         f"Open blockers: {len(open_blockers)}. Open Genie issues: {len(open_issues)}.",
     ]
     return " ".join(parts)

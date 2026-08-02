@@ -53,7 +53,7 @@ TASKS: list[Task] = [
     {"key": "hp_u1_champions", "stage": "u1", "lane": "happy_path",
      "label": "Establish business user champion(s)"},
     {"key": "hp_u1_aim", "stage": "u1", "lane": "happy_path",
-     "label": "Start AIM conversations"},
+     "label": "Start AIM / account-level SCIM conversations"},
 
     {"key": "hp_u2_workshop", "stage": "u2", "lane": "happy_path",
      "label": "Best-practices workshop"},
@@ -77,7 +77,7 @@ TASKS: list[Task] = [
      "label": "Import / export space for DAB & sharing"},
 
     {"key": "hp_u5_aim_ready", "stage": "u5", "lane": "happy_path",
-     "label": "AIM — Genie Ready"},
+     "label": "AIM / account-level SCIM — Genie Ready"},
     {"key": "hp_u5_pricing", "stage": "u5", "lane": "happy_path",
      "label": "Address pricing concerns"},
 
