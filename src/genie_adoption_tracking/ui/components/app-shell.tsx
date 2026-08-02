@@ -51,7 +51,7 @@ export function AppShell({
           <Link to="/" className="flex items-center gap-2.5 mr-4">
             <BrandMark />
             <div className="flex flex-col leading-tight">
-              <span className="text-lg font-bold">Genie Adoption</span>
+              <span className="text-lg font-bold">Genie Playbook Adoption</span>
               <span className="text-xs text-muted-foreground -mt-0.5">
                 Navigator
               </span>
