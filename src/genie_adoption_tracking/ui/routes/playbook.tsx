@@ -4,7 +4,6 @@ import { useGetPlaybookSuspense, logResourceClick } from "@/lib/api";
 import { selector } from "@/lib/selector";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -52,14 +51,10 @@ function PlaybookPage() {
         <Tabs defaultValue="resources">
           <TabsList>
             <TabsTrigger value="resources">Assets & Resources</TabsTrigger>
-            <TabsTrigger value="blockers">Getting Unstuck</TabsTrigger>
             <TabsTrigger value="contacts">Still stuck?</TabsTrigger>
           </TabsList>
           <TabsContent value="resources" className="mt-4">
             <ResourcesView />
-          </TabsContent>
-          <TabsContent value="blockers" className="mt-4">
-            <BlockersView />
           </TabsContent>
           <TabsContent value="contacts" className="mt-4">
             <ContactsView />
@@ -147,48 +142,6 @@ function ContactsView() {
   );
 }
 
-
-function BlockersView() {
-  const { data } = useGetPlaybookSuspense(selector());
-  return (
-    <div className="grid md:grid-cols-2 gap-4">
-      {data.blockers.map((b) => (
-        <Card key={b.key}>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm">{b.name}</CardTitle>
-              <Badge variant="outline" className="text-[10px]">
-                {b.gate}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div>
-              <span className="text-xs font-semibold uppercase text-muted-foreground">
-                Checks
-              </span>
-              <ul className="mt-1 space-y-0.5">
-                {b.checks.map((c, i) => (
-                  <li key={i} className="flex gap-1.5">
-                    <span className="text-muted-foreground">·</span>
-                    {c}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <p className="text-muted-foreground italic">{b.concern}</p>
-            <div>
-              <span className="text-xs font-semibold uppercase text-muted-foreground">
-                Recommended action
-              </span>
-              <p>{b.action}</p>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
 
 function ResourcesView() {
   const { data } = useGetPlaybookSuspense(selector());
