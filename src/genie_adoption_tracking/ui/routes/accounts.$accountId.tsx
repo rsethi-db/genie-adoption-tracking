@@ -312,6 +312,27 @@ const ADOPTION_STATUSES: { value: string; label: string }[] = [
   { value: "blocked", label: "Blocked" },
 ];
 
+// The 5 "Getting Unstuck" blocker categories (playbook). When a task is Blocked, the
+// team picks which category applies; stage_hint orders the most-likely one first for
+// that task's stage. Stored as a "[Blocker: <category>]" prefix in the task note.
+const BLOCKER_CATEGORIES: { key: string; label: string; stage: string }[] = [
+  { key: "prerequisites", label: "Pre-requisites", stage: "prereqs" },
+  { key: "data_readiness", label: "Data Readiness", stage: "u2" },
+  { key: "ease_of_creation", label: "Ease of Creation, Use & Maintenance", stage: "u3" },
+  { key: "scale", label: "Scale", stage: "u4" },
+  { key: "observability", label: "Observability, Evaluation & Monitoring", stage: "u5" },
+];
+const BLOCKER_PREFIX_RE = /^\[Blocker:\s*([^\]]*)\]\s*/;
+
+function parseBlockerNote(note: string): { category: string; rest: string } {
+  const m = BLOCKER_PREFIX_RE.exec(note || "");
+  return m ? { category: m[1].trim(), rest: note.slice(m[0].length) } : { category: "", rest: note || "" };
+}
+function withBlockerCategory(note: string, category: string): string {
+  const { rest } = parseBlockerNote(note);
+  return category ? `[Blocker: ${category}] ${rest}`.trimEnd() : rest;
+}
+
 // Lane tone → color: Happy Path = green, Recommended = blue, As Needed = orange.
 const LANE_ACCENT: Record<string, string> = {
   green: "border-l-green-500",
@@ -457,26 +478,60 @@ function AdoptionTaskCard({
         onPick={(v) => onChange({ status: v })}
       />
       <Textarea
-        value={value.note}
-        onChange={(e) => onChange({ note: e.target.value })}
+        value={blocked ? parseBlockerNote(value.note).rest : value.note}
+        onChange={(e) => {
+          if (!blocked) {
+            onChange({ note: e.target.value });
+            return;
+          }
+          // Preserve the "[Blocker: category]" prefix; edit only the free text.
+          const cat = parseBlockerNote(value.note).category;
+          onChange({
+            note: cat ? `[Blocker: ${cat}] ${e.target.value}`.trimEnd() : e.target.value,
+          });
+        }}
         placeholder="Add a note…"
         className="mt-2 min-h-[38px] text-xs"
       />
-      {/* When a task is blocked, offer a one-click path to Genie for how to get
-          unstuck — pre-filled with the task + account so the answer is specific. */}
+      {/* When a task is blocked: pick the blocker category (most-likely for this
+          stage first) + a one-click path to Genie for how to get unstuck. */}
       {blocked && (
-        <button
-          type="button"
-          onClick={() =>
-            openGenieChat(
-              `${accountName} is blocked on "${task.label}". How do I get unstuck? What play, demo, or resource should I use?`
-            )
-          }
-          className="mt-2 inline-flex items-center gap-1 text-xs text-destructive hover:underline font-medium"
-        >
-          <Sparkles className="h-3 w-3 shrink-0" />
-          Ask Genie how to get unstuck
-        </button>
+        <div className="mt-2 space-y-1.5">
+          <select
+            value={parseBlockerNote(value.note).category}
+            onChange={(e) =>
+              onChange({ note: withBlockerCategory(value.note, e.target.value) })
+            }
+            className="w-full h-8 rounded-md border border-destructive/40 bg-background px-2 text-xs"
+          >
+            <option value="">What's blocking this? (pick a category)</option>
+            {[...BLOCKER_CATEGORIES]
+              .sort((a, b) =>
+                a.stage === task.stage ? -1 : b.stage === task.stage ? 1 : 0
+              )
+              .map((c) => (
+                <option key={c.key} value={c.label}>
+                  {c.label}
+                  {c.stage === task.stage ? " (typical here)" : ""}
+                </option>
+              ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => {
+              const cat = parseBlockerNote(value.note).category;
+              openGenieChat(
+                `${accountName} is blocked on "${task.label}"` +
+                  (cat ? ` (blocker category: ${cat})` : "") +
+                  `. How do I get unstuck? What play, demo, or resource should I use?`
+              );
+            }}
+            className="inline-flex items-center gap-1 text-xs text-destructive hover:underline font-medium"
+          >
+            <Sparkles className="h-3 w-3 shrink-0" />
+            Ask Genie how to get unstuck
+          </button>
+        </div>
       )}
       {(TASK_RESOURCES[task.key] ?? []).length > 0 && (
         <div className="mt-2 space-y-1">
