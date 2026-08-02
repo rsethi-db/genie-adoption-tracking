@@ -73,7 +73,7 @@ function AccountsPage() {
               </div>
               <p className="text-sm text-muted-foreground mt-1">
                 As we drive Genie adoption across FINS this quarter, please make sure your
-                accounts are moving through the Field Adoption Playbook. Take a few minutes
+                accounts are moving through the Genie Playbook. Take a few minutes
                 to update each account's Adoption Workflow in the Navigator so we have an
                 accurate read on where everyone is.
               </p>
