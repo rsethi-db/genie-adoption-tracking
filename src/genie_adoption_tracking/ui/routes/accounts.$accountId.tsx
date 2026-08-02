@@ -1368,31 +1368,30 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
         <CardTitle className="text-base">Readiness &amp; eligibility</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Readiness bar + expandable breakdown */}
-        <div className="max-w-md">
-          <div className="flex justify-between text-xs mb-1">
+        {/* Readiness — the headline of this card; made prominent so it isn't skipped. */}
+        <div className="rounded-lg border bg-muted/30 p-4">
+          <div className="flex items-end justify-between gap-3 mb-2">
             <button
               type="button"
               onClick={() => setShowBreakdown((s) => !s)}
-              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold hover:text-primary"
             >
               Account readiness
               <ChevronDown
                 className={cn(
-                  "h-3 w-3 transition-transform",
+                  "h-4 w-4 transition-transform",
                   showBreakdown && "rotate-180"
                 )}
               />
             </button>
-            <span className="font-medium">
-              {readinessPct}%
-              <span className="text-muted-foreground font-normal">
-                {" "}
-                ({done.length}/{applicable.length})
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold">{readinessPct}%</span>
+              <span className="text-sm text-muted-foreground">
+                {done.length}/{applicable.length} tasks
               </span>
-            </span>
+            </div>
           </div>
-          <Progress value={readinessPct} />
+          <Progress value={readinessPct} className="h-2.5" />
           {showBreakdown && (
             <>
               <p className="text-[11px] text-muted-foreground mt-1.5">
