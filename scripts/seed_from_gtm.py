@@ -227,13 +227,32 @@ AIM_QUERY = """
 SELECT g.account_name,
   COALESCE(g.total_workspaces, 0) AS total_ws,
   COALESCE(g.workspaces_with_aim_enabled, 0) AS aim_ws,
-  COALESCE(g.workspaces_with_user_provisioning, 0) AS prov_ws
+  COALESCE(g.workspaces_with_user_provisioning, 0) AS prov_ws,
+  CASE WHEN g.is_green=1 THEN 'green' WHEN g.is_yellow=1 THEN 'yellow'
+       WHEN g.is_red=1 THEN 'red' ELSE 'unknown' END AS readiness_tier
 FROM main.gtm_gold.rpt_account_genie_ready g
 JOIN (
   SELECT DISTINCT account_name FROM main.gtm_silver.account_dim
   WHERE sales_business_unit='AMER Industries' AND sales_subregion_level_1='FINS'
     AND account_status LIKE '%Customer%' AND account_name IS NOT NULL
 ) f ON g.account_name = f.account_name
+"""
+
+# Genie-specific spend (trailing 90 days) per FINS account, resolved to account_name.
+GENIE_SPEND_QUERY = """
+WITH fins AS (
+  SELECT DISTINCT account_id AS sfdc_account_id, account_name
+  FROM main.gtm_silver.account_dim
+  WHERE sales_business_unit='AMER Industries' AND sales_subregion_level_1='FINS'
+    AND account_status LIKE '%Customer%' AND account_name IS NOT NULL
+)
+SELECT f.account_name,
+  ROUND(SUM(fd.genie_dbu_dollars), 2) AS genie_90d
+FROM main.field_usage_dashboard.fins_data fd
+  JOIN fins f ON fd.accountId = f.sfdc_account_id
+WHERE fd.date >= add_months((SELECT MAX(date) FROM main.field_usage_dashboard.fins_data), -3)
+GROUP BY f.account_name
+HAVING genie_90d > 0
 """
 
 # Genie-related Brickroad issues (ALL severities) per FINS account. customer_id on
@@ -471,6 +490,7 @@ def fetch_aim(ws) -> dict[str, dict]:
     for r in _run_query(ws, AIM_QUERY):
         name = r[0]
         total_ws, aim_ws, prov_ws = int(r[1] or 0), int(r[2] or 0), int(r[3] or 0)
+        tier = (r[4] or "unknown") if len(r) > 4 else "unknown"
         # If multiple report rows per account, keep the most-provisioned.
         prev = out.get(name)
         if prev is None or prov_ws > prev.get("provisioning_ws_enabled", -1):
@@ -483,7 +503,16 @@ def fetch_aim(ws) -> dict[str, dict]:
                 # derived against — so the banner fraction stays self-consistent
                 # (distinct from ws_total, which comes from the PP workspace query).
                 "provisioning_ws_total": total_ws,
+                "readiness_tier": tier,
             }
+    return out
+
+
+def fetch_genie_spend(ws) -> dict[str, float]:
+    """Map account_name -> Genie-specific spend (trailing 90 days, USD)."""
+    out: dict[str, float] = {}
+    for r in _run_query(ws, GENIE_SPEND_QUERY):
+        out[r[0]] = float(r[1] or 0)
     return out
 
 
@@ -516,6 +545,7 @@ def main() -> None:
     pp = fetch_pp(ws)
     wsc = fetch_ws(ws)
     aim = fetch_aim(ws)
+    spend = fetch_genie_spend(ws)
     issues = fetch_issues(ws)
     pp_off = sum(1 for v in pp.values() if v["pp_status"] == "off")
     aim_off = sum(1 for v in aim.values() if v["aim_status"] == "off")
@@ -607,11 +637,13 @@ def main() -> None:
                     provisioning_status=aim_row.get("provisioning_status", "unknown"),
                     provisioning_ws_enabled=aim_row.get("provisioning_ws_enabled", 0),
                     provisioning_ws_total=aim_row.get("provisioning_ws_total", 0),
+                    readiness_tier=aim_row.get("readiness_tier", "unknown"),
+                    genie_spend_90d=spend.get(name, 0.0),
                     genie_active=pp_row.get("genie_active", False),
                 )
                 acct = existing.get(name)
                 if acct is None:
-                    acct = Account(id=_uid(), name=name, created_by=SEED_MARKER, **fields)
+                    acct = Account(id=_uid(), name=name, created_by=SEED_MARKER, **fields)  # ty: ignore[invalid-argument-type]
                     session.add(acct)
                     n_new += 1
                 else:

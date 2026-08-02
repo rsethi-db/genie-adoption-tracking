@@ -314,24 +314,70 @@ def get_playbook():
 
 
 @router.get("/accounts", response_model=list[AccountOut], operation_id="listAccounts")
-def list_accounts(session: Dependencies.Session, q: str = "", limit: int = 25):
-    """Account lookup. Server-side search: pass `q` to filter by name/owner/sub-vertical
-    (returns up to `limit` matches). Empty `q` returns nothing, so the page loads
-    instantly instead of transferring all ~500 accounts up front."""
+def list_accounts(
+    session: Dependencies.Session,
+    q: str = "",
+    limit: int = 25,
+    tier: str = "",
+    pp: str = "",
+    provisioning: str = "",
+    stage: str = "",
+    whitespace: bool = False,
+    open_issues: bool = False,
+):
+    """Account lookup. Pass `q` for text search (name/owner/sub-vertical), or one/more
+    filters (tier, pp, provisioning, stage, whitespace, open_issues) for a Signals
+    drill-down. With NO q and NO filter, returns nothing so the page loads instantly.
+    Filters return up to `limit` matches (500 when a filter is set, to show a segment)."""
     needle = q.strip().lower()
-    if not needle:
+    has_filter = bool(
+        tier or pp or provisioning or stage or whitespace or open_issues
+    )
+    if not needle and not has_filter:
         return []
     all_accounts = session.exec(select(Account)).all()
-    accounts = [
-        a
-        for a in all_accounts
-        if needle in a.name.lower()
-        or needle in (a.ae_owner or "").lower()
-        or needle in (a.sa_owner or "").lower()
-        or needle in (a.dsa_owner or "").lower()
-        or needle in (a.sub_vertical or "").lower()
-    ]
-    accounts = sorted(accounts, key=lambda x: x.name.lower())[:limit]
+
+    # Precompute per-account signals used by filters.
+    all_ucs = session.exec(select(UseCase)).all()
+    stages_by_acct: dict[str, set[str]] = {}
+    for uc in all_ucs:
+        stages_by_acct.setdefault(uc.account_id, set()).add(uc.stage)
+    issue_accts = {
+        i.account_id
+        for i in session.exec(select(AccountIssue)).all()
+        if _issue_is_open(i.status)
+    }
+
+    def _match(a: Account) -> bool:
+        if needle and not (
+            needle in a.name.lower()
+            or needle in (a.ae_owner or "").lower()
+            or needle in (a.sa_owner or "").lower()
+            or needle in (a.dsa_owner or "").lower()
+            or needle in (a.sub_vertical or "").lower()
+        ):
+            return False
+        if tier and a.readiness_tier != tier:
+            return False
+        if pp == "off" and not (
+            a.pp_status == "off" and (a.pp_enforce == "on" or (a.ws_pp_on or 0) == 0)
+        ):
+            return False
+        if pp == "on" and a.pp_status not in ("on", "on_default"):
+            return False
+        if provisioning and a.provisioning_status != provisioning:
+            return False
+        if stage and stage not in stages_by_acct.get(a.id, set()):
+            return False
+        if whitespace and a.id in stages_by_acct:
+            return False
+        if open_issues and a.id not in issue_accts:
+            return False
+        return True
+
+    accounts = [a for a in all_accounts if _match(a)]
+    cap = 500 if has_filter else limit
+    accounts = sorted(accounts, key=lambda x: x.name.lower())[:cap]
     matched_ids = {a.id for a in accounts}
     use_cases = [
         uc for uc in session.exec(select(UseCase)).all() if uc.account_id in matched_ids
@@ -376,6 +422,8 @@ def list_accounts(session: Dependencies.Session, q: str = "", limit: int = 25):
             provisioning_status=a.provisioning_status,
             provisioning_ws_enabled=a.provisioning_ws_enabled,
             provisioning_ws_total=a.provisioning_ws_total,
+            readiness_tier=a.readiness_tier,
+            genie_spend_90d=a.genie_spend_90d,
             genie_active=a.genie_active,
             # Not shown on the account lookup; skip the per-account plan resolve
             # (it was an N+1 that ran several Lakebase queries per account).
@@ -497,6 +545,8 @@ def get_account(account_id: str, session: Dependencies.Session):
         provisioning_status=acct.provisioning_status,
         provisioning_ws_enabled=acct.provisioning_ws_enabled,
         provisioning_ws_total=acct.provisioning_ws_total,
+        readiness_tier=acct.readiness_tier,
+        genie_spend_90d=acct.genie_spend_90d,
         genie_active=acct.genie_active,
         readiness_pct=plan_pct,
         created_at=acct.created_at,
@@ -1100,6 +1150,12 @@ def get_dashboard(session: Dependencies.Session):
         {i.account_id for i in all_issues if _issue_is_open(i.status)}
     )
     avg_readiness = _avg_readiness(session, accounts)
+    genie_active_total = sum(1 for a in accounts if a.genie_active)
+    ws_with_genie = sum(a.ws_pp_on for a in accounts)  # active PP workspaces proxy
+    genie_spend_total = round(sum(a.genie_spend_90d for a in accounts), 2)
+    tier_counts = {"green": 0, "yellow": 0, "red": 0, "unknown": 0}
+    for a in accounts:
+        tier_counts[a.readiness_tier if a.readiness_tier in tier_counts else "unknown"] += 1
 
     return DashboardOut(
         total_accounts=len(accounts),
@@ -1112,6 +1168,13 @@ def get_dashboard(session: Dependencies.Session):
         avg_readiness_pct=avg_readiness,
         open_issues=open_issue_total,
         accounts_with_issues=accounts_with_issues,
+        genie_active_accounts=genie_active_total,
+        workspaces_with_genie=ws_with_genie,
+        genie_spend_90d=genie_spend_total,
+        tier_green=tier_counts["green"],
+        tier_yellow=tier_counts["yellow"],
+        tier_red=tier_counts["red"],
+        tier_unknown=tier_counts["unknown"],
         funnel=funnel,
         blockers_by_category=blockers_by_category,
         stalled=stalled[:10],

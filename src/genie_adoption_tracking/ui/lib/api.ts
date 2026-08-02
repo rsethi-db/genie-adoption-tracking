@@ -21,6 +21,7 @@ export interface AccountDetailOut {
     created_at: string;
     dsa_owner: string;
     genie_active?: boolean;
+    genie_spend_90d?: number;
     id: string;
     issues?: AccountIssueOut[];
     monthly_dbus: number;
@@ -33,6 +34,7 @@ export interface AccountDetailOut {
     provisioning_ws_enabled?: number;
     provisioning_ws_total?: number;
     readiness_pct?: number;
+    readiness_tier?: string;
     sa_owner: string;
     sub_vertical: string;
     use_cases: UseCaseListOut[];
@@ -66,6 +68,7 @@ export interface AccountOut {
     created_at: string;
     dsa_owner?: string;
     genie_active?: boolean;
+    genie_spend_90d?: number;
     id: string;
     monthly_dbus?: number;
     name: string;
@@ -77,6 +80,7 @@ export interface AccountOut {
     provisioning_ws_enabled?: number;
     provisioning_ws_total?: number;
     readiness_pct?: number;
+    readiness_tier?: string;
     sa_owner: string;
     sub_vertical: string;
     use_case_count?: number;
@@ -236,15 +240,22 @@ export interface DashboardOut {
     avg_readiness_pct?: number;
     blockers_by_category: BlockerAggOut[];
     funnel: FunnelBucketOut[];
+    genie_active_accounts?: number;
+    genie_spend_90d?: number;
     live_use_cases: number;
     open_blockers: number;
     open_issues?: number;
     pp_off_accounts?: number;
     stalled: StalledUseCaseOut[];
+    tier_green?: number;
+    tier_red?: number;
+    tier_unknown?: number;
+    tier_yellow?: number;
     top_resources: TopResourceOut[];
     total_accounts: number;
     total_monthly_dbus?: number;
     total_use_cases: number;
+    workspaces_with_genie?: number;
 }
 export interface FunnelBucketOut {
     code: string;
@@ -407,6 +418,12 @@ export interface VersionOut {
 export interface ListAccountsParams {
     q?: string;
     limit?: number;
+    tier?: string;
+    pp?: string;
+    provisioning?: string;
+    stage?: string;
+    whitespace?: boolean;
+    open_issues?: boolean;
 }
 export const listAccounts = async (params?: ListAccountsParams, options?: RequestInit): Promise<{
     data: AccountOut[];
@@ -414,6 +431,12 @@ export const listAccounts = async (params?: ListAccountsParams, options?: Reques
     const searchParams = new URLSearchParams();
     if (params?.q != null) searchParams.set("q", String(params?.q));
     if (params?.limit != null) searchParams.set("limit", String(params?.limit));
+    if (params?.tier != null) searchParams.set("tier", String(params?.tier));
+    if (params?.pp != null) searchParams.set("pp", String(params?.pp));
+    if (params?.provisioning != null) searchParams.set("provisioning", String(params?.provisioning));
+    if (params?.stage != null) searchParams.set("stage", String(params?.stage));
+    if (params?.whitespace != null) searchParams.set("whitespace", String(params?.whitespace));
+    if (params?.open_issues != null) searchParams.set("open_issues", String(params?.open_issues));
     const queryString = searchParams.toString();
     const url = queryString ? `/api/accounts?${queryString}` : "/api/accounts";
     const res = await fetch(url, {

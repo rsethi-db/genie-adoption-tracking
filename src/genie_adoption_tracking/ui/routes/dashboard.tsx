@@ -9,11 +9,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users,
   Layers,
-  AlertTriangle,
   DollarSign,
   ShieldAlert,
   Gauge,
   Bug,
+  Sparkles,
 } from "lucide-react";
 
 function fmtDbus(n: number): string {
@@ -32,8 +32,8 @@ function DashboardPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Signals</h1>
         <p className="text-sm text-muted-foreground">
-          Aggregate signal captured from account teams running the play — the raw
-          material for MBR reporting.
+          FINS Genie adoption at a glance — start big, then click any number to drill
+          into the accounts behind it.
         </p>
       </div>
       <Suspense fallback={<DashboardSkeleton />}>
@@ -48,46 +48,84 @@ function DashboardBody() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatTile icon={<Users className="h-4 w-4" />} label="Accounts" value={data.total_accounts} />
-        <StatTile icon={<Layers className="h-4 w-4" />} label="Use cases" value={data.total_use_cases} />
+      {/* Tier 1 — headline row (start big) */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <StatTile icon={<Users className="h-4 w-4" />} label="FINS accounts" value={data.total_accounts} />
+        <StatTile
+          icon={<Sparkles className="h-4 w-4" />}
+          label="Genie-active"
+          value={data.genie_active_accounts ?? 0}
+          tone="good"
+        />
+        <StatTile
+          icon={<DollarSign className="h-4 w-4" />}
+          label="Genie spend (90d)"
+          display={fmtDbus(data.genie_spend_90d ?? 0)}
+          tone="good"
+        />
+        <StatTile icon={<Layers className="h-4 w-4" />} label="Genie use cases" value={data.total_use_cases} />
         <StatTile
           icon={<Gauge className="h-4 w-4" />}
           label="Avg readiness"
           display={`${data.avg_readiness_pct ?? 0}%`}
         />
         <StatTile
-          icon={<ShieldAlert className="h-4 w-4" />}
-          label="Blocked: PP AI Off"
-          value={data.pp_off_accounts ?? 0}
-          tone={(data.pp_off_accounts ?? 0) > 0 ? "bad" : undefined}
-        />
-        <StatTile
-          icon={<ShieldAlert className="h-4 w-4" />}
-          label="No provisioning (AIM/SCIM)"
-          value={data.aim_off_accounts ?? 0}
-          tone={(data.aim_off_accounts ?? 0) > 0 ? "bad" : undefined}
-        />
-        <StatTile
-          icon={<AlertTriangle className="h-4 w-4" />}
-          label="Open blockers"
-          value={data.open_blockers}
-          tone={data.open_blockers > 0 ? "warn" : undefined}
-        />
-        <StatTile
-          icon={<Bug className="h-4 w-4" />}
-          label="Open Genie issues"
-          value={data.open_issues ?? 0}
-          tone={(data.open_issues ?? 0) > 0 ? "warn" : undefined}
-        />
-        <StatTile
           icon={<DollarSign className="h-4 w-4" />}
           label="Est. pipeline $/mo"
           display={fmtDbus(data.total_monthly_dbus ?? 0)}
-          tone="good"
         />
       </div>
 
+      {/* Tier 2 — Genie-Ready tiers (GTM) */}
+      <div>
+        <h2 className="text-sm font-semibold mb-2 text-muted-foreground">
+          Genie-Ready tiers <span className="font-normal">(GTM signal — click to drill in)</span>
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatTile icon={<span>🟢</span>} label="Green" value={data.tier_green ?? 0} tone="good" to="/accounts?tier=green" />
+          <StatTile icon={<span>🟡</span>} label="Yellow" value={data.tier_yellow ?? 0} tone="warn" to="/accounts?tier=yellow" />
+          <StatTile icon={<span>🔴</span>} label="Red" value={data.tier_red ?? 0} tone="bad" to="/accounts?tier=red" />
+          <StatTile icon={<span>⚪</span>} label="Unknown" value={data.tier_unknown ?? 0} to="/accounts?tier=unknown" />
+        </div>
+      </div>
+
+      {/* Tier 2 — risk & gaps (each drills into a filtered account list) */}
+      <div>
+        <h2 className="text-sm font-semibold mb-2 text-muted-foreground">
+          Gaps & risk <span className="font-normal">(click to see the accounts)</span>
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatTile
+            icon={<ShieldAlert className="h-4 w-4" />}
+            label="Partner-Powered AI off"
+            value={data.pp_off_accounts ?? 0}
+            tone={(data.pp_off_accounts ?? 0) > 0 ? "bad" : undefined}
+            to="/accounts?pp=off"
+          />
+          <StatTile
+            icon={<ShieldAlert className="h-4 w-4" />}
+            label="No provisioning (AIM/SCIM)"
+            value={data.aim_off_accounts ?? 0}
+            tone={(data.aim_off_accounts ?? 0) > 0 ? "bad" : undefined}
+            to="/accounts?provisioning=off"
+          />
+          <StatTile
+            icon={<Bug className="h-4 w-4" />}
+            label="Accounts w/ open issues"
+            value={data.accounts_with_issues ?? 0}
+            tone={(data.accounts_with_issues ?? 0) > 0 ? "warn" : undefined}
+            to="/accounts?open_issues=true"
+          />
+          <StatTile
+            icon={<Layers className="h-4 w-4" />}
+            label="Whitespace"
+            value={(data.total_accounts ?? 0) - (data.genie_active_accounts ?? 0)}
+            to="/accounts?whitespace=true"
+          />
+        </div>
+      </div>
+
+      {/* Tier 3 — deeper cuts */}
       <div className="grid lg:grid-cols-2 gap-6">
         <Funnel data={data} />
         <BlockersByCategory data={data} />
@@ -107,12 +145,14 @@ function StatTile({
   value,
   display,
   tone,
+  to,
 }: {
   icon: React.ReactNode;
   label: string;
   value?: number;
   display?: string;
   tone?: "good" | "warn" | "bad";
+  to?: string; // when set, the tile links to a filtered Accounts view
 }) {
   const toneClass =
     tone === "good"
@@ -122,18 +162,26 @@ function StatTile({
         : tone === "bad"
           ? "text-destructive"
           : "";
-  return (
-    <Card>
-      <CardContent className="py-4">
-        <div className="flex items-center gap-2 text-muted-foreground text-sm">
-          {icon} {label}
-        </div>
-        <div className={`text-3xl font-bold mt-1 ${toneClass}`}>
-          {display ?? value}
-        </div>
-      </CardContent>
-    </Card>
+  const inner = (
+    <CardContent className="py-4">
+      <div className="flex items-center gap-2 text-muted-foreground text-sm">
+        {icon} {label}
+      </div>
+      <div className={`text-3xl font-bold mt-1 ${toneClass}`}>
+        {display ?? value}
+      </div>
+    </CardContent>
   );
+  if (to) {
+    return (
+      <Link to={to}>
+        <Card className="hover:border-primary/50 transition-colors h-full">
+          {inner}
+        </Card>
+      </Link>
+    );
+  }
+  return <Card>{inner}</Card>;
 }
 
 function Funnel({ data }: { data: DashboardOut }) {

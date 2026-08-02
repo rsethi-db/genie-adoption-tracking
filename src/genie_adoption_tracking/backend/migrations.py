@@ -45,6 +45,8 @@ _MIGRATIONS = [
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS provisioning_ws_enabled INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS provisioning_ws_total INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS genie_active BOOLEAN NOT NULL DEFAULT false",
+    "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS readiness_tier VARCHAR NOT NULL DEFAULT 'unknown'",
+    "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS genie_spend_90d DOUBLE PRECISION NOT NULL DEFAULT 0",
 ]
 
 

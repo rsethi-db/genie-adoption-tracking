@@ -91,6 +91,8 @@ class AccountOut(BaseModel):
     provisioning_status: str = "unknown"
     provisioning_ws_enabled: int = 0
     provisioning_ws_total: int = 0
+    readiness_tier: str = "unknown"
+    genie_spend_90d: float = 0.0
     genie_active: bool = False
     readiness_pct: int = 0
     open_issues: int = 0
@@ -185,6 +187,8 @@ class AccountDetailOut(BaseModel):
     provisioning_status: str = "unknown"
     provisioning_ws_enabled: int = 0
     provisioning_ws_total: int = 0
+    readiness_tier: str = "unknown"
+    genie_spend_90d: float = 0.0
     genie_active: bool = False
     readiness_pct: int = 0
     created_at: datetime
@@ -354,6 +358,14 @@ class DashboardOut(BaseModel):
     avg_readiness_pct: int = 0
     open_issues: int = 0
     accounts_with_issues: int = 0
+    genie_active_accounts: int = 0
+    workspaces_with_genie: int = 0
+    genie_spend_90d: float = 0.0
+    # Genie-Ready tiers (GTM signal): green / yellow / red / unknown counts.
+    tier_green: int = 0
+    tier_yellow: int = 0
+    tier_red: int = 0
+    tier_unknown: int = 0
     funnel: list[FunnelBucketOut]
     blockers_by_category: list[BlockerAggOut]
     stalled: list[StalledUseCaseOut]

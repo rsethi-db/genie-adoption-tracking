@@ -59,6 +59,11 @@ class Account(SQLModel, table=True):
     provisioning_ws_total: int = Field(default=0)
     # True if the account consumed Genie in the trailing 2 years (active footprint).
     genie_active: bool = Field(default=False)
+    # Genie-Ready tier from GTM (rpt_account_genie_ready): green | yellow | red | unknown.
+    # A GTM signal, distinct from the team-filled workflow readiness %.
+    readiness_tier: str = Field(default="unknown", index=True)
+    # Genie-specific spend, trailing 90 days (USD), from fins_data.genie_dbu_dollars.
+    genie_spend_90d: float = Field(default=0.0)
     created_at: datetime = Field(default_factory=_utcnow)
     created_by: str = Field(default="")
 
