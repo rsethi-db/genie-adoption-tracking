@@ -79,7 +79,7 @@ const CONTACTS: {
   url: string;
 }[] = [
   {
-    title: "General Genie / AI-BI Slack",
+    title: "General Genie Slack",
     desc: "Broad Genie & AI/BI questions, community help, and product discussion.",
     action: "Post in #apa-genie-aibi",
     url: "https://databricks.enterprise.slack.com/archives/C077N5FSZDL",
