@@ -268,6 +268,14 @@ BLOCKERS: list[dict] = [
 # URLs sourced from the FINS Genie Field Adoption Playbook deck
 # (docs.google.com/presentation/d/1Vbwoj1dHBIGW1t3yIeKT4_9qY0faOTZpa2UsSHp5ojs).
 RESOURCES: list[dict] = [
+    # ---- Product & Reference ----------------------------------------------------------
+    {"key": "ref-go-genie", "bucket": "Product & Reference", "label": "Genie & AI/BI (go/genie)",
+     "url": "https://home.databricks.com/sales/field-performance/products/genie-and-ai-bi/", "stages": ["prereqs", "u1"]},
+    {"key": "workshops-genie-best-practices", "bucket": "Product & Reference", "label": "Genie Best Practices",
+     "url": "https://docs.databricks.com/aws/en/genie-agents/best-practices", "stages": ["u2", "u3", "u5"]},
+    {"key": "workshops-pricing", "bucket": "Product & Reference", "label": "Pricing",
+     "url": "https://go/geniepricing", "stages": ["u3"]},
+
     # ---- Demo Assets ------------------------------------------------------------------
     {"key": "demo-industry", "bucket": "Demo Assets", "label": "Existing Industry demos",
      "url": "https://dbdemos-demo-catalog-2556758628403379.aws.databricksapps.com/", "stages": ["u1"]},
@@ -307,10 +315,6 @@ RESOURCES: list[dict] = [
      "url": "https://docs.google.com/presentation/d/1uDVzOgot6vRzK_dupJK7FJaFYrypYdC5oDtF8CpOnOs", "stages": ["u2", "u5"]},
     {"key": "workshops-bia", "bucket": "Workshops", "label": "Business Impact Accelerator",
      "url": "https://go/business-impact-accelerator", "stages": ["u3", "u4"]},
-    {"key": "workshops-pricing", "bucket": "Workshops", "label": "Pricing",
-     "url": "https://go/geniepricing", "stages": ["u3"]},
-    {"key": "workshops-genie-best-practices", "bucket": "Workshops", "label": "Genie Best Practices",
-     "url": "https://docs.databricks.com/aws/en/genie-agents/best-practices", "stages": ["u2", "u3", "u5"]},
 
     # ---- Proof ------------------------------------------------------------------------
     {"key": "proof-genie-ready-dashboard", "bucket": "Proof", "label": "Genie-Ready Dashboard",
