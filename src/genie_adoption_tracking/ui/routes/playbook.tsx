@@ -79,10 +79,10 @@ const CONTACTS: {
   url: string;
 }[] = [
   {
-    title: "Genie SME / SSA team",
+    title: "FINS Genie SME",
     desc: "Deep technical help on a specific Genie engagement — accuracy, modeling, evaluation, tricky setups.",
-    action: "Post in #fins-genie-ssa",
-    url: "https://databricks.slack.com/channels/fins-genie-ssa",
+    action: "Post in #sme-genie-fins-amer",
+    url: "https://databricks.enterprise.slack.com/archives/C0B1ZRYEUGM",
   },
   {
     title: "Open an ASQ (Specialist Request)",
