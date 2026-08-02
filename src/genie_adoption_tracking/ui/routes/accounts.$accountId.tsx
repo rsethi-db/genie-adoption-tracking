@@ -1385,7 +1385,7 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
               />
             </button>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold">{readinessPct}%</span>
+              <span className="text-2xl font-bold">{readinessPct}%</span>
               <span className="text-sm text-muted-foreground">
                 {done.length}/{applicable.length} tasks
               </span>

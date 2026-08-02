@@ -55,9 +55,6 @@ function AccountsPage() {
     <AppShell>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Accounts</h1>
-        <p className="text-sm text-muted-foreground">
-          Look up a FINS account to pull up its Genie Playbook adoption progress.
-        </p>
       </div>
 
       {label ? (
@@ -65,9 +62,9 @@ function AccountsPage() {
       ) : (
         <>
           {/* Leadership push */}
-          <div className="mb-6 rounded-lg border border-primary/40 bg-primary/5 p-4 flex items-start gap-3 max-w-3xl">
-            <Megaphone className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-            <p className="text-sm text-muted-foreground">
+          <div className="mb-6 flex items-start gap-2 max-w-3xl text-sm text-muted-foreground">
+            <Megaphone className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+            <p>
               As we drive Genie adoption across FINS this quarter, keep your accounts
               moving through the Genie Playbook — update each account's Adoption
               Workflow so we have an accurate read on where everyone is.
