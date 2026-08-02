@@ -305,10 +305,14 @@ RESOURCES: list[dict] = [
      "url": "https://docs.google.com/document/d/1xbGJAaMS1MGy4Lq53axPOHQpyEXZWNzVIDDPZ1UgWmE/edit", "stages": ["u4"]},
     {"key": "workshops-genie-hackathon", "bucket": "Workshops", "label": "Genie Hackathon",
      "url": "https://go/genie-hackathon", "stages": ["u2", "u4"]},
+    {"key": "workshops-training-investment", "bucket": "Workshops", "label": "Training Investment (>100 learners)",
+     "url": "https://docs.google.com/presentation/d/1uDVzOgot6vRzK_dupJK7FJaFYrypYdC5oDtF8CpOnOs", "stages": ["u2", "u5"]},
     {"key": "workshops-bia", "bucket": "Workshops", "label": "Business Impact Accelerator",
      "url": "https://go/business-impact-accelerator", "stages": ["u3", "u4"]},
     {"key": "workshops-pricing", "bucket": "Workshops", "label": "Pricing",
      "url": "https://go/geniepricing", "stages": ["u3"]},
+    {"key": "workshops-genie-best-practices", "bucket": "Workshops", "label": "Genie Best Practices",
+     "url": "https://docs.databricks.com/aws/en/genie-agents/best-practices", "stages": ["u2", "u3", "u5"]},
 
     # ---- Proof ------------------------------------------------------------------------
     {"key": "proof-genie-ready-dashboard", "bucket": "Proof", "label": "Genie-Ready Dashboard",
