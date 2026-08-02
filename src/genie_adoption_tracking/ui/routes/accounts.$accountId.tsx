@@ -1365,14 +1365,26 @@ function PartnerPoweredBanner({
         {consumeViaWs && (
           <p className="text-sm text-muted-foreground mt-1">
             The account default is off but enforce is not set, so workspaces with it
-            enabled can still use Genie. Turn it on at the account level (with enforce)
-            to cover all workspaces.
+            enabled can still use Genie. Enable it at the account level to cover all
+            workspaces.
           </p>
         )}
         {implication && !consumeViaWs && (
           <p className="text-sm text-muted-foreground mt-1">{implication}</p>
         )}
         <WsCounts on={wsOn} off={wsOff} total={wsTotal} />
+        {consumeViaWs && (
+          <Collapsible label="Next steps to enable account-wide">
+            <ul className="space-y-1.5">
+              {PP_OFF_NEXT_STEPS.map((step, i) => (
+                <li key={i} className="flex gap-2 text-sm">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
+                  {step}
+                </li>
+              ))}
+            </ul>
+          </Collapsible>
+        )}
       </div>
     );
   }
