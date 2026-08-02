@@ -56,7 +56,7 @@ function AccountsPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Accounts</h1>
         <p className="text-sm text-muted-foreground">
-          Look up a FINS account to pull up its Genie Playbook.
+          Look up a FINS account to pull up its Genie Playbook adoption progress.
         </p>
       </div>
 
