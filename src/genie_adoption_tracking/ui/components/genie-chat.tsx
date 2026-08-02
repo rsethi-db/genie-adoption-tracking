@@ -158,13 +158,6 @@ export function openGenieChat(prompt?: string) {
   window.dispatchEvent(new CustomEvent(OPEN_GENIE_EVENT, { detail: { prompt } }));
 }
 
-interface GenieAnswer {
-  conversation_id: string;
-  message_id: string;
-  text: string;
-  sql?: string | null;
-}
-
 interface ChatTurn {
   role: "user" | "assistant";
   text: string;
@@ -198,6 +191,7 @@ export function GenieChat() {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const accountId = useCurrentAccountId();
@@ -241,21 +235,47 @@ export function GenieChat() {
     setInput("");
     setTurns((t) => [...t, { role: "user", text: question }]);
     setBusy(true);
+    setStatus("Thinking…");
     try {
-      const res = await fetch("/api/genie/ask", {
+      // Stream: server sends newline-delimited JSON — {type:"status"|"answer"}.
+      const res = await fetch("/api/genie/ask/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question,
           conversation_id: conversationId,
-          // Only inject account context on the first turn of a conversation.
           account_id: conversationId ? null : accountId ?? null,
         }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: GenieAnswer = await res.json();
-      if (data.conversation_id) setConversationId(data.conversation_id);
-      setTurns((t) => [...t, { role: "assistant", text: data.text, sql: data.sql }]);
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let gotAnswer = false;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let ev: { type: string; text?: string; conversation_id?: string };
+          try {
+            ev = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (ev.type === "status" && ev.text) {
+            setStatus(ev.text);
+          } else if (ev.type === "answer") {
+            if (ev.conversation_id) setConversationId(ev.conversation_id);
+            setTurns((t) => [...t, { role: "assistant", text: ev.text ?? "" }]);
+            gotAnswer = true;
+          }
+        }
+      }
+      if (!gotAnswer) throw new Error("no answer");
     } catch {
       setTurns((t) => [
         ...t,
@@ -263,6 +283,7 @@ export function GenieChat() {
       ]);
     } finally {
       setBusy(false);
+      setStatus("");
     }
   }
 
@@ -415,7 +436,8 @@ export function GenieChat() {
           {busy && (
             <div className="flex justify-start">
               <div className="rounded-lg px-3 py-2 bg-muted flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Thinking…
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {status || "Thinking…"}
               </div>
             </div>
           )}

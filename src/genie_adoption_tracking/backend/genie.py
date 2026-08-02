@@ -207,6 +207,37 @@ def _agent_responses(ws, space_id: str, text: str, conversation_id: str | None):
     return events
 
 
+def _agent_stream(ws, space_id: str, text: str, conversation_id: str | None):
+    """Like _agent_responses but yields each parsed SSE event as it arrives (for the
+    streaming endpoint), instead of collecting them all first."""
+    payload: dict = {
+        "input": [
+            {"type": "message", "role": "user",
+             "content": [{"type": "input_text", "text": text}]}
+        ],
+        "enable_viz": False,
+    }
+    if conversation_id:
+        payload["conversation_id"] = conversation_id
+    host = ws.config.host
+    headers = ws.config.authenticate() or {}
+    headers["Content-Type"] = "application/json"
+    url = f"{host}/api/2.0/genie/agents/{space_id}/responses"
+    with requests.post(url, headers=headers, json=payload, stream=True, timeout=180) as r:
+        r.raise_for_status()
+        for raw in r.iter_lines():
+            if not raw:
+                continue
+            line = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+            if line.startswith("data:"):
+                data = line[len("data:"):].strip()
+                if data and data != "[DONE]":
+                    try:
+                        yield json.loads(data)
+                    except json.JSONDecodeError:
+                        pass
+
+
 # --------------------------------------------------------------------------------------
 # Routes
 # --------------------------------------------------------------------------------------
@@ -296,6 +327,84 @@ def ask_genie(
         session.rollback()
 
     return answer
+
+
+@router.post("/genie/ask/stream", operation_id="askGenieStream")
+def ask_genie_stream(
+    body: GenieAskIn,
+    ws: Dependencies.Client,
+    session: Dependencies.Session,
+    config: Dependencies.Config,
+    user_ws: Dependencies.UserClient,
+):
+    """Streaming variant of /genie/ask. Emits newline-delimited JSON events:
+      {"type":"status","text":"Searching context files…"}   (live reasoning steps)
+      {"type":"answer","text":..., "conversation_id":...}    (final answer)
+    The Genie Agent API doesn't stream answer tokens, but it does stream reasoning
+    steps — so this shows real progress instead of a static spinner."""
+    from fastapi.responses import StreamingResponse
+
+    if not config.genie_space_id:
+        def _disabled():
+            yield json.dumps({
+                "type": "answer",
+                "text": "The Genie assistant isn't configured yet.",
+                "conversation_id": "",
+            }) + "\n"
+        return StreamingResponse(_disabled(), media_type="application/x-ndjson")
+
+    original_question = body.question.strip()
+    question = original_question
+    space_id = config.genie_space_id
+    account_name = ""
+    if body.account_id:
+        acct = session.get(Account, body.account_id)
+        account_name = acct.name if acct else ""
+    if not body.conversation_id and body.account_id:
+        ctx = _account_context(session, body.account_id)
+        if ctx:
+            question = f"{ctx}\n\nQuestion: {question}"
+
+    def _gen():
+        events: list[dict] = []
+        try:
+            for ev in _agent_stream(ws, space_id, question, body.conversation_id):
+                events.append(ev)
+                # Surface reasoning steps as live status.
+                if ev.get("type") == "response.output_item.done":
+                    item = ev.get("item", {})
+                    if item.get("type") == "reasoning":
+                        for c in item.get("content", []):
+                            step = c.get("reasoning_text") or c.get("text")
+                            if step:
+                                yield json.dumps({"type": "status", "text": step}) + "\n"
+        except Exception as e:
+            yield json.dumps({"type": "answer", "text": f"Sorry — {e}",
+                              "conversation_id": ""}) + "\n"
+            return
+        answer = _extract_answer(events)
+        yield json.dumps({
+            "type": "answer",
+            "text": answer.text,
+            "conversation_id": answer.conversation_id,
+        }) + "\n"
+        # Log the turn (best-effort).
+        try:
+            asked_by = user_ws.current_user.me().user_name or ""
+        except Exception:
+            asked_by = ""
+        try:
+            session.add(GenieQuery(
+                id=uuid.uuid4().hex, conversation_id=answer.conversation_id,
+                account_id=body.account_id, account_name=account_name,
+                question=original_question, answer=answer.text, asked_by=asked_by,
+                created_at=datetime.now(timezone.utc),
+            ))
+            session.commit()
+        except Exception:
+            session.rollback()
+
+    return StreamingResponse(_gen(), media_type="application/x-ndjson")
 
 
 @router.get(

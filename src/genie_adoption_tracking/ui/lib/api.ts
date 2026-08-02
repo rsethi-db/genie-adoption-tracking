@@ -1469,6 +1469,71 @@ export function useAskGenie(options?: {
         ...options?.mutation
     });
 }
+export interface AskGenieStreamParams {
+    "X-Forwarded-Host"?: string | null;
+    "X-Forwarded-Preferred-Username"?: string | null;
+    "X-Forwarded-User"?: string | null;
+    "X-Forwarded-Email"?: string | null;
+    "X-Request-Id"?: string | null;
+    "X-Forwarded-Access-Token"?: string | null;
+}
+export const askGenieStream = async (data: GenieAskIn, params?: AskGenieStreamParams, options?: RequestInit): Promise<{
+    data: unknown;
+}> =>{
+    const res = await fetch("/api/genie/ask/stream", {
+        ...options,
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...(params?.["X-Forwarded-Host"] != null && {
+                "X-Forwarded-Host": params["X-Forwarded-Host"]
+            }),
+            ...(params?.["X-Forwarded-Preferred-Username"] != null && {
+                "X-Forwarded-Preferred-Username": params["X-Forwarded-Preferred-Username"]
+            }),
+            ...(params?.["X-Forwarded-User"] != null && {
+                "X-Forwarded-User": params["X-Forwarded-User"]
+            }),
+            ...(params?.["X-Forwarded-Email"] != null && {
+                "X-Forwarded-Email": params["X-Forwarded-Email"]
+            }),
+            ...(params?.["X-Request-Id"] != null && {
+                "X-Request-Id": params["X-Request-Id"]
+            }),
+            ...(params?.["X-Forwarded-Access-Token"] != null && {
+                "X-Forwarded-Access-Token": params["X-Forwarded-Access-Token"]
+            }),
+            ...options?.headers
+        },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export function useAskGenieStream(options?: {
+    mutation?: UseMutationOptions<{
+        data: unknown;
+    }, ApiError, {
+        params: AskGenieStreamParams;
+        data: GenieAskIn;
+    }>;
+}) {
+    return useMutation({
+        mutationFn: (vars)=>askGenieStream(vars.data, vars.params),
+        ...options?.mutation
+    });
+}
 export interface GetGenieHistoryParams {
     conversation_id?: string;
     limit?: number;
