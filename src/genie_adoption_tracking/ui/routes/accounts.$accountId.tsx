@@ -36,7 +36,6 @@ import {
   Circle,
   MinusCircle,
   ChevronDown,
-  Ban,
   Megaphone,
   CalendarClock,
 } from "lucide-react";
@@ -312,16 +311,131 @@ const ADOPTION_STATUSES: { value: string; label: string }[] = [
   { value: "blocked", label: "Blocked" },
 ];
 
-// The 5 "Getting Unstuck" blocker categories (playbook). When a task is Blocked, the
-// team picks which category applies; stage_hint orders the most-likely one first for
-// that task's stage. Stored as a "[Blocker: <category>]" prefix in the task note.
-const BLOCKER_CATEGORIES: { key: string; label: string; stage: string }[] = [
-  { key: "prerequisites", label: "Pre-requisites", stage: "prereqs" },
-  { key: "data_readiness", label: "Data Readiness", stage: "u2" },
-  { key: "ease_of_creation", label: "Ease of Creation, Use & Maintenance", stage: "u3" },
-  { key: "scale", label: "Scale", stage: "u4" },
-  { key: "observability", label: "Observability, Evaluation & Monitoring", stage: "u5" },
+// Task-specific blocker reasons. When a task is Blocked, the team picks the reason
+// that actually applies to THAT task (not a generic category). Stored as a
+// "[Blocker: <reason>]" prefix in the task note. A generic fallback covers any task
+// without a bespoke list.
+const GENERIC_BLOCKERS = [
+  "Customer prioritization / bandwidth",
+  "Waiting on customer stakeholder",
+  "Needs internal SME / specialist help",
+  "Technical / platform issue",
+  "Other (see note)",
 ];
+const TASK_BLOCKERS: Record<string, string[]> = {
+  hp_u1_demo: [
+    "No suitable domain data/assets for a demo",
+    "Can't get the right business audience",
+    "Security review blocking the demo environment",
+    "Waiting on customer stakeholder",
+  ],
+  hp_u1_champions: [
+    "No engaged business champion identified",
+    "Champion lacks influence / bandwidth",
+    "Wrong persona engaged (IT-only, no business)",
+  ],
+  hp_u1_aim: [
+    "Incorrect AIM messaging / positioned as Genie-only",
+    "IdP not AIM-supported",
+    "Middle translation layer / IDP concern",
+    "No C-suite sponsorship for identity change",
+  ],
+  hp_u2_workshop: [
+    "Can't schedule the workshop with customer",
+    "Right attendees (business SMEs) unavailable",
+    "No prod-like data ready for the workshop",
+  ],
+  hp_u2_usecase: [
+    "No clear use case with a path to Prod",
+    "Use case value not agreed with business",
+    "Competing priorities / not prioritized",
+  ],
+  hp_u2_csuite: [
+    "No C-suite access / sponsor",
+    "Exec not convinced of value",
+    "Budget / procurement concern",
+  ],
+  hp_u3_prototype: [
+    "Prod-like data not available in lower env",
+    "Data not arranged by domain / hard to find",
+    "Access / permissions to customer data",
+  ],
+  hp_u3_evaldata: [
+    "No SME-validated Q&A available",
+    "SMEs unavailable to validate answers",
+    "Eval data quality / coverage insufficient",
+  ],
+  hp_u3_metricview: [
+    "Metric / ontology specs not defined",
+    "No agreement on KPI definitions",
+    "Metric views not built yet",
+  ],
+  hp_u4_signoff: [
+    "Accuracy not meeting business bar",
+    "Needs more tuning in Genie Workbench",
+    "Business users not signing off",
+  ],
+  hp_u4_uco_sizing: [
+    "Can't get usage/volume estimates",
+    "Pricing / forecasting concern",
+    "Waiting on customer stakeholder",
+  ],
+  hp_u4_import_export: [
+    "DAB / sharing setup issue",
+    "Governance / permissions on sharing",
+    "Technical / platform issue",
+  ],
+  hp_u5_aim_ready: [
+    "AIM not enabled account-wide",
+    "Identity federation / SCIM gap",
+    "Unified Login not enabled",
+  ],
+  hp_u5_pricing: [
+    "Cost concerns / sticker shock",
+    "No clear cost projections",
+    "Serving-layer competition (Snowflake/Fabric)",
+  ],
+  hp_u6_monitor: [
+    "No cost/quality monitoring in place",
+    "Genie space proliferation / unclear costs",
+    "Needs tuning to control cost or quality",
+  ],
+  hp_u6_followup: [
+    "Can't re-engage IT / business stakeholders",
+    "Champion left / changed",
+    "Waiting on customer stakeholder",
+  ],
+  rec_u1_objection: [
+    "Unprepared for common objections",
+    "Security / trust objection",
+    "Cost objection",
+  ],
+  rec_u2_flavors: [
+    "Unclear which Genie flavor fits",
+    "Needs SME guidance on options",
+  ],
+  rec_u3_workbench: [
+    "Accuracy plateau despite tuning",
+    "Missing eval data / KPI metrics",
+    "Governance tags not applied",
+  ],
+  rec_u3_hackathon: [
+    "Prerequisites for hackathon not met",
+    "Can't schedule / recruit business SMEs",
+    "No gold-layer (non-synthetic) data ready",
+  ],
+  an_u3_scale: [
+    "STS / Partner enablement not in place",
+    "Scale approach undecided",
+  ],
+  rec_u5_endpoint: [
+    "Consumption API / endpoint setup issue",
+    "Governance on programmatic access",
+  ],
+};
+function blockersForTask(taskKey: string): string[] {
+  return TASK_BLOCKERS[taskKey] ?? GENERIC_BLOCKERS;
+}
 const BLOCKER_PREFIX_RE = /^\[Blocker:\s*([^\]]*)\]\s*/;
 
 function parseBlockerNote(note: string): { category: string; rest: string } {
@@ -440,8 +554,6 @@ function AdoptionStatusIcon({ status }: { status: string }) {
     return <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />;
   if (status === "na")
     return <MinusCircle className="h-4 w-4 shrink-0 text-muted-foreground" />;
-  if (status === "blocked")
-    return <Ban className="h-4 w-4 shrink-0 text-red-600" />;
   return null; // not_initiated → blank
 }
 
@@ -477,6 +589,29 @@ function AdoptionTaskCard({
         options={statusOptions}
         onPick={(v) => onChange({ status: v })}
       />
+      {/* When blocked, the reason dropdown sits right under the status (task-specific
+          reasons), then the note, then the Ask-Genie link. */}
+      {blocked && (
+        <div className="mt-2">
+          <label className="text-[10px] font-medium uppercase tracking-wide text-destructive">
+            What's blocking this?
+          </label>
+          <select
+            value={parseBlockerNote(value.note).category}
+            onChange={(e) =>
+              onChange({ note: withBlockerCategory(value.note, e.target.value) })
+            }
+            className="mt-1 w-full h-8 rounded-md border border-destructive/40 bg-destructive/5 px-2 text-xs"
+          >
+            <option value="">Select a reason…</option>
+            {blockersForTask(task.key).map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <Textarea
         value={blocked ? parseBlockerNote(value.note).rest : value.note}
         onChange={(e) => {
@@ -484,54 +619,31 @@ function AdoptionTaskCard({
             onChange({ note: e.target.value });
             return;
           }
-          // Preserve the "[Blocker: category]" prefix; edit only the free text.
+          // Preserve the "[Blocker: reason]" prefix; edit only the free text.
           const cat = parseBlockerNote(value.note).category;
           onChange({
             note: cat ? `[Blocker: ${cat}] ${e.target.value}`.trimEnd() : e.target.value,
           });
         }}
-        placeholder="Add a note…"
+        placeholder={blocked ? "Add detail…" : "Add a note…"}
         className="mt-2 min-h-[38px] text-xs"
       />
-      {/* When a task is blocked: pick the blocker category (most-likely for this
-          stage first) + a one-click path to Genie for how to get unstuck. */}
       {blocked && (
-        <div className="mt-2 space-y-1.5">
-          <select
-            value={parseBlockerNote(value.note).category}
-            onChange={(e) =>
-              onChange({ note: withBlockerCategory(value.note, e.target.value) })
-            }
-            className="w-full h-8 rounded-md border border-destructive/40 bg-background px-2 text-xs"
-          >
-            <option value="">What's blocking this? (pick a category)</option>
-            {[...BLOCKER_CATEGORIES]
-              .sort((a, b) =>
-                a.stage === task.stage ? -1 : b.stage === task.stage ? 1 : 0
-              )
-              .map((c) => (
-                <option key={c.key} value={c.label}>
-                  {c.label}
-                  {c.stage === task.stage ? " (typical here)" : ""}
-                </option>
-              ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => {
-              const cat = parseBlockerNote(value.note).category;
-              openGenieChat(
-                `${accountName} is blocked on "${task.label}"` +
-                  (cat ? ` (blocker category: ${cat})` : "") +
-                  `. How do I get unstuck? What play, demo, or resource should I use?`
-              );
-            }}
-            className="inline-flex items-center gap-1 text-xs text-destructive hover:underline font-medium"
-          >
-            <Sparkles className="h-3 w-3 shrink-0" />
-            Ask Genie how to get unstuck
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            const cat = parseBlockerNote(value.note).category;
+            openGenieChat(
+              `${accountName} is blocked on "${task.label}"` +
+                (cat ? ` — ${cat}` : "") +
+                `. How do I get unstuck? What play, demo, or resource should I use?`
+            );
+          }}
+          className="mt-2 inline-flex items-center gap-1 text-xs text-destructive hover:underline font-medium"
+        >
+          <Sparkles className="h-3 w-3 shrink-0" />
+          Ask Genie how to get unstuck
+        </button>
       )}
       {(TASK_RESOURCES[task.key] ?? []).length > 0 && (
         <div className="mt-2 space-y-1">
