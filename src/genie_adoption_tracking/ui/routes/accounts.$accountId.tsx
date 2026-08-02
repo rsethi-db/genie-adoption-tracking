@@ -1224,9 +1224,9 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
                   ) : (
                     <ul className="space-y-1">
                       {done.map((t) => (
-                        <li key={t.key} className="flex items-start gap-1.5">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-px" />
-                          <span>{t.label}</span>
+                        <li key={t.key} className="flex items-center gap-1.5" title={t.label}>
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span className="truncate">{t.label}</span>
                         </li>
                       ))}
                     </ul>
@@ -1243,9 +1243,9 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
                   ) : (
                     <ul className="space-y-1">
                       {remaining.map((t) => (
-                        <li key={t.key} className="flex items-start gap-1.5">
-                          <Circle className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-px" />
-                          <span>{t.label}</span>
+                        <li key={t.key} className="flex items-center gap-1.5" title={t.label}>
+                          <Circle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="truncate">{t.label}</span>
                         </li>
                       ))}
                     </ul>
