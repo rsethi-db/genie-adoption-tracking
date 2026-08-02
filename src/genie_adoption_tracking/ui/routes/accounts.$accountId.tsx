@@ -1152,10 +1152,16 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
   // User-provisioning readiness = AIM OR SCIM (provisioning_status is the broader
   // "any provisioning" signal); aim tells us whether the preferred method is used.
   const prov = data.provisioning_status ?? "unknown";
-  const plan = data.plan ?? [];
-  const applicable = plan.filter((p) => p.applicable);
-  const done = applicable.filter((p) => p.status === "done");
-  const remaining = applicable.filter((p) => p.status !== "done");
+  // Readiness reflects the team-filled Adoption Workflow (matrix tasks, excluding the
+  // Security & Review questions) — not GTM auto-signals. Done = marked "completed".
+  const workflowTasks = (data.adoption?.tasks ?? []).filter((t) => t.lane !== "security");
+  const applicable = workflowTasks;
+  const done = workflowTasks.filter((t) => t.status === "completed");
+  const remaining = workflowTasks.filter((t) => t.status !== "completed");
+  const readinessPct =
+    workflowTasks.length > 0
+      ? Math.round((done.length / workflowTasks.length) * 100)
+      : 0;
 
   const toggle = (k: string) => setExpanded((e) => (e === k ? null : k));
 
@@ -1193,53 +1199,60 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
               />
             </button>
             <span className="font-medium">
-              {data.readiness_pct ?? 0}%
+              {readinessPct}%
               <span className="text-muted-foreground font-normal">
                 {" "}
                 ({done.length}/{applicable.length})
               </span>
             </span>
           </div>
-          <Progress value={data.readiness_pct ?? 0} />
+          <Progress value={readinessPct} />
           {showBreakdown && (
-            <div className="mt-3 grid sm:grid-cols-2 gap-4 text-xs">
-              <div>
-                <div className="font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5">
-                  Done ({done.length})
+            <>
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                Based on the Adoption Workflow tasks the team has marked below.
+              </p>
+              <div className="mt-2 grid sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <div className="font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5">
+                    Done ({done.length})
+                  </div>
+                  {done.length === 0 ? (
+                    <p className="text-muted-foreground">
+                      Nothing marked completed yet.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {done.map((t) => (
+                        <li key={t.key} className="flex items-start gap-1.5">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-px" />
+                          <span>{t.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-                {done.length === 0 ? (
-                  <p className="text-muted-foreground">Nothing done yet.</p>
-                ) : (
-                  <ul className="space-y-1">
-                    {done.map((p) => (
-                      <li key={p.key} className="flex items-start gap-1.5">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-px" />
-                        <span>{p.label}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div>
-                <div className="font-semibold text-muted-foreground mb-1.5">
-                  Not done ({remaining.length})
+                <div>
+                  <div className="font-semibold text-muted-foreground mb-1.5">
+                    Not done ({remaining.length})
+                  </div>
+                  {remaining.length === 0 ? (
+                    <p className="text-emerald-700 dark:text-emerald-400">
+                      All workflow tasks completed. 🎉
+                    </p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {remaining.map((t) => (
+                        <li key={t.key} className="flex items-start gap-1.5">
+                          <Circle className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-px" />
+                          <span>{t.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-                {remaining.length === 0 ? (
-                  <p className="text-emerald-700 dark:text-emerald-400">
-                    All applicable items are done. 🎉
-                  </p>
-                ) : (
-                  <ul className="space-y-1">
-                    {remaining.map((p) => (
-                      <li key={p.key} className="flex items-start gap-1.5">
-                        <Circle className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-px" />
-                        <span>{p.label}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
               </div>
-            </div>
+            </>
           )}
         </div>
 

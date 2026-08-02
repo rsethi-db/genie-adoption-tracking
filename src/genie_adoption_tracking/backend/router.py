@@ -210,67 +210,40 @@ def _readiness_pct(session: Session, account: Account) -> int:
     return pct
 
 
+# Readiness is driven by the team-filled Adoption Workflow (not GTM auto-signals):
+# share of workflow tasks the team has marked "completed". The stage×lane matrix tasks
+# count; the Security & Review questions are excluded from the score.
+_WORKFLOW_TASK_KEYS = [t["key"] for t in adoption_workflow.TASKS if t["lane"] != "security"]
+_WORKFLOW_TASK_TOTAL = len(_WORKFLOW_TASK_KEYS)
+
+
+def _workflow_readiness(states: dict[str, str]) -> int:
+    """states: task_key -> status. % of matrix tasks marked completed."""
+    if _WORKFLOW_TASK_TOTAL == 0:
+        return 0
+    done = sum(1 for k in _WORKFLOW_TASK_KEYS if states.get(k) == "completed")
+    return round(100 * done / _WORKFLOW_TASK_TOTAL)
+
+
+def _account_workflow_readiness(session: Session, account_id: str) -> int:
+    states = {
+        s.task_key: s.status
+        for s in session.exec(
+            select(AdoptionTaskState).where(AdoptionTaskState.account_id == account_id)
+        ).all()
+    }
+    return _workflow_readiness(states)
+
+
 def _avg_readiness(session: Session, accounts: Sequence[Account]) -> int:
-    """Average readiness % across accounts using a few batched queries instead of
-    resolving each account's plan individually — the per-account resolve was an N+1
-    that made the Signals dashboard slow with ~500 accounts."""
+    """Average readiness % across accounts, driven by the team-filled Adoption Workflow
+    (share of matrix tasks marked completed). Batched: one query for all task states."""
     if not accounts:
         return 0
-    use_cases = session.exec(select(UseCase)).all()
-    open_blockers = session.exec(
-        select(Blocker).where(Blocker.resolved == False)  # noqa: E712
-    ).all()
-    issues = session.exec(select(AccountIssue)).all()
-    plan_rows = session.exec(select(AccountPlanItem)).all()
-
-    ucs_by_acct: dict[str, list[UseCase]] = {}
-    for uc in use_cases:
-        ucs_by_acct.setdefault(uc.account_id, []).append(uc)
-    uc_to_acct = {uc.id: uc.account_id for uc in use_cases}
-    open_blk_by_acct: dict[str, int] = {}
-    for b in open_blockers:
-        aid = uc_to_acct.get(b.use_case_id)
-        if aid:
-            open_blk_by_acct[aid] = open_blk_by_acct.get(aid, 0) + 1
-    open_iss_by_acct: dict[str, int] = {}
-    for i in issues:
-        if _issue_is_open(i.status):
-            open_iss_by_acct[i.account_id] = open_iss_by_acct.get(i.account_id, 0) + 1
-    manual_by_acct: dict[str, dict] = {}
-    for p in plan_rows:
-        manual_by_acct.setdefault(p.account_id, {})[p.item_key] = p
-
-    total = 0
-    for a in accounts:
-        ucs = ucs_by_acct.get(a.id, [])
-        max_order = -1
-        for uc in ucs:
-            max_order = max(max_order, account_plan.STAGE_ORDER.get(uc.stage, -1))
-        facts = account_plan.AccountFacts(
-            pp_enabled=a.pp_status in ("on", "on_default"),
-            aim_status=a.aim_status,
-            aim_ws_enabled=a.aim_ws_enabled,
-            provisioning_status=a.provisioning_status,
-            provisioning_ws_enabled=a.provisioning_ws_enabled,
-            uc_count=len(ucs),
-            max_stage_order=max_order,
-            genie_active=a.genie_active,
-            open_issues=open_iss_by_acct.get(a.id, 0),
-            open_blockers=open_blk_by_acct.get(a.id, 0),
-        )
-        manual = manual_by_acct.get(a.id, {})
-        applicable = 0
-        done = 0
-        for item in account_plan.ITEMS:
-            row = manual.get(item["key"])
-            r = account_plan.resolve_item(
-                item, facts, row.done if row else False, row.note if row else ""
-            )
-            if r.applicable:
-                applicable += 1
-                if r.status == "done":
-                    done += 1
-        total += round(100 * done / applicable) if applicable else 0
+    states_by_acct: dict[str, dict[str, str]] = {}
+    for s in session.exec(select(AdoptionTaskState)).all():
+        states_by_acct.setdefault(s.account_id, {})[s.task_key] = s.status
+    total = sum(_workflow_readiness(states_by_acct.get(a.id, {})) for a in accounts)
     return round(total / len(accounts))
 
 
@@ -477,7 +450,9 @@ def get_account(account_id: str, session: Dependencies.Session):
                 progress_pct=_progress_pct(session, uc.id, uc.stage),
             )
         )
-    plan_items, plan_pct = _build_plan(session, acct)
+    plan_items, _ = _build_plan(session, acct)
+    # Readiness is driven by the team-filled Adoption Workflow, not GTM auto-signals.
+    plan_pct = _account_workflow_readiness(session, account_id)
     # Genie-related issues (all severities), open first then by revenue impact.
     issue_rows = session.exec(
         select(AccountIssue).where(AccountIssue.account_id == account_id)
