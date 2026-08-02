@@ -36,10 +36,10 @@ function AccountsPage() {
             Genie adoption push — action needed
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Team — as we drive Genie adoption across FINS this quarter, please make
-            sure your accounts are moving through the Field Adoption Playbook. Take a
-            few minutes to update each account's Adoption Workflow in the Navigator so
-            we have an accurate read on where everyone is.
+            As we drive Genie adoption across FINS this quarter, please make sure your
+            accounts are moving through the Field Adoption Playbook. Take a few minutes
+            to update each account's Adoption Workflow in the Navigator so we have an
+            accurate read on where everyone is.
           </p>
           <p className="text-sm mt-2">
             <span className="font-medium">Action:</span> Choose an account below and
@@ -106,11 +106,7 @@ function AccountLookup() {
         )}
       </div>
 
-      {q.trim() === "" ? (
-        <p className="text-sm text-muted-foreground px-1">
-          Start typing to look up an account.
-        </p>
-      ) : !loading && results.length === 0 ? (
+      {q.trim() === "" ? null : !loading && results.length === 0 ? (
         <p className="text-sm text-muted-foreground px-1">
           No account matches “{q}”.
         </p>
