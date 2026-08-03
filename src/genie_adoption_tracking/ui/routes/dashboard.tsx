@@ -18,7 +18,7 @@ import {
   Bug,
   Sparkles,
   MessageSquare,
-  ArrowRight,
+  ArrowUpDown,
   X,
   Loader2,
   Search,
@@ -29,6 +29,13 @@ function fmtDbus(n: number): string {
   if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}k`;
   return `$${n.toFixed(0)}`;
 }
+
+const TIER_DOT: Record<string, string> = {
+  green: "bg-emerald-500",
+  yellow: "bg-amber-500",
+  red: "bg-destructive",
+  unknown: "bg-muted-foreground/50",
+};
 
 export const Route = createFileRoute("/dashboard")({
   component: () => <DashboardPage />,
@@ -48,6 +55,13 @@ interface AcctRow {
   sa_owner?: string;
   dsa_owner?: string;
   arr?: number;
+  readiness_tier?: string;
+  pp_status?: string;
+  provisioning_status?: string;
+  use_case_count?: number;
+  genie_spend_90d?: number;
+  open_issues?: number;
+  open_blockers?: number;
 }
 
 // A tile spec — clickable (drill-down) when `filter` is set, otherwise a plain metric.
@@ -106,7 +120,6 @@ function DashboardBody() {
         <InlineAccounts
           filter={{ label: `Search: “${needle}”`, params: { q: needle } }}
           onClose={() => setQ("")}
-          showArr
         />
       )}
 
@@ -218,18 +231,42 @@ function TileGrid({ tiles, cols = "lg:grid-cols-4" }: { tiles: TileSpec[]; cols?
   );
 }
 
-// Inline account list for a drill-down filter — fetches /api/accounts with the
-// filter's params and renders the matches right on the Signals page.
+// Sortable columns for the inline account table.
+type SortKey = "name" | "arr" | "genie_spend_90d" | "use_case_count" | "open_issues";
+const NUMERIC_SORTS: SortKey[] = ["arr", "genie_spend_90d", "use_case_count", "open_issues"];
+
+const PP_LABEL: Record<string, string> = {
+  on: "On",
+  on_default: "On (default)",
+  off: "Off",
+  unknown: "—",
+};
+const PROV_LABEL: Record<string, string> = {
+  on: "On",
+  partial: "Partial",
+  off: "Off",
+  unknown: "—",
+};
+
+function toneDot(status: string, good: string[], bad: string[]): string {
+  if (good.includes(status)) return "bg-emerald-500";
+  if (bad.includes(status)) return "bg-destructive";
+  return "bg-amber-500";
+}
+
+// Inline account TABLE for a drill-down filter — fetches /api/accounts and shows the
+// full account picture (tier, PP, provisioning, use cases, Genie spend, issues, ARR),
+// sortable by any numeric column. Rendered right on the Signals page.
 function InlineAccounts({
   filter,
   onClose,
-  showArr = false,
 }: {
   filter: AcctFilter;
   onClose: () => void;
-  showArr?: boolean;
 }) {
   const [rows, setRows] = useState<AcctRow[] | null>(null);
+  const [sort, setSort] = useState<SortKey>("arr");
+  const [dir, setDir] = useState<"asc" | "desc">("desc");
   const seq = useRef(0);
 
   // Serialize params so the effect re-runs on value change (not object identity),
@@ -251,13 +288,49 @@ function InlineAccounts({
     return () => clearTimeout(t);
   }, [qs]);
 
+  const sorted = rows
+    ? [...rows].sort((a, b) => {
+        const mul = dir === "asc" ? 1 : -1;
+        if (sort === "name") return mul * a.name.localeCompare(b.name);
+        return mul * (((a[sort] as number) ?? 0) - ((b[sort] as number) ?? 0));
+      })
+    : null;
+
+  const clickSort = (k: SortKey) => {
+    if (sort === k) setDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSort(k);
+      setDir(NUMERIC_SORTS.includes(k) ? "desc" : "asc");
+    }
+  };
+
+  const Th = ({ k, label, align = "left" }: { k: SortKey; label: string; align?: "left" | "right" }) => (
+    <th className={cn("py-2 px-2 font-medium", align === "right" && "text-right")}>
+      <button
+        onClick={() => clickSort(k)}
+        className={cn(
+          "inline-flex items-center gap-1 hover:text-foreground",
+          align === "right" && "flex-row-reverse"
+        )}
+      >
+        {label}
+        <ArrowUpDown className={cn("h-3 w-3", sort === k ? "text-foreground" : "text-muted-foreground/40")} />
+      </button>
+    </th>
+  );
+
+  // Totals footer — quick roll-up of the segment.
+  const totalArr = sorted?.reduce((s, a) => s + (a.arr ?? 0), 0) ?? 0;
+  const totalSpend = sorted?.reduce((s, a) => s + (a.genie_spend_90d ?? 0), 0) ?? 0;
+  const totalUc = sorted?.reduce((s, a) => s + (a.use_case_count ?? 0), 0) ?? 0;
+
   return (
     <Card className="border-primary/40 bg-primary/[0.03]">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-base flex items-center gap-2 flex-wrap">
             {filter.label}
-            {rows !== null && <Badge variant="secondary">{rows.length}</Badge>}
+            {sorted !== null && <Badge variant="secondary">{sorted.length}</Badge>}
           </CardTitle>
           <button
             onClick={onClose}
@@ -268,40 +341,89 @@ function InlineAccounts({
         </div>
       </CardHeader>
       <CardContent>
-        {rows === null ? (
+        {sorted === null ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading accounts…
           </div>
-        ) : rows.length === 0 ? (
+        ) : sorted.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4">
             No accounts match this filter.
           </p>
         ) : (
-          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-2 max-h-[26rem] overflow-y-auto">
-            {rows.map((a) => (
-              <Link
-                key={a.id}
-                to="/accounts/$accountId"
-                params={{ accountId: a.id }}
-                className="flex items-center justify-between rounded-md border bg-card px-3 py-2 hover:border-primary/50 transition-colors"
-              >
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">{a.name}</div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {a.sub_vertical || "—"}
-                    {a.ae_owner && <> · AE {a.ae_owner}</>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0 ml-2">
-                  {showArr && (a.arr ?? 0) > 0 && (
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {fmtDbus(a.arr ?? 0)}
-                    </span>
-                  )}
-                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </Link>
-            ))}
+          <div className="max-h-[28rem] overflow-auto rounded-md border bg-card">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-card z-10 text-xs text-muted-foreground border-b">
+                <tr className="text-left">
+                  <Th k="name" label="Account" />
+                  <th className="py-2 px-2 font-medium">Tier</th>
+                  <th className="py-2 px-2 font-medium">PP AI</th>
+                  <th className="py-2 px-2 font-medium">Provisioning</th>
+                  <Th k="use_case_count" label="Use cases" align="right" />
+                  <Th k="genie_spend_90d" label="Genie $ (90d)" align="right" />
+                  <Th k="open_issues" label="Issues" align="right" />
+                  <Th k="arr" label="ARR" align="right" />
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((a) => (
+                  <tr key={a.id} className="border-b last:border-0 hover:bg-accent/50">
+                    <td className="py-1.5 px-2">
+                      <Link
+                        to="/accounts/$accountId"
+                        params={{ accountId: a.id }}
+                        className="font-medium hover:underline"
+                      >
+                        {a.name}
+                      </Link>
+                      <div className="text-xs text-muted-foreground truncate max-w-[14rem]">
+                        {a.sub_vertical || "—"}
+                        {a.ae_owner && <> · AE {a.ae_owner}</>}
+                      </div>
+                    </td>
+                    <td className="py-1.5 px-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className={`h-2 w-2 rounded-full ${TIER_DOT[a.readiness_tier ?? "unknown"] ?? TIER_DOT.unknown}`} />
+                        <span className="capitalize">{a.readiness_tier ?? "—"}</span>
+                      </span>
+                    </td>
+                    <td className="py-1.5 px-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className={`h-2 w-2 rounded-full ${toneDot(a.pp_status ?? "unknown", ["on", "on_default"], ["off"])}`} />
+                        {PP_LABEL[a.pp_status ?? "unknown"] ?? a.pp_status}
+                      </span>
+                    </td>
+                    <td className="py-1.5 px-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className={`h-2 w-2 rounded-full ${toneDot(a.provisioning_status ?? "unknown", ["on"], ["off"])}`} />
+                        {PROV_LABEL[a.provisioning_status ?? "unknown"] ?? a.provisioning_status}
+                      </span>
+                    </td>
+                    <td className="py-1.5 px-2 text-right tabular-nums">{a.use_case_count ?? 0}</td>
+                    <td className="py-1.5 px-2 text-right tabular-nums">
+                      {(a.genie_spend_90d ?? 0) > 0 ? fmtDbus(a.genie_spend_90d ?? 0) : "—"}
+                    </td>
+                    <td className="py-1.5 px-2 text-right tabular-nums">
+                      {(a.open_issues ?? 0) > 0 ? (
+                        <span className="text-destructive font-medium">{a.open_issues}</span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="py-1.5 px-2 text-right tabular-nums font-medium">{fmtDbus(a.arr ?? 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="sticky bottom-0 bg-muted/80 border-t text-xs font-medium">
+                <tr>
+                  <td className="py-1.5 px-2 text-muted-foreground">Totals</td>
+                  <td colSpan={3}></td>
+                  <td className="py-1.5 px-2 text-right tabular-nums">{totalUc}</td>
+                  <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalSpend)}</td>
+                  <td></td>
+                  <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalArr)}</td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         )}
       </CardContent>
@@ -633,13 +755,6 @@ function GenieReadyTab({ data }: { data: DashboardOut }) {
     </div>
   );
 }
-
-const TIER_DOT: Record<string, string> = {
-  green: "bg-emerald-500",
-  yellow: "bg-amber-500",
-  red: "bg-destructive",
-  unknown: "bg-muted-foreground/50",
-};
 
 function GenieReadyTable({ data }: { data: DashboardOut }) {
   const rows = data.genie_ready_accounts ?? [];
