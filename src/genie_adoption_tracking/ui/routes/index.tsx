@@ -32,7 +32,7 @@ function Index() {
         <FeatureCard
           icon={<ClipboardCheck className="h-5 w-5" />}
           title="Accounts"
-          desc="Look up an account and capture where it is — work its Genie Playbook across the UCO stages and track readiness and blockers."
+          desc="Look up an account and work its Genie Playbook across the UCO stages."
           to="/accounts"
           cta="Open Accounts"
         />
@@ -46,7 +46,7 @@ function Index() {
         <FeatureCard
           icon={<BookOpen className="h-5 w-5" />}
           title="Getting Help"
-          desc="Ask Genie for anything, browse the assets and resources, or find who to contact when you're still stuck."
+          desc="Ask Genie, browse the resources, or find who to contact."
           to="/playbook"
           cta="Open Getting Help"
         />
