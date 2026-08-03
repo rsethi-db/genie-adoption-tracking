@@ -39,7 +39,7 @@ function Index() {
         <FeatureCard
           icon={<LineChart className="h-5 w-5" />}
           title="Signals"
-          desc="The U1→U6 funnel, PP / provisioning gaps, Genie-Ready tiers, open Genie issues, and pipeline — adoption across all of FINS at a glance."
+          desc="The U1→U6 adoption funnel across all of FINS at a glance."
           to="/dashboard"
           cta="Open Signals"
         />
