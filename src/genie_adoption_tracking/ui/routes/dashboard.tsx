@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Suspense } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useGetDashboardSuspense, type DashboardOut } from "@/lib/api";
 import { selector } from "@/lib/selector";
 import { AppShell } from "@/components/app-shell";
@@ -17,7 +17,25 @@ import {
   Sparkles,
   MessageSquare,
   ArrowRight,
+  X,
+  Loader2,
 } from "lucide-react";
+
+// A drill-down filter: a human label + the query params sent to /api/accounts.
+export interface AcctFilter {
+  label: string;
+  params: Record<string, string>;
+}
+type OnFilter = (f: AcctFilter) => void;
+
+interface AcctRow {
+  id: string;
+  name: string;
+  sub_vertical?: string;
+  ae_owner?: string;
+  sa_owner?: string;
+  dsa_owner?: string;
+}
 
 function fmtDbus(n: number): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
@@ -47,6 +65,18 @@ function DashboardPage() {
 
 function DashboardBody() {
   const { data } = useGetDashboardSuspense(selector());
+  // The active drill-down filter — set when a tile/segment is clicked; the matching
+  // accounts render inline (below) rather than navigating to the Accounts page.
+  const [filter, setFilter] = useState<AcctFilter | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const onFilter: OnFilter = (f) => {
+    setFilter(f);
+    // Bring the inline panel into view.
+    requestAnimationFrame(() =>
+      panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -82,6 +112,13 @@ function DashboardBody() {
         />
       </div>
 
+      {/* Inline drill-down panel — shows the accounts behind a clicked tile/segment */}
+      <div ref={panelRef}>
+        {filter && (
+          <InlineAccounts filter={filter} onClose={() => setFilter(null)} />
+        )}
+      </div>
+
       {/* Four lenses, mirroring the logfood dashboard's pages */}
       <Tabs defaultValue="pp">
         <TabsList>
@@ -92,19 +129,98 @@ function DashboardBody() {
         </TabsList>
 
         <TabsContent value="pp" className="mt-4">
-          <PartnerPoweredTab data={data} />
+          <PartnerPoweredTab data={data} onFilter={onFilter} />
         </TabsContent>
         <TabsContent value="accounts" className="mt-4">
-          <GenieAccountsTab data={data} />
+          <GenieAccountsTab data={data} onFilter={onFilter} />
         </TabsContent>
         <TabsContent value="brickroad" className="mt-4">
-          <BrickroadTab data={data} />
+          <BrickroadTab data={data} onFilter={onFilter} />
         </TabsContent>
         <TabsContent value="ready" className="mt-4">
-          <GenieReadyTab data={data} />
+          <GenieReadyTab data={data} onFilter={onFilter} />
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// Inline account list for a drill-down filter — fetches /api/accounts with the
+// filter's params and renders the matches right on the Signals page.
+function InlineAccounts({
+  filter,
+  onClose,
+}: {
+  filter: AcctFilter;
+  onClose: () => void;
+}) {
+  const [rows, setRows] = useState<AcctRow[] | null>(null);
+  const seq = useRef(0);
+
+  useEffect(() => {
+    const mine = ++seq.current;
+    setRows(null);
+    const qs = new URLSearchParams(filter.params).toString();
+    fetch(`/api/accounts?${qs}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => {
+        if (mine === seq.current) setRows(Array.isArray(d) ? d : []);
+      })
+      .catch(() => {
+        if (mine === seq.current) setRows([]);
+      });
+  }, [filter]);
+
+  return (
+    <Card className="border-primary/40">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+            {filter.label}
+            {rows !== null && (
+              <Badge variant="secondary">{rows.length}</Badge>
+            )}
+          </CardTitle>
+          <button
+            onClick={onClose}
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground shrink-0"
+          >
+            <X className="h-4 w-4" /> Close
+          </button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {rows === null ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading accounts…
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4">
+            No accounts match this filter.
+          </p>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-2 max-h-[26rem] overflow-y-auto">
+            {rows.map((a) => (
+              <Link
+                key={a.id}
+                to="/accounts/$accountId"
+                params={{ accountId: a.id }}
+                className="flex items-center justify-between rounded-md border px-3 py-2 hover:border-primary/50 transition-colors"
+              >
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">{a.name}</div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {a.sub_vertical || "—"}
+                    {a.ae_owner && <> · AE {a.ae_owner}</>}
+                  </div>
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
+              </Link>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -116,7 +232,7 @@ function SoWhat({ children }: { children: React.ReactNode }) {
 }
 
 // ------------------------------------------------------------------ Tab 1: PP AI
-function PartnerPoweredTab({ data }: { data: DashboardOut }) {
+function PartnerPoweredTab({ data, onFilter }: { data: DashboardOut; onFilter: OnFilter }) {
   const ppOff = data.pp_off_accounts ?? 0;
   return (
     <div className="space-y-6">
@@ -132,7 +248,9 @@ function PartnerPoweredTab({ data }: { data: DashboardOut }) {
           label="PP AI off (blocked)"
           value={ppOff}
           tone={ppOff > 0 ? "bad" : undefined}
-          to="/accounts?pp=off"
+          onClick={() =>
+            onFilter({ label: "Partner-Powered AI off (blocked)", params: { pp: "off" } })
+          }
         />
         <StatTile
           icon={<ShieldAlert className="h-4 w-4" />}
@@ -195,7 +313,7 @@ function SpendDistribution({ data }: { data: DashboardOut }) {
 }
 
 // ------------------------------------------------------- Tab 2: Genie Accounts
-function GenieAccountsTab({ data }: { data: DashboardOut }) {
+function GenieAccountsTab({ data, onFilter }: { data: DashboardOut; onFilter: OnFilter }) {
   return (
     <div className="space-y-6">
       <SoWhat>
@@ -216,7 +334,9 @@ function GenieAccountsTab({ data }: { data: DashboardOut }) {
           label="Whitespace"
           value={data.whitespace_accounts ?? 0}
           tone={(data.whitespace_accounts ?? 0) > 0 ? "warn" : undefined}
-          to="/accounts?whitespace=true"
+          onClick={() =>
+            onFilter({ label: "Whitespace — no Genie use case", params: { whitespace: "true" } })
+          }
         />
         <StatTile
           icon={<DollarSign className="h-4 w-4" />}
@@ -226,7 +346,7 @@ function GenieAccountsTab({ data }: { data: DashboardOut }) {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        <Funnel data={data} />
+        <Funnel data={data} onFilter={onFilter} />
         <Whitespace data={data} />
       </div>
     </div>
@@ -265,22 +385,13 @@ function Whitespace({ data }: { data: DashboardOut }) {
             </span>
           </Link>
         ))}
-        {rows.length > 0 && (
-          <Link
-            to="/accounts"
-            search={{ whitespace: true }}
-            className="inline-flex items-center gap-1 text-sm text-primary hover:underline px-2 pt-2"
-          >
-            See all whitespace <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        )}
       </CardContent>
     </Card>
   );
 }
 
 // ---------------------------------------------------------- Tab 3: Brickroad
-function BrickroadTab({ data }: { data: DashboardOut }) {
+function BrickroadTab({ data, onFilter }: { data: DashboardOut; onFilter: OnFilter }) {
   return (
     <div className="space-y-6">
       <SoWhat>
@@ -305,7 +416,9 @@ function BrickroadTab({ data }: { data: DashboardOut }) {
           icon={<Users className="h-4 w-4" />}
           label="Accounts w/ issues"
           value={data.accounts_with_issues ?? 0}
-          to="/accounts?open_issues=true"
+          onClick={() =>
+            onFilter({ label: "Accounts with open Genie issues", params: { open_issues: "true" } })
+          }
         />
         <StatTile
           icon={<DollarSign className="h-4 w-4" />}
@@ -397,7 +510,9 @@ function BrickroadTable({ data }: { data: DashboardOut }) {
 }
 
 // ---------------------------------------------------------- Tab 4: Genie Ready
-function GenieReadyTab({ data }: { data: DashboardOut }) {
+function GenieReadyTab({ data, onFilter }: { data: DashboardOut; onFilter: OnFilter }) {
+  const tierFilter = (tier: string, label: string) => () =>
+    onFilter({ label: `Genie-Ready tier: ${label}`, params: { tier } });
   return (
     <div className="space-y-6">
       <SoWhat>
@@ -407,10 +522,10 @@ function GenieReadyTab({ data }: { data: DashboardOut }) {
       </SoWhat>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatTile icon={<span>🟢</span>} label="Green" value={data.tier_green ?? 0} tone="good" to="/accounts?tier=green" />
-        <StatTile icon={<span>🟡</span>} label="Yellow" value={data.tier_yellow ?? 0} tone="warn" to="/accounts?tier=yellow" />
-        <StatTile icon={<span>🔴</span>} label="Red" value={data.tier_red ?? 0} tone="bad" to="/accounts?tier=red" />
-        <StatTile icon={<span>⚪</span>} label="Unknown" value={data.tier_unknown ?? 0} to="/accounts?tier=unknown" />
+        <StatTile icon={<span>🟢</span>} label="Green" value={data.tier_green ?? 0} tone="good" onClick={tierFilter("green", "Green")} />
+        <StatTile icon={<span>🟡</span>} label="Yellow" value={data.tier_yellow ?? 0} tone="warn" onClick={tierFilter("yellow", "Yellow")} />
+        <StatTile icon={<span>🔴</span>} label="Red" value={data.tier_red ?? 0} tone="bad" onClick={tierFilter("red", "Red")} />
+        <StatTile icon={<span>⚪</span>} label="Unknown" value={data.tier_unknown ?? 0} onClick={tierFilter("unknown", "Unknown")} />
       </div>
 
       <GenieReadyTable data={data} />
@@ -497,14 +612,14 @@ function StatTile({
   value,
   display,
   tone,
-  to,
+  onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   value?: number;
   display?: string;
   tone?: "good" | "warn" | "bad";
-  to?: string; // when set, the tile links to a filtered Accounts view
+  onClick?: () => void; // when set, the tile opens an inline drill-down on this page
 }) {
   const toneClass =
     tone === "good"
@@ -524,19 +639,19 @@ function StatTile({
       </div>
     </CardContent>
   );
-  if (to) {
+  if (onClick) {
     return (
-      <Link to={to}>
+      <button type="button" onClick={onClick} className="text-left">
         <Card className="hover:border-primary/50 transition-colors h-full">
           {inner}
         </Card>
-      </Link>
+      </button>
     );
   }
   return <Card>{inner}</Card>;
 }
 
-function Funnel({ data }: { data: DashboardOut }) {
+function Funnel({ data, onFilter }: { data: DashboardOut; onFilter: OnFilter }) {
   const max = Math.max(1, ...data.funnel.map((f) => f.count));
   return (
     <Card>
@@ -545,7 +660,18 @@ function Funnel({ data }: { data: DashboardOut }) {
       </CardHeader>
       <CardContent className="space-y-2">
         {data.funnel.map((f) => (
-          <div key={f.stage} className="flex items-center gap-3">
+          <button
+            key={f.stage}
+            type="button"
+            disabled={f.count === 0 || f.stage === "prereqs"}
+            onClick={() =>
+              onFilter({
+                label: `Use case at stage ${f.code} — ${f.name}`,
+                params: { stage: f.stage },
+              })
+            }
+            className="w-full flex items-center gap-3 text-left rounded-md px-1 py-0.5 enabled:hover:bg-accent transition-colors disabled:cursor-default"
+          >
             <div className="w-10 shrink-0">
               <Badge variant="secondary" className="font-mono text-xs">
                 {f.code}
@@ -570,7 +696,7 @@ function Funnel({ data }: { data: DashboardOut }) {
                 />
               </div>
             </div>
-          </div>
+          </button>
         ))}
       </CardContent>
     </Card>
