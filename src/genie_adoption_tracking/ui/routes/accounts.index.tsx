@@ -66,8 +66,7 @@ function AccountsPage() {
             <Megaphone className="h-4 w-4 text-primary mt-0.5 shrink-0" />
             <p>
               As we drive Genie adoption across FINS this quarter, keep your accounts
-              moving through the Genie Playbook — update each account's Adoption
-              Workflow so we have an accurate read on where everyone is.
+              moving through the Genie Playbook.
             </p>
           </div>
 

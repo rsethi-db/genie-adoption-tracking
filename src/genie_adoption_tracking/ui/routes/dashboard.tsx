@@ -448,9 +448,7 @@ function PartnerPoweredTab({ data }: { data: DashboardOut }) {
   return (
     <div className="space-y-6">
       <SoWhat>
-        Partner-Powered AI must be on for Genie to consume. Accounts that are off (and
-        can't consume via any workspace) are the hard blocker; enforce-off accounts can
-        still consume through select workspaces.
+        Partner-Powered AI must be on for Genie to consume.
       </SoWhat>
 
       <TileGrid
