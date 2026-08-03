@@ -154,7 +154,7 @@ TASK_RESOURCE_KEYS: dict[str, list[str]] = {
     "hp_u3_metricview": ["workshops-genie-best-practices"],
     "hp_u4_signoff": ["demo-workbench", "proof-genie-ready-dashboard"],
     "hp_u4_uco_sizing": ["workshops-pricing", "ref-pricing-faq", "proof-genie-cost-dashboard", "workshops-bia"],
-    "hp_u5_aim_ready": ["plays-aim-migration", "proof-genie-ready-dashboard"],
+    "hp_u5_aim_ready": [],
     "hp_u5_pricing": ["workshops-pricing", "ref-pricing-faq", "proof-genie-cost-dashboard"],
     "hp_u6_monitor": ["proof-genie-cost-dashboard", "demo-workbench", "proof-blockers-dashboard"],
     "hp_u6_followup": ["proof-customer-stories"],
