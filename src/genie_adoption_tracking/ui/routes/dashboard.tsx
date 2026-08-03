@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   Users,
@@ -20,6 +21,7 @@ import {
   ArrowRight,
   X,
   Loader2,
+  Search,
 } from "lucide-react";
 
 function fmtDbus(n: number): string {
@@ -45,6 +47,7 @@ interface AcctRow {
   ae_owner?: string;
   sa_owner?: string;
   dsa_owner?: string;
+  arr?: number;
 }
 
 // A tile spec — clickable (drill-down) when `filter` is set, otherwise a plain metric.
@@ -76,9 +79,37 @@ function DashboardPage() {
 
 function DashboardBody() {
   const { data } = useGetDashboardSuspense(selector());
+  const [q, setQ] = useState("");
+  const needle = q.trim();
 
   return (
     <div className="space-y-6">
+      {/* Search — find an account by name, sub-vertical, AE/SA/DSA */}
+      <div className="relative max-w-xl">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search accounts by name, sub-vertical, AE, SA, or DSA…"
+          className="pl-9 h-10"
+        />
+        {q && (
+          <button
+            onClick={() => setQ("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      {needle && (
+        <InlineAccounts
+          filter={{ label: `Search: “${needle}”`, params: { q: needle } }}
+          onClose={() => setQ("")}
+          showArr
+        />
+      )}
+
       {/* Headline row (start big) — click a tile to expand the accounts beneath it */}
       <TileGrid
         cols="lg:grid-cols-3 xl:grid-cols-6"
@@ -192,26 +223,33 @@ function TileGrid({ tiles, cols = "lg:grid-cols-4" }: { tiles: TileSpec[]; cols?
 function InlineAccounts({
   filter,
   onClose,
+  showArr = false,
 }: {
   filter: AcctFilter;
   onClose: () => void;
+  showArr?: boolean;
 }) {
   const [rows, setRows] = useState<AcctRow[] | null>(null);
   const seq = useRef(0);
 
+  // Serialize params so the effect re-runs on value change (not object identity),
+  // and debounce so typing in the search box doesn't fire a request per keystroke.
+  const qs = new URLSearchParams(filter.params).toString();
   useEffect(() => {
     const mine = ++seq.current;
     setRows(null);
-    const qs = new URLSearchParams(filter.params).toString();
-    fetch(`/api/accounts?${qs}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => {
-        if (mine === seq.current) setRows(Array.isArray(d) ? d : []);
-      })
-      .catch(() => {
-        if (mine === seq.current) setRows([]);
-      });
-  }, [filter]);
+    const t = setTimeout(() => {
+      fetch(`/api/accounts?${qs}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((d) => {
+          if (mine === seq.current) setRows(Array.isArray(d) ? d : []);
+        })
+        .catch(() => {
+          if (mine === seq.current) setRows([]);
+        });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [qs]);
 
   return (
     <Card className="border-primary/40 bg-primary/[0.03]">
@@ -254,7 +292,14 @@ function InlineAccounts({
                     {a.ae_owner && <> · AE {a.ae_owner}</>}
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  {showArr && (a.arr ?? 0) > 0 && (
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {fmtDbus(a.arr ?? 0)}
+                    </span>
+                  )}
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                </div>
               </Link>
             ))}
           </div>
