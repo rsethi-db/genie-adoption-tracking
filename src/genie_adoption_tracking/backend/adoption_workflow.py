@@ -168,7 +168,7 @@ TASK_RESOURCE_KEYS: dict[str, list[str]] = {
     # --- As Needed ---
     "an_u3_scale": ["plays-sts", "plays-partner-powered"],
     "an_u4_tuning": ["demo-workbench", "proof-genie-cost-dashboard"],
-    "an_u5_further_tuning": ["demo-workbench", "workshops-genie-best-practices"],
+    "an_u5_further_tuning": ["demo-workbench"],
     "an_u6_document": ["proof-customer-stories"],
 }
 
