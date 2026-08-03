@@ -157,6 +157,7 @@ function DashboardBody() {
           <TabsTrigger value="accounts">Genie Accounts</TabsTrigger>
           <TabsTrigger value="brickroad">Brickroad</TabsTrigger>
           <TabsTrigger value="ready">Genie Ready</TabsTrigger>
+          <TabsTrigger value="subvertical">By Sub-Vertical</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pp" className="mt-4">
@@ -170,6 +171,9 @@ function DashboardBody() {
         </TabsContent>
         <TabsContent value="ready" className="mt-4">
           <GenieReadyTab data={data} />
+        </TabsContent>
+        <TabsContent value="subvertical" className="mt-4">
+          <SubVerticalTab data={data} />
         </TabsContent>
       </Tabs>
     </div>
@@ -606,6 +610,115 @@ function Whitespace({ data }: { data: DashboardOut }) {
         ))}
       </CardContent>
     </Card>
+  );
+}
+
+// ---------------------------------------------------- Tab 5: By Sub-Vertical
+function SubVerticalTab({ data }: { data: DashboardOut }) {
+  const rows = data.sub_verticals ?? [];
+  const [open, setOpen] = useState<string | null>(null);
+  const maxAcct = Math.max(1, ...rows.map((r) => r.accounts));
+
+  return (
+    <div className="space-y-4">
+      <SoWhat>
+        Adoption rolled up by sub-vertical. Click a row to see that sub-vertical's
+        accounts, with their full detail.
+      </SoWhat>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Adoption by sub-vertical</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No sub-vertical data yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-muted-foreground border-b">
+                    <th className="py-2 px-2 font-medium">Sub-vertical</th>
+                    <th className="py-2 px-2 font-medium">Accounts</th>
+                    <th className="py-2 px-2 font-medium text-right">Genie-active</th>
+                    <th className="py-2 px-2 font-medium text-right">Whitespace</th>
+                    <th className="py-2 px-2 font-medium text-right">Genie $ (90d)</th>
+                    <th className="py-2 px-2 font-medium text-right">Avg readiness</th>
+                    <th className="py-2 px-2 font-medium text-right">ARR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => {
+                    const isOpen = open === r.sub_vertical;
+                    const activePct = r.accounts
+                      ? Math.round((r.genie_active / r.accounts) * 100)
+                      : 0;
+                    return (
+                      <>
+                        <tr
+                          key={r.sub_vertical}
+                          onClick={() =>
+                            setOpen((o) => (o === r.sub_vertical ? null : r.sub_vertical))
+                          }
+                          className={cn(
+                            "border-b last:border-0 cursor-pointer hover:bg-accent/50",
+                            isOpen && "bg-accent/50"
+                          )}
+                        >
+                          <td className="py-1.5 px-2 font-medium">{r.sub_vertical}</td>
+                          <td className="py-1.5 px-2">
+                            <div className="flex items-center gap-2">
+                              <div className="h-2 w-16 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className="h-full bg-primary rounded-full"
+                                  style={{ width: `${(r.accounts / maxAcct) * 100}%` }}
+                                />
+                              </div>
+                              <span className="tabular-nums">{r.accounts}</span>
+                            </div>
+                          </td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-emerald-700 dark:text-emerald-400">
+                            {r.genie_active}
+                            <span className="text-muted-foreground font-normal"> ({activePct}%)</span>
+                          </td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-amber-700 dark:text-amber-400">
+                            {r.whitespace}
+                          </td>
+                          <td className="py-1.5 px-2 text-right tabular-nums">
+                            {(r.genie_spend_90d ?? 0) > 0 ? fmtDbus(r.genie_spend_90d ?? 0) : "—"}
+                          </td>
+                          <td className="py-1.5 px-2 text-right tabular-nums">
+                            {r.avg_readiness_pct}%
+                          </td>
+                          <td className="py-1.5 px-2 text-right tabular-nums font-medium">
+                            {fmtDbus(r.arr ?? 0)}
+                          </td>
+                        </tr>
+                        {isOpen && (
+                          <tr>
+                            <td colSpan={7} className="p-0">
+                              <div className="p-2 bg-primary/[0.03]">
+                                <InlineAccounts
+                                  filter={{
+                                    label: `Sub-vertical: ${r.sub_vertical}`,
+                                    params: { sub_vertical: r.sub_vertical },
+                                  }}
+                                  onClose={() => setOpen(null)}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

@@ -389,6 +389,18 @@ class BrickroadIssueOut(BaseModel):
     investigator: str = ""
 
 
+class SubVerticalStatOut(BaseModel):
+    """Adoption rolled up by sub-vertical (e.g. Banking, Insurance, Capital Markets)."""
+
+    sub_vertical: str
+    accounts: int
+    genie_active: int
+    whitespace: int
+    genie_spend_90d: float = 0.0
+    avg_readiness_pct: int = 0
+    arr: float = 0.0
+
+
 class GenieReadyAccountOut(BaseModel):
     """A row in the Genie-Ready tab table (tier + provisioning + spend), sorted by
     t3m annualized ~ ARR (mirrors rpt_account_genie_ready ordering)."""
@@ -441,6 +453,7 @@ class DashboardOut(BaseModel):
     whitespace_top: list[WhitespaceAccountOut] = []
     brickroad_issues: list[BrickroadIssueOut] = []
     genie_ready_accounts: list[GenieReadyAccountOut] = []
+    sub_verticals: list[SubVerticalStatOut] = []
 
 
 # AccountDetailOut forward-references UseCaseListOut (defined above), resolve it.

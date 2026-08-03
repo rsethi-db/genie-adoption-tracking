@@ -65,6 +65,7 @@ from .models import (
     StageAdvanceIn,
     StageOut,
     StalledUseCaseOut,
+    SubVerticalStatOut,
     TaskResourceOut,
     TopResourceOut,
     WhitespaceAccountOut,
@@ -376,6 +377,7 @@ def list_accounts(
     open_issues: bool = False,
     genie_active: bool = False,
     has_spend: bool = False,
+    sub_vertical: str = "",
 ):
     """Account lookup. Pass `q` for text search (name/owner/sub-vertical), or one/more
     filters (tier, pp, provisioning, stage, whitespace, open_issues, genie_active,
@@ -385,7 +387,7 @@ def list_accounts(
     needle = q.strip().lower()
     has_filter = bool(
         tier or pp or provisioning or stage or whitespace or open_issues
-        or genie_active or has_spend
+        or genie_active or has_spend or sub_vertical
     )
     if not needle and not has_filter:
         return []
@@ -438,6 +440,8 @@ def list_accounts(
         if genie_active and not a.genie_active:
             return False
         if has_spend and (a.genie_dollars_t30d or 0) <= 0:
+            return False
+        if sub_vertical and (a.sub_vertical or "Unspecified") != sub_vertical:
             return False
         return True
 
@@ -1281,6 +1285,30 @@ def get_dashboard(session: Dependencies.Session):
         for a in sorted(accounts, key=lambda x: x.arr, reverse=True)[:100]
     ]
 
+    # Sub-vertical rollup — adoption grouped by sub-vertical (batched readiness).
+    states_by_acct: dict[str, dict[str, str]] = {}
+    for s in session.exec(select(AdoptionTaskState)).all():
+        states_by_acct.setdefault(s.account_id, {})[s.task_key] = s.status
+    sv_groups: dict[str, list[Account]] = {}
+    for a in accounts:
+        sv_groups.setdefault(a.sub_vertical or "Unspecified", []).append(a)
+    sub_verticals = [
+        SubVerticalStatOut(
+            sub_vertical=sv,
+            accounts=len(grp),
+            genie_active=sum(1 for a in grp if a.genie_active),
+            whitespace=sum(1 for a in grp if a.id not in accts_with_uc),
+            genie_spend_90d=round(sum(a.genie_spend_90d for a in grp), 2),
+            avg_readiness_pct=round(
+                sum(_workflow_readiness(states_by_acct.get(a.id, {})) for a in grp)
+                / len(grp)
+            ),
+            arr=round(sum(a.arr for a in grp), 2),
+        )
+        for sv, grp in sv_groups.items()
+    ]
+    sub_verticals.sort(key=lambda x: x.accounts, reverse=True)
+
     return DashboardOut(
         total_accounts=len(accounts),
         total_use_cases=len(use_cases),
@@ -1314,4 +1342,5 @@ def get_dashboard(session: Dependencies.Session):
         whitespace_top=whitespace_top,
         brickroad_issues=brickroad_issues,
         genie_ready_accounts=genie_ready_accounts,
+        sub_verticals=sub_verticals,
     )
