@@ -325,7 +325,7 @@ RESOURCES: list[dict] = [
      "url": "https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f014ecfb601fa19ed40df16a1110ae/published/pages/1e023696?o=2548836972759138", "stages": ["u5", "u6"]},
     {"key": "proof-customer-stories", "bucket": "Proof & Dashboards", "label": "Customer Stories",
      "url": "https://docs.google.com/presentation/d/1hLUBBrJ7oC2c5e8IiJiuvonbZ9u7ysw_bh21OFc0TYk/edit?usp=sharing", "stages": ["u4", "u6"]},
-    {"key": "proof-genie-cost-dashboard", "bucket": "Proof & Dashboards", "label": "Genie Cost Dashboard (go/aibi/genie-api-pricing)",
+    {"key": "proof-genie-cost-dashboard", "bucket": "Proof & Dashboards", "label": "Genie Cost Dashboard",
      "url": "https://logfood.azuredatabricks.net/dashboardsv3/01f14a6ac7361099a4ae71135c942a45/published?o=2548836972759138", "stages": ["u5", "u6"]},
 ]
 
