@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { useGetDashboardSuspense, type DashboardOut } from "@/lib/api";
 import { selector } from "@/lib/selector";
 import { AppShell } from "@/components/app-shell";
@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import {
   Users,
   Layers,
@@ -21,12 +22,21 @@ import {
   Loader2,
 } from "lucide-react";
 
+function fmtDbus(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}k`;
+  return `$${n.toFixed(0)}`;
+}
+
+export const Route = createFileRoute("/dashboard")({
+  component: () => <DashboardPage />,
+});
+
 // A drill-down filter: a human label + the query params sent to /api/accounts.
 export interface AcctFilter {
   label: string;
   params: Record<string, string>;
 }
-type OnFilter = (f: AcctFilter) => void;
 
 interface AcctRow {
   id: string;
@@ -37,15 +47,16 @@ interface AcctRow {
   dsa_owner?: string;
 }
 
-function fmtDbus(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}k`;
-  return `$${n.toFixed(0)}`;
+// A tile spec — clickable (drill-down) when `filter` is set, otherwise a plain metric.
+interface TileSpec {
+  key: string;
+  icon: ReactNode;
+  label: string;
+  value?: number;
+  display?: string;
+  tone?: "good" | "warn" | "bad";
+  filter?: AcctFilter;
 }
-
-export const Route = createFileRoute("/dashboard")({
-  component: () => <DashboardPage />,
-});
 
 function DashboardPage() {
   return (
@@ -65,58 +76,35 @@ function DashboardPage() {
 
 function DashboardBody() {
   const { data } = useGetDashboardSuspense(selector());
-  // The active drill-down filter — set when a tile/segment is clicked; the matching
-  // accounts render inline (below) rather than navigating to the Accounts page.
-  const [filter, setFilter] = useState<AcctFilter | null>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  const onFilter: OnFilter = (f) => {
-    setFilter(f);
-    // Bring the inline panel into view.
-    requestAnimationFrame(() =>
-      panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-    );
-  };
 
   return (
     <div className="space-y-6">
-      {/* Headline row (start big) — always visible above the tabs */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <StatTile icon={<Users className="h-4 w-4" />} label="FINS accounts" value={data.total_accounts} />
-        <StatTile
-          icon={<Sparkles className="h-4 w-4" />}
-          label="Genie-active"
-          value={data.genie_active_accounts ?? 0}
-          tone="good"
-          onClick={() =>
-            onFilter({ label: "Genie-active accounts", params: { genie_active: "true" } })
-          }
-        />
-        <StatTile
-          icon={<DollarSign className="h-4 w-4" />}
-          label="Genie revenue (30d)"
-          display={fmtDbus(data.genie_revenue_t30d ?? 0)}
-          tone="good"
-          onClick={() =>
-            onFilter({ label: "Accounts with Genie spend (30d)", params: { has_spend: "true" } })
-          }
-        />
-        <StatTile
-          icon={<MessageSquare className="h-4 w-4" />}
-          label="Active Genie spaces"
-          value={data.active_genie_spaces ?? 0}
-        />
-        <StatTile
-          icon={<Gauge className="h-4 w-4" />}
-          label="Avg readiness"
-          display={`${data.avg_readiness_pct ?? 0}%`}
-        />
-        <StatTile
-          icon={<DollarSign className="h-4 w-4" />}
-          label="Est. pipeline $/mo"
-          display={fmtDbus(data.total_monthly_dbus ?? 0)}
-        />
-      </div>
+      {/* Headline row (start big) — click a tile to expand the accounts beneath it */}
+      <TileGrid
+        cols="lg:grid-cols-3 xl:grid-cols-6"
+        tiles={[
+          { key: "total", icon: <Users className="h-4 w-4" />, label: "FINS accounts", value: data.total_accounts },
+          {
+            key: "genie_active",
+            icon: <Sparkles className="h-4 w-4" />,
+            label: "Genie-active",
+            value: data.genie_active_accounts ?? 0,
+            tone: "good",
+            filter: { label: "Genie-active accounts", params: { genie_active: "true" } },
+          },
+          {
+            key: "revenue",
+            icon: <DollarSign className="h-4 w-4" />,
+            label: "Genie revenue (30d)",
+            display: fmtDbus(data.genie_revenue_t30d ?? 0),
+            tone: "good",
+            filter: { label: "Accounts with Genie spend (30d)", params: { has_spend: "true" } },
+          },
+          { key: "spaces", icon: <MessageSquare className="h-4 w-4" />, label: "Active Genie spaces", value: data.active_genie_spaces ?? 0 },
+          { key: "readiness", icon: <Gauge className="h-4 w-4" />, label: "Avg readiness", display: `${data.avg_readiness_pct ?? 0}%` },
+          { key: "pipeline", icon: <DollarSign className="h-4 w-4" />, label: "Est. pipeline $/mo", display: fmtDbus(data.total_monthly_dbus ?? 0) },
+        ]}
+      />
 
       {/* Four lenses, mirroring the logfood dashboard's pages */}
       <Tabs defaultValue="pp">
@@ -128,26 +116,73 @@ function DashboardBody() {
         </TabsList>
 
         <TabsContent value="pp" className="mt-4">
-          <PartnerPoweredTab data={data} onFilter={onFilter} />
+          <PartnerPoweredTab data={data} />
         </TabsContent>
         <TabsContent value="accounts" className="mt-4">
-          <GenieAccountsTab data={data} onFilter={onFilter} />
+          <GenieAccountsTab data={data} />
         </TabsContent>
         <TabsContent value="brickroad" className="mt-4">
-          <BrickroadTab data={data} onFilter={onFilter} />
+          <BrickroadTab data={data} />
         </TabsContent>
         <TabsContent value="ready" className="mt-4">
-          <GenieReadyTab data={data} onFilter={onFilter} />
+          <GenieReadyTab data={data} />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
 
-      {/* Inline drill-down panel — shows the accounts behind a clicked tile/segment,
-          rendered BELOW the lens it was triggered from. */}
-      <div ref={panelRef}>
-        {filter && (
-          <InlineAccounts filter={filter} onClose={() => setFilter(null)} />
-        )}
+// A grid of stat tiles that expands the matching accounts INLINE, directly beneath
+// the row, when a clickable tile is selected. The active tile is ringed and points a
+// caret at the panel so the link between "the number" and "the accounts" is obvious.
+function TileGrid({ tiles, cols = "lg:grid-cols-4" }: { tiles: TileSpec[]; cols?: string }) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const open = tiles.find((t) => t.key === openKey && t.filter);
+  // Column count at the widest breakpoint (last "grid-cols-N" wins), for caret placement.
+  const colClasses = cols.match(/grid-cols-(\d+)/g) ?? [];
+  const maxCols = colClasses.length
+    ? Number(colClasses[colClasses.length - 1].split("-").pop())
+    : 4;
+  const openIdx = open ? tiles.findIndex((t) => t.key === open.key) : -1;
+
+  return (
+    <div>
+      <div className={cn("grid grid-cols-2 gap-4", cols)}>
+        {tiles.map((t) => (
+          <StatTile
+            key={t.key}
+            icon={t.icon}
+            label={t.label}
+            value={t.value}
+            display={t.display}
+            tone={t.tone}
+            active={openKey === t.key}
+            onClick={
+              t.filter
+                ? () => setOpenKey((k) => (k === t.key ? null : t.key))
+                : undefined
+            }
+          />
+        ))}
       </div>
+      {open?.filter && (
+        <div className="mt-2">
+          {/* Caret pointing up at the active tile (best-effort: aligns to the tile's
+              column at the widest breakpoint). */}
+          <div
+            className="hidden lg:block h-2 overflow-hidden"
+            aria-hidden
+          >
+            <div
+              className="h-3 w-3 rotate-45 bg-card border-l border-t border-primary/40 mx-auto"
+              style={{
+                marginLeft: `calc((100% / ${maxCols}) * ${openIdx + 0.5} - 0.375rem)`,
+              }}
+            />
+          </div>
+          <InlineAccounts filter={open.filter} onClose={() => setOpenKey(null)} />
+        </div>
+      )}
     </div>
   );
 }
@@ -179,14 +214,12 @@ function InlineAccounts({
   }, [filter]);
 
   return (
-    <Card className="border-primary/40">
+    <Card className="border-primary/40 bg-primary/[0.03]">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-base flex items-center gap-2 flex-wrap">
             {filter.label}
-            {rows !== null && (
-              <Badge variant="secondary">{rows.length}</Badge>
-            )}
+            {rows !== null && <Badge variant="secondary">{rows.length}</Badge>}
           </CardTitle>
           <button
             onClick={onClose}
@@ -206,13 +239,13 @@ function InlineAccounts({
             No accounts match this filter.
           </p>
         ) : (
-          <div className="grid sm:grid-cols-2 gap-2 max-h-[26rem] overflow-y-auto">
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-2 max-h-[26rem] overflow-y-auto">
             {rows.map((a) => (
               <Link
                 key={a.id}
                 to="/accounts/$accountId"
                 params={{ accountId: a.id }}
-                className="flex items-center justify-between rounded-md border px-3 py-2 hover:border-primary/50 transition-colors"
+                className="flex items-center justify-between rounded-md border bg-card px-3 py-2 hover:border-primary/50 transition-colors"
               >
                 <div className="min-w-0">
                   <div className="text-sm font-medium truncate">{a.name}</div>
@@ -232,14 +265,14 @@ function InlineAccounts({
 }
 
 // A one-line "so what" callout above each tab's content.
-function SoWhat({ children }: { children: React.ReactNode }) {
+function SoWhat({ children }: { children: ReactNode }) {
   return (
     <p className="text-sm text-muted-foreground mb-4 max-w-3xl">{children}</p>
   );
 }
 
 // ------------------------------------------------------------------ Tab 1: PP AI
-function PartnerPoweredTab({ data, onFilter }: { data: DashboardOut; onFilter: OnFilter }) {
+function PartnerPoweredTab({ data }: { data: DashboardOut }) {
   const ppOff = data.pp_off_accounts ?? 0;
   return (
     <div className="space-y-6">
@@ -249,44 +282,42 @@ function PartnerPoweredTab({ data, onFilter }: { data: DashboardOut; onFilter: O
         still consume through select workspaces.
       </SoWhat>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatTile
-          icon={<ShieldAlert className="h-4 w-4" />}
-          label="PP AI off (blocked)"
-          value={ppOff}
-          tone={ppOff > 0 ? "bad" : undefined}
-          onClick={() =>
-            onFilter({ label: "Partner-Powered AI off (blocked)", params: { pp: "off" } })
-          }
-        />
-        <StatTile
-          icon={<ShieldAlert className="h-4 w-4" />}
-          label="PP AI Off · enforce on"
-          value={data.pp_off_enforce_on ?? 0}
-          tone={(data.pp_off_enforce_on ?? 0) > 0 ? "bad" : undefined}
-          onClick={() =>
-            onFilter({ label: "PP AI off · enforce on", params: { pp: "off_enforce_on" } })
-          }
-        />
-        <StatTile
-          icon={<ShieldAlert className="h-4 w-4" />}
-          label="PP AI Off · enforce off"
-          value={data.pp_off_enforce_off ?? 0}
-          tone={(data.pp_off_enforce_off ?? 0) > 0 ? "warn" : undefined}
-          onClick={() =>
-            onFilter({ label: "PP AI off · enforce off", params: { pp: "off_enforce_off" } })
-          }
-        />
-        <StatTile
-          icon={<DollarSign className="h-4 w-4" />}
-          label="Genie revenue (30d)"
-          display={fmtDbus(data.genie_revenue_t30d ?? 0)}
-          tone="good"
-          onClick={() =>
-            onFilter({ label: "Accounts with Genie spend (30d)", params: { has_spend: "true" } })
-          }
-        />
-      </div>
+      <TileGrid
+        tiles={[
+          {
+            key: "pp_off",
+            icon: <ShieldAlert className="h-4 w-4" />,
+            label: "PP AI off (blocked)",
+            value: ppOff,
+            tone: ppOff > 0 ? "bad" : undefined,
+            filter: { label: "Partner-Powered AI off (blocked)", params: { pp: "off" } },
+          },
+          {
+            key: "enf_on",
+            icon: <ShieldAlert className="h-4 w-4" />,
+            label: "PP AI Off · enforce on",
+            value: data.pp_off_enforce_on ?? 0,
+            tone: (data.pp_off_enforce_on ?? 0) > 0 ? "bad" : undefined,
+            filter: { label: "PP AI off · enforce on", params: { pp: "off_enforce_on" } },
+          },
+          {
+            key: "enf_off",
+            icon: <ShieldAlert className="h-4 w-4" />,
+            label: "PP AI Off · enforce off",
+            value: data.pp_off_enforce_off ?? 0,
+            tone: (data.pp_off_enforce_off ?? 0) > 0 ? "warn" : undefined,
+            filter: { label: "PP AI off · enforce off", params: { pp: "off_enforce_off" } },
+          },
+          {
+            key: "revenue",
+            icon: <DollarSign className="h-4 w-4" />,
+            label: "Genie revenue (30d)",
+            display: fmtDbus(data.genie_revenue_t30d ?? 0),
+            tone: "good",
+            filter: { label: "Accounts with Genie spend (30d)", params: { has_spend: "true" } },
+          },
+        ]}
+      />
 
       <SpendDistribution data={data} />
     </div>
@@ -329,7 +360,10 @@ function SpendDistribution({ data }: { data: DashboardOut }) {
 }
 
 // ------------------------------------------------------- Tab 2: Genie Accounts
-function GenieAccountsTab({ data, onFilter }: { data: DashboardOut; onFilter: OnFilter }) {
+function GenieAccountsTab({ data }: { data: DashboardOut }) {
+  // Funnel drill-down — its own state so the panel appears right under the funnel row.
+  const [stageFilter, setStageFilter] = useState<AcctFilter | null>(null);
+
   return (
     <div className="space-y-6">
       <SoWhat>
@@ -337,41 +371,36 @@ function GenieAccountsTab({ data, onFilter }: { data: DashboardOut; onFilter: On
         FINS customers with no Genie use case at all, ranked by ARR.
       </SoWhat>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatTile
-          icon={<Layers className="h-4 w-4" />}
-          label="Genie use cases"
-          value={data.total_use_cases}
-        />
-        <StatTile
-          icon={<Sparkles className="h-4 w-4" />}
-          label="Live (U6)"
-          value={data.live_use_cases}
-          tone="good"
-          onClick={() =>
-            onFilter({ label: "Accounts with a Live (U6) use case", params: { stage: "u6" } })
-          }
-        />
-        <StatTile
-          icon={<Layers className="h-4 w-4" />}
-          label="Whitespace"
-          value={data.whitespace_accounts ?? 0}
-          tone={(data.whitespace_accounts ?? 0) > 0 ? "warn" : undefined}
-          onClick={() =>
-            onFilter({ label: "Whitespace — no Genie use case", params: { whitespace: "true" } })
-          }
-        />
-        <StatTile
-          icon={<DollarSign className="h-4 w-4" />}
-          label="Est. pipeline $/mo"
-          display={fmtDbus(data.total_monthly_dbus ?? 0)}
-        />
-      </div>
+      <TileGrid
+        tiles={[
+          { key: "uc", icon: <Layers className="h-4 w-4" />, label: "Genie use cases", value: data.total_use_cases },
+          {
+            key: "live",
+            icon: <Sparkles className="h-4 w-4" />,
+            label: "Live (U6)",
+            value: data.live_use_cases,
+            tone: "good",
+            filter: { label: "Accounts with a Live (U6) use case", params: { stage: "u6" } },
+          },
+          {
+            key: "whitespace",
+            icon: <Layers className="h-4 w-4" />,
+            label: "Whitespace",
+            value: data.whitespace_accounts ?? 0,
+            tone: (data.whitespace_accounts ?? 0) > 0 ? "warn" : undefined,
+            filter: { label: "Whitespace — no Genie use case", params: { whitespace: "true" } },
+          },
+          { key: "pipeline", icon: <DollarSign className="h-4 w-4" />, label: "Est. pipeline $/mo", display: fmtDbus(data.total_monthly_dbus ?? 0) },
+        ]}
+      />
 
       <div className="grid lg:grid-cols-2 gap-6">
-        <Funnel data={data} onFilter={onFilter} />
+        <Funnel data={data} active={stageFilter} onPick={setStageFilter} />
         <Whitespace data={data} />
       </div>
+      {stageFilter && (
+        <InlineAccounts filter={stageFilter} onClose={() => setStageFilter(null)} />
+      )}
     </div>
   );
 }
@@ -414,7 +443,7 @@ function Whitespace({ data }: { data: DashboardOut }) {
 }
 
 // ---------------------------------------------------------- Tab 3: Brickroad
-function BrickroadTab({ data, onFilter }: { data: DashboardOut; onFilter: OnFilter }) {
+function BrickroadTab({ data }: { data: DashboardOut }) {
   return (
     <div className="space-y-6">
       <SoWhat>
@@ -422,34 +451,38 @@ function BrickroadTab({ data, onFilter }: { data: DashboardOut; onFilter: OnFilt
         ranked by revenue impact.
       </SoWhat>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatTile
-          icon={<Bug className="h-4 w-4" />}
-          label="Open issues"
-          value={data.open_issues ?? 0}
-          tone={(data.open_issues ?? 0) > 0 ? "warn" : undefined}
-        />
-        <StatTile
-          icon={<Bug className="h-4 w-4" />}
-          label="At risk"
-          value={data.issues_at_risk ?? 0}
-          tone={(data.issues_at_risk ?? 0) > 0 ? "bad" : undefined}
-        />
-        <StatTile
-          icon={<Users className="h-4 w-4" />}
-          label="Accounts w/ issues"
-          value={data.accounts_with_issues ?? 0}
-          onClick={() =>
-            onFilter({ label: "Accounts with open Genie issues", params: { open_issues: "true" } })
-          }
-        />
-        <StatTile
-          icon={<DollarSign className="h-4 w-4" />}
-          label="Revenue impact"
-          display={fmtDbus(data.total_revenue_impact ?? 0)}
-          tone={(data.total_revenue_impact ?? 0) > 0 ? "bad" : undefined}
-        />
-      </div>
+      <TileGrid
+        tiles={[
+          {
+            key: "open",
+            icon: <Bug className="h-4 w-4" />,
+            label: "Open issues",
+            value: data.open_issues ?? 0,
+            tone: (data.open_issues ?? 0) > 0 ? "warn" : undefined,
+          },
+          {
+            key: "at_risk",
+            icon: <Bug className="h-4 w-4" />,
+            label: "At risk",
+            value: data.issues_at_risk ?? 0,
+            tone: (data.issues_at_risk ?? 0) > 0 ? "bad" : undefined,
+          },
+          {
+            key: "accts",
+            icon: <Users className="h-4 w-4" />,
+            label: "Accounts w/ issues",
+            value: data.accounts_with_issues ?? 0,
+            filter: { label: "Accounts with open Genie issues", params: { open_issues: "true" } },
+          },
+          {
+            key: "rev",
+            icon: <DollarSign className="h-4 w-4" />,
+            label: "Revenue impact",
+            display: fmtDbus(data.total_revenue_impact ?? 0),
+            tone: (data.total_revenue_impact ?? 0) > 0 ? "bad" : undefined,
+          },
+        ]}
+      />
 
       <BrickroadTable data={data} />
     </div>
@@ -533,9 +566,7 @@ function BrickroadTable({ data }: { data: DashboardOut }) {
 }
 
 // ---------------------------------------------------------- Tab 4: Genie Ready
-function GenieReadyTab({ data, onFilter }: { data: DashboardOut; onFilter: OnFilter }) {
-  const tierFilter = (tier: string, label: string) => () =>
-    onFilter({ label: `Genie-Ready tier: ${label}`, params: { tier } });
+function GenieReadyTab({ data }: { data: DashboardOut }) {
   return (
     <div className="space-y-6">
       <SoWhat>
@@ -544,12 +575,14 @@ function GenieReadyTab({ data, onFilter }: { data: DashboardOut; onFilter: OnFil
         accounts.
       </SoWhat>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatTile icon={<span>🟢</span>} label="Green" value={data.tier_green ?? 0} tone="good" onClick={tierFilter("green", "Green")} />
-        <StatTile icon={<span>🟡</span>} label="Yellow" value={data.tier_yellow ?? 0} tone="warn" onClick={tierFilter("yellow", "Yellow")} />
-        <StatTile icon={<span>🔴</span>} label="Red" value={data.tier_red ?? 0} tone="bad" onClick={tierFilter("red", "Red")} />
-        <StatTile icon={<span>⚪</span>} label="Unknown" value={data.tier_unknown ?? 0} onClick={tierFilter("unknown", "Unknown")} />
-      </div>
+      <TileGrid
+        tiles={[
+          { key: "green", icon: <span>🟢</span>, label: "Green", value: data.tier_green ?? 0, tone: "good", filter: { label: "Genie-Ready tier: Green", params: { tier: "green" } } },
+          { key: "yellow", icon: <span>🟡</span>, label: "Yellow", value: data.tier_yellow ?? 0, tone: "warn", filter: { label: "Genie-Ready tier: Yellow", params: { tier: "yellow" } } },
+          { key: "red", icon: <span>🔴</span>, label: "Red", value: data.tier_red ?? 0, tone: "bad", filter: { label: "Genie-Ready tier: Red", params: { tier: "red" } } },
+          { key: "unknown", icon: <span>⚪</span>, label: "Unknown", value: data.tier_unknown ?? 0, filter: { label: "Genie-Ready tier: Unknown", params: { tier: "unknown" } } },
+        ]}
+      />
 
       <GenieReadyTable data={data} />
     </div>
@@ -636,13 +669,15 @@ function StatTile({
   display,
   tone,
   onClick,
+  active,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   value?: number;
   display?: string;
   tone?: "good" | "warn" | "bad";
   onClick?: () => void; // when set, the tile opens an inline drill-down on this page
+  active?: boolean;
 }) {
   const toneClass =
     tone === "good"
@@ -665,7 +700,14 @@ function StatTile({
   if (onClick) {
     return (
       <button type="button" onClick={onClick} className="text-left">
-        <Card className="hover:border-primary/50 transition-colors h-full">
+        <Card
+          className={cn(
+            "transition-colors h-full",
+            active
+              ? "border-primary ring-2 ring-primary/40 bg-primary/[0.03]"
+              : "hover:border-primary/50"
+          )}
+        >
           {inner}
         </Card>
       </button>
@@ -674,7 +716,15 @@ function StatTile({
   return <Card>{inner}</Card>;
 }
 
-function Funnel({ data, onFilter }: { data: DashboardOut; onFilter: OnFilter }) {
+function Funnel({
+  data,
+  active,
+  onPick,
+}: {
+  data: DashboardOut;
+  active: AcctFilter | null;
+  onPick: (f: AcctFilter | null) => void;
+}) {
   const max = Math.max(1, ...data.funnel.map((f) => f.count));
   return (
     <Card>
@@ -682,45 +732,55 @@ function Funnel({ data, onFilter }: { data: DashboardOut; onFilter: OnFilter }) 
         <CardTitle className="text-base">Adoption funnel (count &amp; $DBU by stage)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        {data.funnel.map((f) => (
-          <button
-            key={f.stage}
-            type="button"
-            disabled={f.count === 0 || f.stage === "prereqs"}
-            onClick={() =>
-              onFilter({
-                label: `Use case at stage ${f.code} — ${f.name}`,
-                params: { stage: f.stage },
-              })
-            }
-            className="w-full flex items-center gap-3 text-left rounded-md px-1 py-0.5 enabled:hover:bg-accent transition-colors disabled:cursor-default"
-          >
-            <div className="w-10 shrink-0">
-              <Badge variant="secondary" className="font-mono text-xs">
-                {f.code}
-              </Badge>
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center justify-between text-sm mb-0.5">
-                <span className="text-muted-foreground truncate">{f.name}</span>
-                <span className="font-medium">
-                  {f.count}
-                  {(f.monthly_dbus ?? 0) > 0 && (
-                    <span className="text-muted-foreground font-normal ml-2">
-                      {fmtDbus(f.monthly_dbus ?? 0)}/mo
-                    </span>
-                  )}
-                </span>
+        {data.funnel.map((f) => {
+          const isActive = active?.params.stage === f.stage;
+          return (
+            <button
+              key={f.stage}
+              type="button"
+              disabled={f.count === 0 || f.stage === "prereqs"}
+              onClick={() =>
+                onPick(
+                  isActive
+                    ? null
+                    : {
+                        label: `Use case at stage ${f.code} — ${f.name}`,
+                        params: { stage: f.stage },
+                      }
+                )
+              }
+              className={cn(
+                "w-full flex items-center gap-3 text-left rounded-md px-1 py-0.5 transition-colors disabled:cursor-default",
+                isActive ? "bg-accent" : "enabled:hover:bg-accent"
+              )}
+            >
+              <div className="w-10 shrink-0">
+                <Badge variant="secondary" className="font-mono text-xs">
+                  {f.code}
+                </Badge>
               </div>
-              <div className="h-2 rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full bg-primary rounded-full transition-all"
-                  style={{ width: `${(f.count / max) * 100}%` }}
-                />
+              <div className="flex-1">
+                <div className="flex items-center justify-between text-sm mb-0.5">
+                  <span className="text-muted-foreground truncate">{f.name}</span>
+                  <span className="font-medium">
+                    {f.count}
+                    {(f.monthly_dbus ?? 0) > 0 && (
+                      <span className="text-muted-foreground font-normal ml-2">
+                        {fmtDbus(f.monthly_dbus ?? 0)}/mo
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-primary rounded-full transition-all"
+                    style={{ width: `${(f.count / max) * 100}%` }}
+                  />
+                </div>
               </div>
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </CardContent>
     </Card>
   );
