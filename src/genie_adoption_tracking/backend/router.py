@@ -65,6 +65,7 @@ from .models import (
     StageAdvanceIn,
     StageOut,
     StalledUseCaseOut,
+    TaskResourceOut,
     TopResourceOut,
     WhitespaceAccountOut,
     UseCaseDetailOut,
@@ -298,6 +299,14 @@ def _build_adoption(session: Session, account: Account) -> AdoptionWorkflowOut:
             )
         ).all()
     }
+    def _task_resources(task_key: str) -> list[TaskResourceOut]:
+        out: list[TaskResourceOut] = []
+        for rkey in adoption_workflow.TASK_RESOURCE_KEYS.get(task_key, []):
+            meta = _RESOURCE_META.get(rkey)
+            if meta:
+                out.append(TaskResourceOut(label=meta["label"], url=meta["url"]))
+        return out
+
     tasks = [
         AdoptionTaskOut(
             key=t["key"],
@@ -307,6 +316,7 @@ def _build_adoption(session: Session, account: Account) -> AdoptionWorkflowOut:
             status=(stored[t["key"]].status if t["key"] in stored
                     else adoption_workflow.DEFAULT_STATUS),
             note=stored[t["key"]].note if t["key"] in stored else "",
+            resources=_task_resources(t["key"]),
         )
         for t in adoption_workflow.TASKS
     ]

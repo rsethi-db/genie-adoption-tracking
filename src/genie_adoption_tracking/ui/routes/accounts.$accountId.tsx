@@ -460,19 +460,10 @@ const LANE_DOT: Record<string, string> = {
 };
 
 // Reference links shown under specific workflow/security questions (by task key).
+// Extra links for the Security & Review tasks, which aren't part of the go/ resource
+// buckets in playbook.RESOURCES. Workflow-stage tasks get their resources from the
+// backend (task.resources, resolved from playbook.RESOURCES) so they never drift.
 const TASK_RESOURCES: Record<string, { label: string; url: string }[]> = {
-  hp_u1_demo: [
-    {
-      label: "Existing Industry Demos (dbdemos catalog)",
-      url: "https://dbdemos-demo-catalog-2556758628403379.aws.databricksapps.com/",
-    },
-  ],
-  hp_u2_workshop: [
-    {
-      label: "Genie Agents Implementation Guide",
-      url: "https://docs.google.com/presentation/d/1qz0vIUW0QsIhGNFDHOVvtUf-g4CPnf9IjN1_P64qt2Q/edit?slide=id.g3d4e81e3100_0_662#slide=id.g3d4e81e3100_0_662",
-    },
-  ],
   sec_authority_review: [
     {
       label: "Security Authority Review guide",
@@ -657,22 +648,35 @@ function AdoptionTaskCard({
           Ask Genie how to get unstuck
         </button>
       )}
-      {(TASK_RESOURCES[task.key] ?? []).length > 0 && (
-        <div className="mt-2 space-y-1">
-          {TASK_RESOURCES[task.key].map((r) => (
-            <a
-              key={r.url}
-              href={r.url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              <ExternalLink className="h-3 w-3 shrink-0" />
-              {r.label}
-            </a>
-          ))}
-        </div>
-      )}
+      {(() => {
+        // Backend-resolved resources (from playbook.RESOURCES) + any security-only
+        // extras, de-duped by URL.
+        const links = [
+          ...(task.resources ?? []),
+          ...(TASK_RESOURCES[task.key] ?? []),
+        ];
+        const seen = new Set<string>();
+        const deduped = links.filter((r) =>
+          r.url && !seen.has(r.url) && seen.add(r.url)
+        );
+        if (deduped.length === 0) return null;
+        return (
+          <div className="mt-2 space-y-1">
+            {deduped.map((r) => (
+              <a
+                key={r.url}
+                href={r.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                <ExternalLink className="h-3 w-3 shrink-0" />
+                {r.label}
+              </a>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -862,7 +866,7 @@ function AdoptionWorkflow({
           Save button (and unsaved / blocked counts) are always reachable. */}
       <CardHeader className="pb-3 sticky top-16 z-20 bg-card/95 backdrop-blur-sm rounded-t-xl border-b flex flex-row items-start justify-between gap-4">
         <div>
-          <CardTitle className="text-base">The Adoption Workflow</CardTitle>
+          <CardTitle className="text-base">The Genie Playbook</CardTitle>
           <p className="text-sm text-muted-foreground">
             What happens at every stage — set the status and add notes per task, then
             Save.

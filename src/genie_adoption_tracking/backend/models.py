@@ -119,6 +119,11 @@ class AdoptionLaneOut(BaseModel):
     tone: str  # lava | navy | amber — maps to the app accent colors
 
 
+class TaskResourceOut(BaseModel):
+    label: str
+    url: str
+
+
 class AdoptionTaskOut(BaseModel):
     key: str
     stage: str
@@ -126,6 +131,8 @@ class AdoptionTaskOut(BaseModel):
     label: str
     status: str = "not_initiated"  # not_initiated | na | in_progress | completed
     note: str = ""
+    # Relevant Getting-Help resources for this task (resolved from playbook.RESOURCES).
+    resources: list[TaskResourceOut] = []
 
 
 class AdoptionWorkflowOut(BaseModel):

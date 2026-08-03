@@ -134,6 +134,45 @@ TASKS: list[Task] = [
 _TASK_KEYS = {t["key"] for t in TASKS}
 
 
+# Which Getting-Help resources (by playbook.RESOURCES key) are relevant to each
+# workflow task. Rendered under the task on the account page so the team has the
+# right asset one click away. Keys resolve to label+URL from playbook.RESOURCES at
+# read time — playbook.py stays the single source of truth (no duplicated URLs).
+TASK_RESOURCE_KEYS: dict[str, list[str]] = {
+    # --- Happy Path ---
+    "hp_u1_demo": ["demo-industry", "demo-gtm-rooms", "demo-fevm", "demo-solution-builder"],
+    "hp_u1_champions": ["plays-win-business-user", "plays-enablement"],
+    "hp_u1_aim": ["plays-aim-migration", "ref-go-genie"],
+    "hp_u2_workshop": [
+        "workshops-geniewish", "workshops-genie-workshop",
+        "workshops-workshop-in-box", "workshops-genie-best-practices",
+    ],
+    "hp_u2_usecase": ["plays-win-business-user", "demo-solution-builder"],
+    "hp_u2_csuite": ["plays-win-business-user", "proof-customer-stories"],
+    "hp_u3_prototype": ["demo-solution-builder", "demo-workbench", "workshops-genie-best-practices"],
+    "hp_u3_evaldata": ["demo-workbench", "workshops-genie-best-practices"],
+    "hp_u3_metricview": ["workshops-genie-best-practices"],
+    "hp_u4_signoff": ["demo-workbench", "proof-genie-ready-dashboard"],
+    "hp_u4_uco_sizing": ["workshops-pricing", "ref-pricing-faq", "proof-genie-cost-dashboard", "workshops-bia"],
+    "hp_u5_aim_ready": ["plays-aim-migration", "proof-genie-ready-dashboard"],
+    "hp_u5_pricing": ["workshops-pricing", "ref-pricing-faq", "proof-genie-cost-dashboard"],
+    "hp_u6_monitor": ["proof-genie-cost-dashboard", "demo-workbench", "proof-blockers-dashboard"],
+    "hp_u6_followup": ["proof-customer-stories"],
+    # --- Recommended ---
+    "rec_u1_objection": ["plays-win-business-user", "proof-customer-stories", "ref-go-genie"],
+    "rec_u2_flavors": ["ref-go-genie", "plays-partner-powered"],
+    "rec_u3_workbench": ["demo-workbench", "workshops-genie-best-practices"],
+    "rec_u3_hackathon": ["workshops-genie-hackathon"],
+    "rec_u4_expand_lob": ["plays-partner-powered", "plays-aibi-migration", "workshops-training-investment"],
+    "rec_u5_expand_uc": ["plays-partner-powered", "workshops-bia"],
+    # --- As Needed ---
+    "an_u3_scale": ["plays-sts", "plays-partner-powered"],
+    "an_u4_tuning": ["demo-workbench", "proof-genie-cost-dashboard"],
+    "an_u5_further_tuning": ["demo-workbench", "workshops-genie-best-practices"],
+    "an_u6_document": ["proof-customer-stories"],
+}
+
+
 def is_valid_task(key: str) -> bool:
     return key in _TASK_KEYS
 

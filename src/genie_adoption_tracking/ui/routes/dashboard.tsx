@@ -35,8 +35,7 @@ function DashboardPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Signals</h1>
         <p className="text-sm text-muted-foreground">
-          FINS Genie adoption at a glance — start big, then open a lens to drill into
-          the accounts behind it. Mirrors the FINS Genie AI Adoption dashboard.
+          FINS Genie adoption at a glance
         </p>
       </div>
       <Suspense fallback={<DashboardSkeleton />}>
@@ -137,13 +136,13 @@ function PartnerPoweredTab({ data }: { data: DashboardOut }) {
         />
         <StatTile
           icon={<ShieldAlert className="h-4 w-4" />}
-          label="Off · enforce on"
+          label="PP AI Off · enforce on"
           value={data.pp_off_enforce_on ?? 0}
           tone={(data.pp_off_enforce_on ?? 0) > 0 ? "bad" : undefined}
         />
         <StatTile
           icon={<ShieldAlert className="h-4 w-4" />}
-          label="Off · enforce off"
+          label="PP AI Off · enforce off"
           value={data.pp_off_enforce_off ?? 0}
           tone={(data.pp_off_enforce_off ?? 0) > 0 ? "warn" : undefined}
         />
