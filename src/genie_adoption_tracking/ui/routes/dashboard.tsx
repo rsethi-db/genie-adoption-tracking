@@ -88,12 +88,18 @@ function DashboardBody() {
           label="Genie-active"
           value={data.genie_active_accounts ?? 0}
           tone="good"
+          onClick={() =>
+            onFilter({ label: "Genie-active accounts", params: { genie_active: "true" } })
+          }
         />
         <StatTile
           icon={<DollarSign className="h-4 w-4" />}
           label="Genie revenue (30d)"
           display={fmtDbus(data.genie_revenue_t30d ?? 0)}
           tone="good"
+          onClick={() =>
+            onFilter({ label: "Accounts with Genie spend (30d)", params: { has_spend: "true" } })
+          }
         />
         <StatTile
           icon={<MessageSquare className="h-4 w-4" />}
@@ -110,13 +116,6 @@ function DashboardBody() {
           label="Est. pipeline $/mo"
           display={fmtDbus(data.total_monthly_dbus ?? 0)}
         />
-      </div>
-
-      {/* Inline drill-down panel — shows the accounts behind a clicked tile/segment */}
-      <div ref={panelRef}>
-        {filter && (
-          <InlineAccounts filter={filter} onClose={() => setFilter(null)} />
-        )}
       </div>
 
       {/* Four lenses, mirroring the logfood dashboard's pages */}
@@ -141,6 +140,14 @@ function DashboardBody() {
           <GenieReadyTab data={data} onFilter={onFilter} />
         </TabsContent>
       </Tabs>
+
+      {/* Inline drill-down panel — shows the accounts behind a clicked tile/segment,
+          rendered BELOW the lens it was triggered from. */}
+      <div ref={panelRef}>
+        {filter && (
+          <InlineAccounts filter={filter} onClose={() => setFilter(null)} />
+        )}
+      </div>
     </div>
   );
 }
@@ -257,18 +264,27 @@ function PartnerPoweredTab({ data, onFilter }: { data: DashboardOut; onFilter: O
           label="PP AI Off · enforce on"
           value={data.pp_off_enforce_on ?? 0}
           tone={(data.pp_off_enforce_on ?? 0) > 0 ? "bad" : undefined}
+          onClick={() =>
+            onFilter({ label: "PP AI off · enforce on", params: { pp: "off_enforce_on" } })
+          }
         />
         <StatTile
           icon={<ShieldAlert className="h-4 w-4" />}
           label="PP AI Off · enforce off"
           value={data.pp_off_enforce_off ?? 0}
           tone={(data.pp_off_enforce_off ?? 0) > 0 ? "warn" : undefined}
+          onClick={() =>
+            onFilter({ label: "PP AI off · enforce off", params: { pp: "off_enforce_off" } })
+          }
         />
         <StatTile
           icon={<DollarSign className="h-4 w-4" />}
           label="Genie revenue (30d)"
           display={fmtDbus(data.genie_revenue_t30d ?? 0)}
           tone="good"
+          onClick={() =>
+            onFilter({ label: "Accounts with Genie spend (30d)", params: { has_spend: "true" } })
+          }
         />
       </div>
 
@@ -322,12 +338,19 @@ function GenieAccountsTab({ data, onFilter }: { data: DashboardOut; onFilter: On
       </SoWhat>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatTile icon={<Layers className="h-4 w-4" />} label="Genie use cases" value={data.total_use_cases} />
+        <StatTile
+          icon={<Layers className="h-4 w-4" />}
+          label="Genie use cases"
+          value={data.total_use_cases}
+        />
         <StatTile
           icon={<Sparkles className="h-4 w-4" />}
           label="Live (U6)"
           value={data.live_use_cases}
           tone="good"
+          onClick={() =>
+            onFilter({ label: "Accounts with a Live (U6) use case", params: { stage: "u6" } })
+          }
         />
         <StatTile
           icon={<Layers className="h-4 w-4" />}

@@ -374,14 +374,18 @@ def list_accounts(
     stage: str = "",
     whitespace: bool = False,
     open_issues: bool = False,
+    genie_active: bool = False,
+    has_spend: bool = False,
 ):
     """Account lookup. Pass `q` for text search (name/owner/sub-vertical), or one/more
-    filters (tier, pp, provisioning, stage, whitespace, open_issues) for a Signals
-    drill-down. With NO q and NO filter, returns nothing so the page loads instantly.
-    Filters return up to `limit` matches (500 when a filter is set, to show a segment)."""
+    filters (tier, pp, provisioning, stage, whitespace, open_issues, genie_active,
+    has_spend) for a Signals drill-down. `pp` accepts on/off plus off_enforce_on and
+    off_enforce_off for the enforce split. With NO q and NO filter, returns nothing so
+    the page loads instantly. Filters return up to `limit` matches (500 when set)."""
     needle = q.strip().lower()
     has_filter = bool(
         tier or pp or provisioning or stage or whitespace or open_issues
+        or genie_active or has_spend
     )
     if not needle and not has_filter:
         return []
@@ -415,6 +419,14 @@ def list_accounts(
             return False
         if pp == "on" and a.pp_status not in ("on", "on_default"):
             return False
+        if pp == "off_enforce_on" and not (
+            a.pp_status == "off" and a.pp_enforce == "on"
+        ):
+            return False
+        if pp == "off_enforce_off" and not (
+            a.pp_status == "off" and a.pp_enforce != "on"
+        ):
+            return False
         if provisioning and a.provisioning_status != provisioning:
             return False
         if stage and stage not in stages_by_acct.get(a.id, set()):
@@ -422,6 +434,10 @@ def list_accounts(
         if whitespace and a.id in stages_by_acct:
             return False
         if open_issues and a.id not in issue_accts:
+            return False
+        if genie_active and not a.genie_active:
+            return False
+        if has_spend and (a.genie_dollars_t30d or 0) <= 0:
             return False
         return True
 
