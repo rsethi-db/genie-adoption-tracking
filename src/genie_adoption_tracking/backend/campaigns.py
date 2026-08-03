@@ -45,7 +45,7 @@ SEGMENTS: list[dict] = [
                 "Playbook. Take a few minutes to update each account's Adoption "
                 "Workflow in the Navigator so we have an accurate read on where "
                 "everyone is.",
-     "tpl_cta": "Review and update your accounts' Adoption Workflow in the Navigator."},
+     "tpl_cta": "Review and update your accounts' Genie Playbook in the Navigator."},
     {"key": "pp_off", "label": "Partner-Powered AI off",
      "description": "PP AI disabled — Genie can't consume until it's enabled.",
      "tpl_title": "Turn on Partner-Powered AI to unblock Genie",

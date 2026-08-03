@@ -32,7 +32,7 @@ function Index() {
         <FeatureCard
           icon={<ClipboardCheck className="h-5 w-5" />}
           title="Accounts"
-          desc="Look up an account and capture where it is — work its Adoption Workflow across the UCO stages and track readiness and blockers."
+          desc="Look up an account and capture where it is — work its Genie Playbook across the UCO stages and track readiness and blockers."
           to="/accounts"
           cta="Open Accounts"
         />

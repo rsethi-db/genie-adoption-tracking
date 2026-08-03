@@ -103,7 +103,7 @@ class AccountOut(BaseModel):
 
 
 # --------------------------------------------------------------------------------------
-# Adoption Workflow (stage × lane matrix, per-account status + note)
+# Genie Playbook (stage × lane matrix, per-account status + note)
 # --------------------------------------------------------------------------------------
 
 

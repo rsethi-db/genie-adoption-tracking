@@ -251,7 +251,7 @@ def _readiness_pct(session: Session, account: Account) -> int:
     return pct
 
 
-# Readiness is driven by the team-filled Adoption Workflow (not GTM auto-signals):
+# Readiness is driven by the team-filled Genie Playbook (not GTM auto-signals):
 # share of workflow tasks the team has marked "completed". The stage×lane matrix tasks
 # count; the Security & Review questions are excluded from the score.
 _WORKFLOW_TASK_KEYS = [t["key"] for t in adoption_workflow.TASKS if t["lane"] != "security"]
@@ -277,7 +277,7 @@ def _account_workflow_readiness(session: Session, account_id: str) -> int:
 
 
 def _avg_readiness(session: Session, accounts: Sequence[Account]) -> int:
-    """Average readiness % across accounts, driven by the team-filled Adoption Workflow
+    """Average readiness % across accounts, driven by the team-filled Genie Playbook
     (share of matrix tasks marked completed). Batched: one query for all task states."""
     if not accounts:
         return 0
@@ -289,7 +289,7 @@ def _avg_readiness(session: Session, accounts: Sequence[Account]) -> int:
 
 
 def _build_adoption(session: Session, account: Account) -> AdoptionWorkflowOut:
-    """The Adoption Workflow matrix for one account: static stage/lane/task content
+    """The Genie Playbook matrix for one account: static stage/lane/task content
     merged with the account's stored per-task status + note."""
     stored = {
         s.task_key: s
@@ -565,7 +565,7 @@ def get_account(account_id: str, session: Dependencies.Session):
             )
         )
     plan_items, _ = _build_plan(session, acct)
-    # Readiness is driven by the team-filled Adoption Workflow, not GTM auto-signals.
+    # Readiness is driven by the team-filled Genie Playbook, not GTM auto-signals.
     plan_pct = _account_workflow_readiness(session, account_id)
     # Genie-related issues (all severities), open first then by revenue impact.
     issue_rows = session.exec(
@@ -688,7 +688,7 @@ def save_adoption_tasks(
     session: Dependencies.Session,
     user_ws: Dependencies.UserClient,
 ):
-    """Persist the whole Adoption Workflow questionnaire in one request (Save button)."""
+    """Persist the whole Genie Playbook questionnaire in one request (Save button)."""
     acct = session.get(Account, account_id)
     if acct is None:
         raise HTTPException(status_code=404, detail="Account not found")
@@ -743,7 +743,7 @@ def save_adoption_tasks(
     operation_id="getAdoptionHistory",
 )
 def adoption_history(account_id: str, session: Dependencies.Session):
-    """Append-only edit history for an account's Adoption Workflow tasks, newest first."""
+    """Append-only edit history for an account's Genie Playbook tasks, newest first."""
     labels = {t["key"]: t["label"] for t in adoption_workflow.TASKS}
     rows = session.exec(
         select(AdoptionTaskHistory).where(

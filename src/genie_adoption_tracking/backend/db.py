@@ -142,7 +142,7 @@ class AccountPlanItem(SQLModel, table=True):
 
 
 class AdoptionTaskState(SQLModel, table=True):
-    """Per-account status + note for one Adoption Workflow task (stage × lane grid).
+    """Per-account status + note for one Genie Playbook task (stage × lane grid).
     Task identity (stage, lane, label) is static content in adoption_workflow.py;
     only the team-entered status/note is persisted here (one row per account+task).
 
@@ -166,7 +166,7 @@ class AdoptionTaskState(SQLModel, table=True):
 
 
 class AdoptionTaskHistory(SQLModel, table=True):
-    """Append-only audit log — one row per change to an Adoption Workflow task, so the
+    """Append-only audit log — one row per change to an Genie Playbook task, so the
     account team can see the full history (who changed what, when) rather than only the
     latest value in AdoptionTaskState. Written on every save; never updated or deleted.
     FK to gat_account (stable id) so the nightly refresh preserves it."""

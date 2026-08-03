@@ -299,7 +299,7 @@ function AccountIssues({ issues }: { issues: AccountIssueOut[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Adoption Workflow — "What happens at every stage".
+// Genie Playbook — "What happens at every stage".
 // Stage columns (U1–U6); tasks colored by lane (border). Edits are held locally
 // and persisted to Lakebase in one shot via the Save button.
 // ---------------------------------------------------------------------------
@@ -681,7 +681,7 @@ function AdoptionTaskCard({
   );
 }
 
-// Append-only edit history for the account's Adoption Workflow tasks — who changed
+// Append-only edit history for the account's Genie Playbook tasks — who changed
 // what, when. Collapsed by default; fetched on expand.
 interface HistoryEntry {
   task_key: string;
@@ -745,7 +745,7 @@ function AdoptionHistory({ accountId }: { accountId: string }) {
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : entries.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No changes recorded yet — edits to the Adoption Workflow will appear
+                No changes recorded yet — edits to the Genie Playbook will appear
                 here.
               </p>
             ) : (
@@ -1001,7 +1001,7 @@ const UC_STAGES: { key: string; code: string }[] = [
 ];
 
 // Genie use cases arranged as a horizontal U1–U6 stage flow (matches the
-// Adoption Workflow layout). Read-only — no create option here.
+// Genie Playbook layout). Read-only — no create option here.
 function UseCaseFlow({ useCases }: { useCases: UseCaseListOut[] }) {
   const [open, setOpen] = useState(false);
   const byStage = new Map<string, UseCaseListOut[]>();
@@ -1342,7 +1342,7 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
   // User-provisioning readiness = AIM OR SCIM (provisioning_status is the broader
   // "any provisioning" signal); aim tells us whether the preferred method is used.
   const prov = data.provisioning_status ?? "unknown";
-  // Readiness reflects the team-filled Adoption Workflow (matrix tasks, excluding the
+  // Readiness reflects the team-filled Genie Playbook (matrix tasks, excluding the
   // Security & Review questions) — not GTM auto-signals. Done = marked "completed".
   const workflowTasks = (data.adoption?.tasks ?? []).filter((t) => t.lane !== "security");
   const applicable = workflowTasks;
@@ -1411,7 +1411,7 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
           {showBreakdown && (
             <>
               <p className="text-xs text-muted-foreground mt-1.5">
-                By stage — from the Adoption Workflow the team fills below.{" "}
+                By stage — from the Genie Playbook the team fills below.{" "}
                 <span className="font-medium">{done.length}/{applicable.length}</span>{" "}
                 tasks done.
               </p>

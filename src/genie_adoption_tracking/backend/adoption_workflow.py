@@ -1,5 +1,5 @@
 """
-The Adoption Workflow — "What happens at every stage".
+The Genie Playbook — "What happens at every stage".
 
 A matrix of UCO stages (U1..U6) across the top and three action lanes down the
 side (Happy Path / Recommended / As Needed). Each cell holds one or more tasks.

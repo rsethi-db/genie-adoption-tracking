@@ -132,6 +132,7 @@ export interface AdoptionTaskOut {
     label: string;
     lane: string;
     note?: string;
+    resources?: TaskResourceOut[];
     stage: string;
     status?: string;
 }
@@ -382,6 +383,10 @@ export interface StalledUseCaseOut {
     stage: string;
     title: string;
 }
+export interface TaskResourceOut {
+    label: string;
+    url: string;
+}
 export interface TopResourceOut {
     bucket: string;
     clicks: number;
@@ -469,6 +474,8 @@ export interface ListAccountsParams {
     stage?: string;
     whitespace?: boolean;
     open_issues?: boolean;
+    genie_active?: boolean;
+    has_spend?: boolean;
 }
 export const listAccounts = async (params?: ListAccountsParams, options?: RequestInit): Promise<{
     data: AccountOut[];
@@ -482,6 +489,8 @@ export const listAccounts = async (params?: ListAccountsParams, options?: Reques
     if (params?.stage != null) searchParams.set("stage", String(params?.stage));
     if (params?.whitespace != null) searchParams.set("whitespace", String(params?.whitespace));
     if (params?.open_issues != null) searchParams.set("open_issues", String(params?.open_issues));
+    if (params?.genie_active != null) searchParams.set("genie_active", String(params?.genie_active));
+    if (params?.has_spend != null) searchParams.set("has_spend", String(params?.has_spend));
     const queryString = searchParams.toString();
     const url = queryString ? `/api/accounts?${queryString}` : "/api/accounts";
     const res = await fetch(url, {
