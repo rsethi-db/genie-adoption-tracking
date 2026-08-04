@@ -418,9 +418,7 @@ def list_accounts(
             return False
         if tier and a.readiness_tier != tier:
             return False
-        if pp == "off" and not (
-            a.pp_status == "off" and (a.pp_enforce == "on" or (a.ws_pp_on or 0) == 0)
-        ):
+        if pp == "off" and a.pp_status != "off":
             return False
         if pp == "on" and a.pp_status not in ("on", "on_default"):
             return False
@@ -1209,13 +1207,10 @@ def get_dashboard(session: Dependencies.Session):
     live_total = sum(1 for uc in use_cases if uc.stage == "u6")
     total_dbus = round(sum(uc.estimated_monthly_dbus for uc in use_cases), 2)
     est_pipeline_total = round(sum(a.est_pipeline_per_month for a in accounts), 2)
-    # PP genuinely blocked: default off AND (enforce on, or no workspace has it on).
-    # Enforce-off with some workspaces on can still consume Genie → not counted.
-    pp_off_total = sum(
-        1
-        for a in accounts
-        if a.pp_status == "off" and (a.pp_enforce == "on" or (a.ws_pp_on or 0) == 0)
-    )
+    # PP-off is decided ONCE in the seed (logfood's rule: an explicitly-off Databricks
+    # account that is actually consuming in T30D). pp_status == "off" IS that set — so
+    # everywhere in the app just trusts the stored status, no re-derivation.
+    pp_off_total = sum(1 for a in accounts if a.pp_status == "off")
     # "Provisioning off" = no user provisioning at all (neither AIM nor SCIM).
     aim_off_total = sum(1 for a in accounts if a.provisioning_status == "off")
     all_issues = session.exec(select(AccountIssue)).all()

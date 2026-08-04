@@ -273,42 +273,72 @@ JOIN (
 """
 
 # Per-account Genie/pipeline signals over the trailing 30 days, keyed by SFDC
-# account_id (all sources FINS-scoped and fast — the fct_data_room message table was
-# dropped as it consistently timed out on this warehouse):
-#   * genie_active           — standalone-Genie DBU spend > 0 in the last 30d
-#                              (genuinely consuming Genie now)
+# account_id — the EXACT definitions used by the logfood FINS Genie dashboard, so the
+# app matches it with no discrepancies:
+#   * genie_active           — has ≥1 Genie space with actual MESSAGE usage in the last
+#                              30d (metric_store.fct_data_room_messages_daily → the
+#                              logfood "agent_consuming" set). Genuinely using Genie now.
 #   * genie_revenue_30d      — standalone-Genie DBU $ over the last 30d
 #     (gtm_gold.account_consumption_daily.genie_standalone_dbu_dollars)
+#   * active_genie_spaces    — Genie spaces with usage in the last 30d, per account
 #   * est_pipeline_per_month — open-opportunity booking ARR / 12
 #     (gtm_silver.opportunity_detail, opportunity_status = 'open')
 GENIE_30D_QUERY = """
-WITH fins AS (
-  SELECT DISTINCT account_id AS sfdc_id
-  FROM main.gtm_silver.account_dim
-  WHERE sales_business_unit='AMER Industries' AND sales_subregion_level_1='FINS'
-    AND account_status LIKE '%Customer%' AND account_name IS NOT NULL
+WITH genie_space_counts AS (
+  SELECT workspace_id,
+    COUNT(DISTINCT CASE WHEN ds >= date_sub(current_date(), 30)
+      THEN dim_data_room_id END) AS genie_spaces_with_usage
+  FROM main.metric_store.fct_data_room_messages_daily
+  WHERE ds >= '2025-04-13'
+  GROUP BY workspace_id
+),
+acct_ws AS (
+  SELECT DISTINCT accountId, workspaceId
+  FROM main.field_usage_dashboard.fins_data
+  WHERE date BETWEEN date_sub(max_date, 29) AND max_date
+),
+spaces AS (
+  SELECT aw.accountId AS account_id,
+    SUM(COALESCE(gc.genie_spaces_with_usage, 0)) AS active_genie_spaces
+  FROM acct_ws aw
+    LEFT JOIN genie_space_counts gc ON aw.workspaceId = gc.workspace_id
+  GROUP BY aw.accountId
+),
+agent_consuming AS (
+  SELECT DISTINCT aw.accountId AS account_id
+  FROM acct_ws aw
+    LEFT JOIN genie_space_counts gc ON aw.workspaceId = gc.workspace_id
+  WHERE COALESCE(gc.genie_spaces_with_usage, 0) > 0
 ),
 revenue AS (
-  SELECT fd.accountId AS account_id,
-    ROUND(SUM(COALESCE(fd.genie_dbu_dollars, 0)), 2) AS genie_revenue_30d
-  FROM main.field_usage_dashboard.fins_data fd
-  WHERE fd.date BETWEEN date_sub(fd.max_date, 29) AND fd.max_date
-  GROUP BY fd.accountId
+  SELECT account_id,
+    ROUND(SUM(COALESCE(genie_standalone_dbu_dollars, 0)), 2) AS genie_revenue_30d
+  FROM main.gtm_gold.account_consumption_daily
+  WHERE usage_date >= current_date() - INTERVAL 30 DAYS
+  GROUP BY account_id
 ),
 pipeline AS (
-  SELECT o.account_id,
-    ROUND(SUM(COALESCE(o.booking_arr, 0)) / 12, 2) AS est_pipeline_per_month
-  FROM main.gtm_silver.opportunity_detail o
-  JOIN fins f ON o.account_id = f.sfdc_id
-  WHERE o.opportunity_status = 'open'
-  GROUP BY o.account_id
+  SELECT account_id,
+    ROUND(SUM(COALESCE(booking_arr, 0)) / 12, 2) AS est_pipeline_per_month
+  FROM main.gtm_silver.opportunity_detail
+  WHERE opportunity_status = 'open'
+  GROUP BY account_id
+),
+ids AS (
+  SELECT account_id FROM spaces
+  UNION SELECT account_id FROM revenue
+  UNION SELECT account_id FROM pipeline
 )
-SELECT COALESCE(r.account_id, p.account_id) AS account_id,
+SELECT i.account_id,
   COALESCE(r.genie_revenue_30d, 0) AS genie_revenue_30d,
   COALESCE(p.est_pipeline_per_month, 0) AS est_pipeline_per_month,
-  CASE WHEN COALESCE(r.genie_revenue_30d, 0) > 0 THEN 1 ELSE 0 END AS genie_active
-FROM revenue r
-  FULL OUTER JOIN pipeline p ON r.account_id = p.account_id
+  CASE WHEN ac.account_id IS NOT NULL THEN 1 ELSE 0 END AS genie_active,
+  COALESCE(s.active_genie_spaces, 0) AS active_genie_spaces
+FROM ids i
+  LEFT JOIN spaces s ON i.account_id = s.account_id
+  LEFT JOIN revenue r ON i.account_id = r.account_id
+  LEFT JOIN pipeline p ON i.account_id = p.account_id
+  LEFT JOIN agent_consuming ac ON i.account_id = ac.account_id
 """
 
 # Genie-related Brickroad issues (ALL severities) per FINS account. customer_id on
@@ -579,9 +609,9 @@ def fetch_aim(ws) -> dict[str, dict]:
 
 
 def fetch_genie_30d(ws) -> dict[str, dict]:
-    """Map SFDC account_id -> trailing-30d Genie/pipeline signals:
-    {genie_revenue_30d, est_pipeline_per_month, genie_active}.
-    Columns: account_id, genie_revenue_30d, est_pipeline_per_month, genie_active."""
+    """Map SFDC account_id -> trailing-30d Genie/pipeline signals.
+    Columns: account_id, genie_revenue_30d, est_pipeline_per_month, genie_active,
+    active_genie_spaces."""
     out: dict[str, dict] = {}
     for r in _run_query(ws, GENIE_30D_QUERY):
         aid = r[0]
@@ -591,6 +621,7 @@ def fetch_genie_30d(ws) -> dict[str, dict]:
             "genie_revenue_30d": float(r[1] or 0),
             "est_pipeline_per_month": float(r[2] or 0),
             "genie_active": bool(int(r[3] or 0)),
+            "active_genie_spaces": int(r[4] or 0),
         }
     return out
 
@@ -729,13 +760,13 @@ def main() -> None:
                     provisioning_ws_enabled=aim_row.get("provisioning_ws_enabled", 0),
                     provisioning_ws_total=aim_row.get("provisioning_ws_total", 0),
                     readiness_tier=aim_row.get("readiness_tier", "unknown"),
-                    # Trailing-30d Genie signals, keyed by SFDC account_id:
-                    #   genie_active = Genie DBU spend > 0 in last 30d (fins_data)
-                    #   genie_dollars_t30d / genie_spend_90d = Genie DBU $ (last 30d)
-                    # (active_genie_spaces is not refreshed here — its source message
-                    #  table times out on logfood; existing values are left untouched.)
+                    # Trailing-30d Genie signals, keyed by SFDC account_id (logfood-exact):
+                    #   genie_active = Genie space w/ message usage in last 30d
+                    #   genie_dollars_t30d / genie_spend_90d = standalone-Genie DBU $ (30d)
+                    #   active_genie_spaces = Genie spaces with usage (last 30d)
                     genie_spend_90d=g30.get("genie_revenue_30d", 0.0),
                     genie_dollars_t30d=g30.get("genie_revenue_30d", 0.0),
+                    active_genie_spaces=g30.get("active_genie_spaces", 0),
                     est_pipeline_per_month=g30.get("est_pipeline_per_month", 0.0),
                     genie_active=g30.get("genie_active", False),
                 )
