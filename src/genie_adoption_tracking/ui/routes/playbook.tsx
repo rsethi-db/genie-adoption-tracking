@@ -132,6 +132,7 @@ const CONTACTS: {
 ];
 
 const FEEDBACK_SUBJECT = "?subject=Genie%20Adoption%20Navigator%20feedback";
+const ANINDITA_MAILTO = `mailto:anindita.mahapatra@databricks.com${FEEDBACK_SUBJECT}`;
 const RICHA_MAILTO = `mailto:richa.sethi@databricks.com${FEEDBACK_SUBJECT}`;
 const AMEE_MAILTO = `mailto:amee.vora@databricks.com${FEEDBACK_SUBJECT}`;
 
@@ -186,10 +187,14 @@ function ContactsView() {
       </div>
       <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
         Feedback on this Navigator — a data gap, a bug, or an idea? Email{" "}
+        <a href={ANINDITA_MAILTO} className="text-primary font-medium hover:underline">
+          Anindita Mahapatra
+        </a>
+        ,{" "}
         <a href={RICHA_MAILTO} className="text-primary font-medium hover:underline">
           Richa Sethi
-        </a>{" "}
-        or{" "}
+        </a>
+        , or{" "}
         <a href={AMEE_MAILTO} className="text-primary font-medium hover:underline">
           Amee Vora
         </a>
@@ -227,7 +232,6 @@ function ResourcesView() {
                   <Icon className="h-4 w-4" />
                 </div>
                 <CardTitle className="text-sm">{bucket}</CardTitle>
-                <span className="ml-auto text-xs text-muted-foreground">{items.length}</span>
               </div>
             </CardHeader>
             <CardContent className="space-y-0.5 flex-1">
