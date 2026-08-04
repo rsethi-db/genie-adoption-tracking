@@ -381,16 +381,18 @@ def list_accounts(
     genie_active: bool = False,
     has_spend: bool = False,
     sub_vertical: str = "",
+    spend_bucket: int = -1,
 ):
     """Account lookup. Pass `q` for text search (name/owner/sub-vertical), or one/more
     filters (tier, pp, provisioning, stage, whitespace, open_issues, genie_active,
-    has_spend) for a Signals drill-down. `pp` accepts on/off plus off_enforce_on and
-    off_enforce_off for the enforce split. With NO q and NO filter, returns nothing so
-    the page loads instantly. Filters return up to `limit` matches (500 when set)."""
+    has_spend, sub_vertical, spend_bucket) for a Signals drill-down. `pp` accepts on/off
+    plus off_enforce_on and off_enforce_off; `spend_bucket` is a Genie-spend bucket index
+    (see _SPEND_BUCKETS). With NO q and NO filter, returns nothing so the page loads
+    instantly. Filters return up to `limit` matches (500 when set)."""
     needle = q.strip().lower()
     has_filter = bool(
         tier or pp or provisioning or stage or whitespace or open_issues
-        or genie_active or has_spend or sub_vertical
+        or genie_active or has_spend or sub_vertical or spend_bucket >= 0
     )
     if not needle and not has_filter:
         return []
@@ -443,6 +445,8 @@ def list_accounts(
         if has_spend and (a.genie_dollars_t30d or 0) <= 0:
             return False
         if sub_vertical and (a.sub_vertical or "Unspecified") != sub_vertical:
+            return False
+        if spend_bucket >= 0 and _spend_bucket_index(a.genie_dollars_t30d or 0) != spend_bucket:
             return False
         return True
 

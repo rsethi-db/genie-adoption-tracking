@@ -486,6 +486,7 @@ function PartnerPoweredTab({ data }: { data: DashboardOut }) {
 function SpendDistribution({ data }: { data: DashboardOut }) {
   const buckets = data.spend_buckets ?? [];
   const max = Math.max(1, ...buckets.map((b) => b.account_count));
+  const [filter, setFilter] = useState<AcctFilter | null>(null);
   return (
     <Card>
       <CardHeader>
@@ -497,22 +498,48 @@ function SpendDistribution({ data }: { data: DashboardOut }) {
         {buckets.length === 0 && (
           <p className="text-sm text-muted-foreground">No spend data yet.</p>
         )}
-        {buckets.map((b) => (
-          <div key={b.order} className="flex items-center gap-3">
-            <div className="w-24 shrink-0 text-sm text-muted-foreground text-right">
-              {b.label}
-            </div>
-            <div className="flex-1">
-              <div className="h-4 rounded bg-muted overflow-hidden">
-                <div
-                  className="h-full bg-emerald-600 rounded"
-                  style={{ width: `${(b.account_count / max) * 100}%` }}
-                />
+        {buckets.map((b) => {
+          const isActive = filter?.params.spend_bucket === String(b.order);
+          return (
+            <button
+              key={b.order}
+              type="button"
+              disabled={b.account_count === 0}
+              onClick={() =>
+                setFilter(
+                  isActive
+                    ? null
+                    : {
+                        label: `Genie spend (30d): ${b.label}`,
+                        params: { spend_bucket: String(b.order) },
+                      }
+                )
+              }
+              className={cn(
+                "w-full flex items-center gap-3 rounded px-1 py-0.5 text-left transition-colors disabled:cursor-default",
+                isActive ? "bg-accent" : "enabled:hover:bg-accent"
+              )}
+            >
+              <div className="w-24 shrink-0 text-sm text-muted-foreground text-right">
+                {b.label}
               </div>
-            </div>
-            <div className="w-10 shrink-0 text-sm font-medium">{b.account_count}</div>
+              <div className="flex-1">
+                <div className="h-4 rounded bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-600 rounded"
+                    style={{ width: `${(b.account_count / max) * 100}%` }}
+                  />
+                </div>
+              </div>
+              <div className="w-10 shrink-0 text-sm font-medium">{b.account_count}</div>
+            </button>
+          );
+        })}
+        {filter && (
+          <div className="pt-2">
+            <InlineAccounts filter={filter} onClose={() => setFilter(null)} />
           </div>
-        ))}
+        )}
       </CardContent>
     </Card>
   );
