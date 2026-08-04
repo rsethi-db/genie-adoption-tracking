@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { useGetDashboardSuspense, type DashboardOut } from "@/lib/api";
 import { selector } from "@/lib/selector";
 import { AppShell } from "@/components/app-shell";
@@ -245,6 +245,7 @@ function InlineAccounts({
   const [rows, setRows] = useState<AcctRow[] | null>(null);
   const [sort, setSort] = useState<SortKey>("arr");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
+  const [openIssues, setOpenIssues] = useState<string | null>(null); // account id
   const seq = useRef(0);
 
   // Serialize params so the effect re-runs on value change (not object identity),
@@ -344,7 +345,8 @@ function InlineAccounts({
               </thead>
               <tbody>
                 {sorted.map((a) => (
-                  <tr key={a.id} className="border-b last:border-0 hover:bg-accent/50">
+                  <Fragment key={a.id}>
+                  <tr className="border-b last:border-0 hover:bg-accent/50">
                     <td className="py-1.5 px-2">
                       <Link
                         to="/accounts/$accountId"
@@ -369,15 +371,10 @@ function InlineAccounts({
                         <span className={`h-2 w-2 rounded-full ${toneDot(a.pp_status ?? "unknown", ["on", "on_default"], ["off"])}`} />
                         {PP_LABEL[a.pp_status ?? "unknown"] ?? a.pp_status}
                         {a.pp_status === "off" && (
-                          <span
-                            className="text-xs text-muted-foreground"
-                            title={
-                              a.pp_enforce === "on"
-                                ? "Enforce on — Genie is hard-blocked account-wide."
-                                : "Enforce off — the account default is off, but individual workspaces can turn PP on, so Genie can still consume there."
-                            }
-                          >
-                            {a.pp_enforce === "on" ? "· enforce on" : "· enforce off ⓘ"}
+                          <span className="text-xs text-muted-foreground">
+                            {a.pp_enforce === "on"
+                              ? "· enforce on (hard-blocked)"
+                              : "· enforce off (workspaces can consume)"}
                           </span>
                         )}
                       </span>
@@ -394,13 +391,28 @@ function InlineAccounts({
                     </td>
                     <td className="py-1.5 px-2 text-right tabular-nums">
                       {(a.open_issues ?? 0) > 0 ? (
-                        <span className="text-destructive font-medium">{a.open_issues}</span>
+                        <button
+                          type="button"
+                          onClick={() => setOpenIssues((o) => (o === a.id ? null : a.id))}
+                          className="text-destructive font-medium hover:underline"
+                        >
+                          {a.open_issues}
+                          {openIssues === a.id ? " ▾" : " ▸"}
+                        </button>
                       ) : (
                         "—"
                       )}
                     </td>
                     <td className="py-1.5 px-2 text-right tabular-nums font-medium">{fmtDbus(a.arr ?? 0)}</td>
                   </tr>
+                  {openIssues === a.id && (
+                    <tr>
+                      <td colSpan={8} className="p-0">
+                        <AccountIssues accountId={a.id} />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
               <tfoot className="sticky bottom-0 bg-muted/80 border-t text-xs font-medium">
@@ -418,6 +430,60 @@ function InlineAccounts({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+interface IssueRow {
+  id: string;
+  display_id: string;
+  title: string;
+  severity: string;
+  status: string;
+  is_open: boolean;
+}
+
+// Expanded issue list for one account — fetched from /api/accounts/{id} on expand.
+function AccountIssues({ accountId }: { accountId: string }) {
+  const [issues, setIssues] = useState<IssueRow[] | null>(null);
+  useEffect(() => {
+    fetch(`/api/accounts/${accountId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const all: IssueRow[] = Array.isArray(d?.issues) ? d.issues : [];
+        setIssues(all.filter((i) => i.is_open));
+      })
+      .catch(() => setIssues([]));
+  }, [accountId]);
+  return (
+    <div className="bg-muted/40 border-y px-4 py-2">
+      {issues === null ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading issues…
+        </div>
+      ) : issues.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-1">No open issues.</p>
+      ) : (
+        <ul className="space-y-1 py-1">
+          {issues.map((i) => (
+            <li key={i.id} className="flex items-center gap-2 text-xs">
+              <Bug className="h-3 w-3 text-destructive shrink-0" />
+              {i.display_id ? (
+                <a
+                  href={`https://brickroad.databricks.com/issues/${i.display_id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary hover:underline shrink-0"
+                >
+                  #{i.display_id}
+                </a>
+              ) : null}
+              <span className="flex-1 min-w-0 truncate">{i.title}</span>
+              <span className="text-muted-foreground capitalize shrink-0">{i.severity}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -534,7 +600,6 @@ function SpendDistribution({ data }: { data: DashboardOut }) {
 
 // ------------------------------------------------------- Tab 2: Genie Accounts
 function GenieAccountsTab({ data }: { data: DashboardOut }) {
-  // Funnel drill-down — its own state so the panel appears right under the funnel row.
   const [stageFilter, setStageFilter] = useState<AcctFilter | null>(null);
   const [q, setQ] = useState("");
   const needle = q.trim();
@@ -572,17 +637,10 @@ function GenieAccountsTab({ data }: { data: DashboardOut }) {
         )}
       </div>
 
+      {/* Summary tiles */}
       <TileGrid
         tiles={[
           { key: "uc", icon: <Layers className="h-4 w-4" />, label: "Genie use cases", value: data.total_use_cases },
-          {
-            key: "live",
-            icon: <Sparkles className="h-4 w-4" />,
-            label: "Live (U6)",
-            value: data.live_use_cases,
-            tone: "good",
-            filter: { label: "Accounts with a Live (U6) use case", params: { stage: "u6" } },
-          },
           {
             key: "whitespace",
             icon: <Layers className="h-4 w-4" />,
@@ -593,6 +651,25 @@ function GenieAccountsTab({ data }: { data: DashboardOut }) {
           },
         ]}
       />
+
+      {/* Use cases by UCO stage — display tiles (count + $DBU per stage) */}
+      <div>
+        <h2 className="text-sm font-semibold text-muted-foreground mb-2">
+          Use cases by UCO stage
+        </h2>
+        <TileGrid
+          cols="lg:grid-cols-6"
+          tiles={data.funnel
+            .filter((f) => f.stage !== "prereqs")
+            .map((f) => ({
+              key: f.stage,
+              icon: <span className="font-mono text-xs">{f.code}</span>,
+              label: `${f.name}${(f.monthly_dbus ?? 0) > 0 ? ` · ${fmtDbus(f.monthly_dbus ?? 0)}/mo` : ""}`,
+              value: f.count,
+              tone: f.stage === "u6" ? "good" : undefined,
+            }))}
+        />
+      </div>
 
       <Funnel data={data} active={stageFilter} onPick={setStageFilter} />
       {stageFilter && (
