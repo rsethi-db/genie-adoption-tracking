@@ -252,35 +252,16 @@ JOIN (
 ) f ON g.account_name = f.account_name
 """
 
-# Genie-specific spend (trailing 90 days) per FINS account, resolved to account_name.
-GENIE_SPEND_QUERY = """
-WITH fins AS (
-  SELECT DISTINCT account_id AS sfdc_account_id, account_name
-  FROM main.gtm_silver.account_dim
-  WHERE sales_business_unit='AMER Industries' AND sales_subregion_level_1='FINS'
-    AND account_status LIKE '%Customer%' AND account_name IS NOT NULL
-)
-SELECT f.account_name,
-  ROUND(SUM(fd.genie_dbu_dollars), 2) AS genie_90d
-FROM main.field_usage_dashboard.fins_data fd
-  JOIN fins f ON fd.accountId = f.sfdc_account_id
-WHERE fd.date >= add_months((SELECT MAX(date) FROM main.field_usage_dashboard.fins_data), -3)
-GROUP BY f.account_name
-HAVING genie_90d > 0
-"""
-
-# Genie T30D consumption per FINS account: genie $DBU (trailing 30 days) and the
-# count of Genie spaces with usage in the trailing 30 days — the two figures the
-# logfood PP-off page reports at the account level (fins_genie_account_view), but
-# computed for ALL FINS accounts (not just PP-off) so Signals can show them app-wide.
-GENIE_T30D_QUERY = """
-WITH fins AS (
-  SELECT DISTINCT account_id AS sfdc_account_id, account_name
-  FROM main.gtm_silver.account_dim
-  WHERE sales_business_unit='AMER Industries' AND sales_subregion_level_1='FINS'
-    AND account_status LIKE '%Customer%' AND account_name IS NOT NULL
-),
-genie_space_counts AS (
+# Per-account Genie signals over the trailing 30 days, keyed by SFDC account_id:
+#   * genie_active         — has ≥1 Genie space with actual message usage in the last
+#                            30d (genuinely USING Genie now, not just historical spend)
+#   * genie_revenue_30d    — standalone-Genie DBU $ (gtm_gold.account_consumption_daily
+#                            .genie_standalone_dbu_dollars) over the last 30d
+#   * active_genie_spaces  — total Genie spaces with usage in the last 30d
+# Sources: fct_data_room_messages_daily (space message activity), fins_data (account↔
+# workspace map + 30d window), account_consumption_daily (standalone Genie revenue).
+GENIE_30D_QUERY = """
+WITH genie_space_counts AS (
   SELECT workspace_id,
     COUNT(DISTINCT CASE WHEN ds >= date_sub(current_date(), 30)
       THEN dim_data_room_id END) AS genie_spaces_with_usage
@@ -288,21 +269,31 @@ genie_space_counts AS (
   WHERE ds >= '2025-04-13'
   GROUP BY workspace_id
 ),
-per_ws AS (
-  SELECT f.account_name, fd.workspaceId,
-    SUM(fd.genie_dbu_dollars) AS genie_dollars,
-    MAX(COALESCE(gc.genie_spaces_with_usage, 0)) AS spaces
-  FROM main.field_usage_dashboard.fins_data fd
-    JOIN fins f ON fd.accountId = f.sfdc_account_id
-    LEFT JOIN genie_space_counts gc ON fd.workspaceId = gc.workspace_id
-  WHERE fd.date BETWEEN date_sub(fd.max_date, 29) AND fd.max_date
-  GROUP BY f.account_name, fd.workspaceId
+acct_ws AS (
+  SELECT DISTINCT accountId, workspaceId
+  FROM main.field_usage_dashboard.fins_data
+  WHERE date BETWEEN date_sub(max_date, 29) AND max_date
+),
+spaces AS (
+  SELECT aw.accountId AS account_id,
+    SUM(COALESCE(gc.genie_spaces_with_usage, 0)) AS active_genie_spaces
+  FROM acct_ws aw
+    LEFT JOIN genie_space_counts gc ON aw.workspaceId = gc.workspace_id
+  GROUP BY aw.accountId
+),
+revenue AS (
+  SELECT account_id,
+    ROUND(SUM(COALESCE(genie_standalone_dbu_dollars, 0)), 2) AS genie_revenue_30d
+  FROM main.gtm_gold.account_consumption_daily
+  WHERE usage_date >= current_date() - INTERVAL 30 DAYS
+  GROUP BY account_id
 )
-SELECT account_name,
-  ROUND(SUM(genie_dollars), 2) AS genie_dollars_t30d,
-  SUM(spaces) AS active_genie_spaces
-FROM per_ws
-GROUP BY account_name
+SELECT COALESCE(s.account_id, r.account_id) AS account_id,
+  COALESCE(s.active_genie_spaces, 0) AS active_genie_spaces,
+  COALESCE(r.genie_revenue_30d, 0) AS genie_revenue_30d,
+  CASE WHEN COALESCE(s.active_genie_spaces, 0) > 0 THEN 1 ELSE 0 END AS genie_active
+FROM spaces s
+  FULL OUTER JOIN revenue r ON s.account_id = r.account_id
 """
 
 # Genie-related Brickroad issues (ALL severities) per FINS account. customer_id on
@@ -559,21 +550,18 @@ def fetch_aim(ws) -> dict[str, dict]:
     return out
 
 
-def fetch_genie_spend(ws) -> dict[str, float]:
-    """Map account_name -> Genie-specific spend (trailing 90 days, USD)."""
-    out: dict[str, float] = {}
-    for r in _run_query(ws, GENIE_SPEND_QUERY):
-        out[r[0]] = float(r[1] or 0)
-    return out
-
-
-def fetch_genie_t30d(ws) -> dict[str, dict]:
-    """Map account_name -> {genie_dollars_t30d, active_genie_spaces} (trailing 30d)."""
+def fetch_genie_30d(ws) -> dict[str, dict]:
+    """Map SFDC account_id -> trailing-30d Genie signals:
+    {active_genie_spaces, genie_revenue_30d, genie_active}."""
     out: dict[str, dict] = {}
-    for r in _run_query(ws, GENIE_T30D_QUERY):
-        out[r[0]] = {
-            "genie_dollars_t30d": float(r[1] or 0),
-            "active_genie_spaces": int(r[2] or 0),
+    for r in _run_query(ws, GENIE_30D_QUERY):
+        aid = r[0]
+        if not aid:
+            continue
+        out[aid] = {
+            "active_genie_spaces": int(r[1] or 0),
+            "genie_revenue_30d": float(r[2] or 0),
+            "genie_active": bool(int(r[3] or 0)),
         }
     return out
 
@@ -607,21 +595,22 @@ def main() -> None:
     pp = fetch_pp(ws)
     wsc = fetch_ws(ws)
     aim = fetch_aim(ws)
-    spend = fetch_genie_spend(ws)
-    t30d = fetch_genie_t30d(ws)
+    genie30 = fetch_genie_30d(ws)  # keyed by SFDC account_id
     issues = fetch_issues(ws)
     pp_off = sum(1 for v in pp.values() if v["pp_status"] == "off")
     aim_off = sum(1 for v in aim.values() if v["aim_status"] == "off")
+    genie_active_n = sum(1 for v in genie30.values() if v.get("genie_active"))
     print(
         f"Fetched {len(accounts)} FINS accounts, {len(use_cases)} Genie use cases, "
         f"PP status for {len(pp)} accounts ({pp_off} PP-off), "
         f"workspace counts for {len(wsc)}, AIM for {len(aim)} ({aim_off} AIM-off), "
+        f"30d Genie signals for {len(genie30)} accounts ({genie_active_n} genie-active), "
         f"{len(issues)} Genie issues"
     )
 
     # Guard: never wipe the app's data on a partial fetch (e.g. a cold-warehouse
     # timeout on one of the queries). All enrichment queries must return data,
-    # otherwise we'd re-seed with blank PP/WS/AIM signals.
+    # otherwise we'd re-seed with blank PP/WS/AIM/Genie signals.
     missing = [
         name
         for name, rows in (
@@ -630,6 +619,7 @@ def main() -> None:
             ("pp", pp),
             ("workspaces", wsc),
             ("aim", aim),
+            ("genie30", genie30),
         )
         if not rows
     ]
@@ -688,6 +678,7 @@ def main() -> None:
                 pp_row = pp.get(name, {})
                 ws_row = wsc.get(name, {})
                 aim_row = aim.get(name, {})
+                g30 = genie30.get(sfdc, {})  # 30d Genie signals, keyed by SFDC id
                 fields = dict(
                     name=name,
                     sub_vertical=a["sub_vertical"],
@@ -706,10 +697,14 @@ def main() -> None:
                     provisioning_ws_enabled=aim_row.get("provisioning_ws_enabled", 0),
                     provisioning_ws_total=aim_row.get("provisioning_ws_total", 0),
                     readiness_tier=aim_row.get("readiness_tier", "unknown"),
-                    genie_spend_90d=spend.get(name, 0.0),
-                    genie_dollars_t30d=t30d.get(name, {}).get("genie_dollars_t30d", 0.0),
-                    active_genie_spaces=t30d.get(name, {}).get("active_genie_spaces", 0),
-                    genie_active=pp_row.get("genie_active", False),
+                    # Trailing-30d Genie signals, keyed by SFDC account_id:
+                    #   genie_active = has a Genie space with message usage in last 30d
+                    #   genie_dollars_t30d = standalone-Genie DBU $ (last 30d)
+                    #   active_genie_spaces = Genie spaces with usage (last 30d)
+                    genie_spend_90d=g30.get("genie_revenue_30d", 0.0),
+                    genie_dollars_t30d=g30.get("genie_revenue_30d", 0.0),
+                    active_genie_spaces=g30.get("active_genie_spaces", 0),
+                    genie_active=g30.get("genie_active", False),
                 )
                 # Match by sfdc id; else adopt an existing name-keyed row (first run);
                 # else it's genuinely new. by_name is only used when NOT already claimed
@@ -720,7 +715,7 @@ def main() -> None:
                     if cand is not None and not cand.sfdc_account_id:
                         acct = cand  # first-run adoption: keep its uuid, stamp the id
                 if acct is None:
-                    acct = Account(id=_uid(), sfdc_account_id=sfdc, created_by=SEED_MARKER, **fields)  # ty: ignore[invalid-argument-type]
+                    acct = Account(id=_uid(), sfdc_account_id=sfdc, created_by=SEED_MARKER, **fields)
                     session.add(acct)
                     n_new += 1
                 else:

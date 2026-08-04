@@ -131,10 +131,10 @@ function DashboardBody() {
           {
             key: "genie_active",
             icon: <Sparkles className="h-4 w-4" />,
-            label: "Genie-active",
+            label: "Genie-active (30d)",
             value: data.genie_active_accounts ?? 0,
             tone: "good",
-            filter: { label: "Genie-active accounts", params: { genie_active: "true" } },
+            filter: { label: "Genie-active accounts (last 30d)", params: { genie_active: "true" } },
           },
           {
             key: "revenue",
@@ -363,7 +363,7 @@ function InlineAccounts({
                   <th className="py-2 px-2 font-medium">PP AI</th>
                   <th className="py-2 px-2 font-medium">Provisioning</th>
                   <Th k="use_case_count" label="Use cases" align="right" />
-                  <Th k="genie_spend_90d" label="Genie $ (90d)" align="right" />
+                  <Th k="genie_spend_90d" label="Genie $ (30d)" align="right" />
                   <Th k="open_issues" label="Issues" align="right" />
                   <Th k="arr" label="ARR" align="right" />
                 </tr>
