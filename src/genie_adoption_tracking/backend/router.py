@@ -253,9 +253,10 @@ def _readiness_pct(session: Session, account: Account) -> int:
 
 
 # Readiness is driven by the team-filled Genie Playbook (not GTM auto-signals):
-# share of workflow tasks the team has marked "completed". The stage×lane matrix tasks
-# count; the Security & Review questions are excluded from the score.
-_WORKFLOW_TASK_KEYS = [t["key"] for t in adoption_workflow.TASKS if t["lane"] != "security"]
+# share of HAPPY PATH tasks the team has marked "completed". Only the Happy Path lane
+# counts toward readiness (Recommended / As Needed / Security tasks are excluded), so
+# this matches the account-detail readiness %.
+_WORKFLOW_TASK_KEYS = [t["key"] for t in adoption_workflow.TASKS if t["lane"] == "happy_path"]
 _WORKFLOW_TASK_TOTAL = len(_WORKFLOW_TASK_KEYS)
 
 

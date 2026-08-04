@@ -1342,9 +1342,10 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
   // User-provisioning readiness = AIM OR SCIM (provisioning_status is the broader
   // "any provisioning" signal); aim tells us whether the preferred method is used.
   const prov = data.provisioning_status ?? "unknown";
-  // Readiness reflects the team-filled Genie Playbook (matrix tasks, excluding the
-  // Security & Review questions) — not GTM auto-signals. Done = marked "completed".
-  const workflowTasks = (data.adoption?.tasks ?? []).filter((t) => t.lane !== "security");
+  // Readiness reflects the team-filled Genie Playbook — Happy Path tasks only (the
+  // core adoption path; Recommended / As Needed / Security tasks don't count toward
+  // the score). Done = marked "completed".
+  const workflowTasks = (data.adoption?.tasks ?? []).filter((t) => t.lane === "happy_path");
   const applicable = workflowTasks;
   const done = workflowTasks.filter((t) => t.status === "completed");
   const readinessPct =
