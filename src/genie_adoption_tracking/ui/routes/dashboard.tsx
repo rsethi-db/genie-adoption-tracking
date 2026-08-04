@@ -637,37 +637,50 @@ function GenieAccountsTab({ data }: { data: DashboardOut }) {
         )}
       </div>
 
-      {/* Summary tiles */}
-      <TileGrid
-        tiles={[
-          { key: "uc", icon: <Layers className="h-4 w-4" />, label: "Genie use cases", value: data.total_use_cases },
-          {
-            key: "whitespace",
-            icon: <Layers className="h-4 w-4" />,
-            label: "Whitespace",
-            value: data.whitespace_accounts ?? 0,
-            tone: (data.whitespace_accounts ?? 0) > 0 ? "warn" : undefined,
-            filter: { label: "Whitespace — no Genie use case", params: { whitespace: "true" } },
-          },
-        ]}
-      />
-
-      {/* Use cases by UCO stage — display tiles (count + $DBU per stage) */}
+      {/* Use cases by UCO stage — Total first, U1→U6, Whitespace last. All clickable. */}
       <div>
         <h2 className="text-sm font-semibold text-muted-foreground mb-2">
           Use cases by UCO stage
         </h2>
         <TileGrid
-          cols="lg:grid-cols-6"
-          tiles={data.funnel
-            .filter((f) => f.stage !== "prereqs")
-            .map((f) => ({
-              key: f.stage,
-              icon: <span className="font-mono text-xs">{f.code}</span>,
-              label: `${f.name}${(f.monthly_dbus ?? 0) > 0 ? ` · ${fmtDbus(f.monthly_dbus ?? 0)}/mo` : ""}`,
-              value: f.count,
-              tone: f.stage === "u6" ? "good" : undefined,
-            }))}
+          cols="lg:grid-cols-4 xl:grid-cols-8"
+          tiles={[
+            {
+              key: "total",
+              icon: <Layers className="h-4 w-4" />,
+              label: "Total Genie use cases",
+              value: data.total_use_cases,
+              filter: { label: "Accounts with a Genie use case", params: { has_usecase: "true" } },
+            },
+            ...data.funnel
+              .filter((f) => f.stage !== "prereqs")
+              .map((f) => ({
+                key: f.stage,
+                icon: <span className="font-mono text-xs">{f.code}</span>,
+                label: f.name,
+                value: f.count,
+                tone: (f.stage === "u6" ? "good" : undefined) as
+                  | "good"
+                  | undefined,
+                filter:
+                  f.count > 0
+                    ? {
+                        label: `Use case at stage ${f.code} — ${f.name}`,
+                        params: { stage: f.stage },
+                      }
+                    : undefined,
+              })),
+            {
+              key: "whitespace",
+              icon: <Layers className="h-4 w-4" />,
+              label: "Whitespace",
+              value: data.whitespace_accounts ?? 0,
+              tone: ((data.whitespace_accounts ?? 0) > 0 ? "warn" : undefined) as
+                | "warn"
+                | undefined,
+              filter: { label: "Whitespace — no Genie use case", params: { whitespace: "true" } },
+            },
+          ]}
         />
       </div>
 

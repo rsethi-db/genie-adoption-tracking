@@ -382,6 +382,7 @@ def list_accounts(
     has_spend: bool = False,
     sub_vertical: str = "",
     spend_bucket: int = -1,
+    has_usecase: bool = False,
 ):
     """Account lookup. Pass `q` for text search (name/owner/sub-vertical), or one/more
     filters (tier, pp, provisioning, stage, whitespace, open_issues, genie_active,
@@ -393,6 +394,7 @@ def list_accounts(
     has_filter = bool(
         tier or pp or provisioning or stage or whitespace or open_issues
         or genie_active or has_spend or sub_vertical or spend_bucket >= 0
+        or has_usecase
     )
     if not needle and not has_filter:
         return []
@@ -437,6 +439,8 @@ def list_accounts(
         if stage and stage not in stages_by_acct.get(a.id, set()):
             return False
         if whitespace and a.id in stages_by_acct:
+            return False
+        if has_usecase and a.id not in stages_by_acct:
             return False
         if open_issues and a.id not in issue_accts:
             return False
