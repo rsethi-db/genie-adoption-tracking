@@ -93,36 +93,9 @@ function DashboardPage() {
 
 function DashboardBody() {
   const { data } = useGetDashboardSuspense(selector());
-  const [q, setQ] = useState("");
-  const needle = q.trim();
 
   return (
     <div className="space-y-6">
-      {/* Search — find an account by name, sub-vertical, AE/SA/DSA */}
-      <div className="relative max-w-xl">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search accounts by name, sub-vertical, AE, SA, or DSA…"
-          className="pl-9 h-10"
-        />
-        {q && (
-          <button
-            onClick={() => setQ("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-      {needle && (
-        <InlineAccounts
-          filter={{ label: `Search: “${needle}”`, params: { q: needle } }}
-          onClose={() => setQ("")}
-        />
-      )}
-
       {/* Headline row (start big) — click a tile to expand the accounts beneath it */}
       <TileGrid
         cols="lg:grid-cols-5"
@@ -549,13 +522,41 @@ function SpendDistribution({ data }: { data: DashboardOut }) {
 function GenieAccountsTab({ data }: { data: DashboardOut }) {
   // Funnel drill-down — its own state so the panel appears right under the funnel row.
   const [stageFilter, setStageFilter] = useState<AcctFilter | null>(null);
+  const [q, setQ] = useState("");
+  const needle = q.trim();
 
   return (
     <div className="space-y-6">
-      <SoWhat>
-        Where Genie use cases sit in the UCO funnel, and the untapped whitespace —
-        FINS customers with no Genie use case at all, ranked by ARR.
-      </SoWhat>
+      <SoWhat>The UCO funnel, whitespace, and account lookup.</SoWhat>
+
+      {/* Account search — find one account by name, sub-vertical, or owner */}
+      <div>
+        <div className="relative max-w-xl">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search accounts by name, sub-vertical, AE, SA, or DSA…"
+            className="pl-9 h-10"
+          />
+          {q && (
+            <button
+              onClick={() => setQ("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {needle && (
+          <div className="mt-3">
+            <InlineAccounts
+              filter={{ label: `Search: “${needle}”`, params: { q: needle } }}
+              onClose={() => setQ("")}
+            />
+          </div>
+        )}
+      </div>
 
       <TileGrid
         tiles={[
