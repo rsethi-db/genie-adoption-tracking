@@ -1211,6 +1211,7 @@ def get_dashboard(session: Dependencies.Session):
     # account that is actually consuming in T30D). pp_status == "off" IS that set — so
     # everywhere in the app just trusts the stored status, no re-derivation.
     pp_off_total = sum(1 for a in accounts if a.pp_status == "off")
+    pp_on_total = sum(1 for a in accounts if a.pp_status in ("on", "on_default"))
     # "Provisioning off" = no user provisioning at all (neither AIM nor SCIM).
     aim_off_total = sum(1 for a in accounts if a.provisioning_status == "off")
     all_issues = session.exec(select(AccountIssue)).all()
@@ -1316,6 +1317,7 @@ def get_dashboard(session: Dependencies.Session):
         total_monthly_dbus=total_dbus,
         est_pipeline_per_month=est_pipeline_total,
         pp_off_accounts=pp_off_total,
+        pp_on_accounts=pp_on_total,
         aim_off_accounts=aim_off_total,
         avg_readiness_pct=avg_readiness,
         open_issues=open_issue_total,

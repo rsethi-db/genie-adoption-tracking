@@ -267,6 +267,7 @@ export interface DashboardOut {
     pp_off_accounts?: number;
     pp_off_enforce_off?: number;
     pp_off_enforce_on?: number;
+    pp_on_accounts?: number;
     spend_buckets?: SpendBucketOut[];
     stalled: StalledUseCaseOut[];
     sub_verticals?: SubVerticalStatOut[];

@@ -14,6 +14,7 @@ import {
   Layers,
   DollarSign,
   ShieldAlert,
+  ShieldCheck,
   Gauge,
   Bug,
   Sparkles,
@@ -442,7 +443,6 @@ function SoWhat({ children }: { children: ReactNode }) {
 
 // ------------------------------------------------------------------ Tab 1: PP AI
 function PartnerPoweredTab({ data }: { data: DashboardOut }) {
-  const ppOff = data.pp_off_accounts ?? 0;
   return (
     <div className="space-y-6">
       <SoWhat>
@@ -454,17 +454,17 @@ function PartnerPoweredTab({ data }: { data: DashboardOut }) {
       <TileGrid
         tiles={[
           {
-            key: "pp_off",
-            icon: <ShieldAlert className="h-4 w-4" />,
-            label: "PP AI off (blocked)",
-            value: ppOff,
-            tone: ppOff > 0 ? "bad" : undefined,
-            filter: { label: "Partner-Powered AI off (blocked)", params: { pp: "off" } },
+            key: "pp_on",
+            icon: <ShieldCheck className="h-4 w-4" />,
+            label: "PP AI on",
+            value: data.pp_on_accounts ?? 0,
+            tone: "good",
+            filter: { label: "Partner-Powered AI on", params: { pp: "on" } },
           },
           {
             key: "enf_on",
             icon: <ShieldAlert className="h-4 w-4" />,
-            label: "PP AI Off · enforce on",
+            label: "PP AI off · enforce on",
             value: data.pp_off_enforce_on ?? 0,
             tone: (data.pp_off_enforce_on ?? 0) > 0 ? "bad" : undefined,
             filter: { label: "PP AI off · enforce on", params: { pp: "off_enforce_on" } },
@@ -472,7 +472,7 @@ function PartnerPoweredTab({ data }: { data: DashboardOut }) {
           {
             key: "enf_off",
             icon: <ShieldAlert className="h-4 w-4" />,
-            label: "PP AI Off · enforce off",
+            label: "PP AI off · enforce off",
             value: data.pp_off_enforce_off ?? 0,
             tone: (data.pp_off_enforce_off ?? 0) > 0 ? "warn" : undefined,
             filter: { label: "PP AI off · enforce off", params: { pp: "off_enforce_off" } },

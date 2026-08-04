@@ -423,6 +423,7 @@ class DashboardOut(BaseModel):
     total_monthly_dbus: float = 0.0
     est_pipeline_per_month: float = 0.0  # sum of open-opp ARR/12 across accounts
     pp_off_accounts: int = 0
+    pp_on_accounts: int = 0
     aim_off_accounts: int = 0
     avg_readiness_pct: int = 0
     open_issues: int = 0
