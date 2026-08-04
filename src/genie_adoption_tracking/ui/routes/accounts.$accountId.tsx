@@ -720,6 +720,36 @@ const STATUS_LABEL: Record<string, string> = {
   blocked: "Blocked",
 };
 
+// Group history entries (already newest-first) into [dateLabel, entries] sections by
+// calendar day, so the activity reads as a dated timeline. "Today"/"Yesterday" for the
+// two most recent days, otherwise a full date.
+function groupByDate(entries: HistoryEntry[]): [string, HistoryEntry[]][] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const dayLabel = (d: Date): string => {
+    const dd = new Date(d);
+    dd.setHours(0, 0, 0, 0);
+    if (dd.getTime() === today.getTime()) return "Today";
+    if (dd.getTime() === yesterday.getTime()) return "Yesterday";
+    return dd.toLocaleDateString([], {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: dd.getFullYear() === today.getFullYear() ? undefined : "numeric",
+    });
+  };
+  const groups: [string, HistoryEntry[]][] = [];
+  for (const e of entries) {
+    const label = dayLabel(new Date(e.changed_at));
+    const last = groups[groups.length - 1];
+    if (last && last[0] === label) last[1].push(e);
+    else groups.push([label, [e]]);
+  }
+  return groups;
+}
+
 function AdoptionHistory({ accountId }: { accountId: string }) {
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
@@ -769,28 +799,48 @@ function AdoptionHistory({ accountId }: { accountId: string }) {
                 here.
               </p>
             ) : (
-              <ul className="space-y-3">
-                {entries.map((e, i) => (
-                  <li key={i} className="flex gap-3 text-sm">
-                    <div className="mt-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-x-2">
-                        <span className="font-medium">{e.task_label}</span>
-                        <Badge variant="outline" className="text-xs">
-                          {STATUS_LABEL[e.status] ?? e.status}
-                        </Badge>
-                      </div>
-                      {e.note && (
-                        <p className="text-muted-foreground mt-0.5">“{e.note}”</p>
-                      )}
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {new Date(e.changed_at).toLocaleString()}
-                        {e.changed_by ? ` · ${e.changed_by}` : ""}
-                      </p>
+              <div className="space-y-5">
+                {groupByDate(entries).map(([day, dayEntries]) => (
+                  <div key={day}>
+                    {/* Date header — one section per day, newest first */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <CalendarClock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {day}
+                      </span>
+                      <span className="text-xs text-muted-foreground/70">
+                        · {dayEntries.length} change{dayEntries.length === 1 ? "" : "s"}
+                      </span>
+                      <div className="flex-1 border-t" />
                     </div>
-                  </li>
+                    <ul className="space-y-2.5 pl-1 border-l ml-1.5">
+                      {dayEntries.map((e, i) => (
+                        <li key={i} className="flex gap-3 text-sm pl-3 relative">
+                          <div className="absolute -left-[5px] top-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-x-2">
+                              <span className="font-medium">{e.task_label}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {STATUS_LABEL[e.status] ?? e.status}
+                              </Badge>
+                            </div>
+                            {e.note && (
+                              <p className="text-muted-foreground mt-0.5">“{e.note}”</p>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {new Date(e.changed_at).toLocaleTimeString([], {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                              {e.changed_by ? ` · ${e.changed_by}` : ""}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </CardContent>
         </Card>
