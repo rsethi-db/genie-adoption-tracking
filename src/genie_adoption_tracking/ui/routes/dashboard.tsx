@@ -1013,20 +1013,23 @@ function Funnel({
   active: AcctFilter | null;
   onPick: (f: AcctFilter | null) => void;
 }) {
-  const max = Math.max(1, ...data.funnel.map((f) => f.count));
+  // Only the U1–U6 UCO stages (drop Pre-Reqs) to mirror the logfood
+  // "Count & $DBU by UCO Stage" chart.
+  const stages = data.funnel.filter((f) => f.stage !== "prereqs");
+  const max = Math.max(1, ...stages.map((f) => f.count));
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Adoption funnel (count &amp; $DBU by stage)</CardTitle>
+        <CardTitle className="text-base">Count &amp; $DBU by UCO Stage</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        {data.funnel.map((f) => {
+        {stages.map((f) => {
           const isActive = active?.params.stage === f.stage;
           return (
             <button
               key={f.stage}
               type="button"
-              disabled={f.count === 0 || f.stage === "prereqs"}
+              disabled={f.count === 0}
               onClick={() =>
                 onPick(
                   isActive
