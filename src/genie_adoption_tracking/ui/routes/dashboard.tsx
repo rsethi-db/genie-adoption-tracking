@@ -57,6 +57,8 @@ interface AcctRow {
   arr?: number;
   readiness_tier?: string;
   pp_status?: string;
+  pp_enforce?: string;
+  ws_pp_on?: number;
   provisioning_status?: string;
   use_case_count?: number;
   genie_spend_90d?: number;
@@ -366,6 +368,18 @@ function InlineAccounts({
                       <span className="inline-flex items-center gap-1.5">
                         <span className={`h-2 w-2 rounded-full ${toneDot(a.pp_status ?? "unknown", ["on", "on_default"], ["off"])}`} />
                         {PP_LABEL[a.pp_status ?? "unknown"] ?? a.pp_status}
+                        {a.pp_status === "off" && (
+                          <span
+                            className="text-xs text-muted-foreground"
+                            title={
+                              a.pp_enforce === "on"
+                                ? "Enforce on — Genie is hard-blocked account-wide."
+                                : "Enforce off — the account default is off, but individual workspaces can turn PP on, so Genie can still consume there."
+                            }
+                          >
+                            {a.pp_enforce === "on" ? "· enforce on" : "· enforce off ⓘ"}
+                          </span>
+                        )}
                       </span>
                     </td>
                     <td className="py-1.5 px-2">
@@ -580,51 +594,11 @@ function GenieAccountsTab({ data }: { data: DashboardOut }) {
         ]}
       />
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        <Funnel data={data} active={stageFilter} onPick={setStageFilter} />
-        <Whitespace data={data} />
-      </div>
+      <Funnel data={data} active={stageFilter} onPick={setStageFilter} />
       {stageFilter && (
         <InlineAccounts filter={stageFilter} onClose={() => setStageFilter(null)} />
       )}
     </div>
-  );
-}
-
-function Whitespace({ data }: { data: DashboardOut }) {
-  const rows = data.whitespace_top ?? [];
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">
-          Top whitespace accounts (no Genie use case)
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-1">
-        {rows.length === 0 && (
-          <p className="text-sm text-muted-foreground">No whitespace — every account has a Genie use case.</p>
-        )}
-        {rows.map((a) => (
-          <Link
-            key={a.id}
-            to="/accounts/$accountId"
-            params={{ accountId: a.id }}
-            className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-accent transition-colors"
-          >
-            <div className="min-w-0">
-              <div className="text-sm font-medium truncate">{a.name}</div>
-              <div className="text-xs text-muted-foreground truncate">
-                {a.sub_vertical || "—"}
-                {a.ae_owner && <> · AE {a.ae_owner}</>}
-              </div>
-            </div>
-            <span className="text-sm font-medium shrink-0 ml-2">
-              {fmtDbus(a.arr ?? 0)}
-            </span>
-          </Link>
-        ))}
-      </CardContent>
-    </Card>
   );
 }
 
