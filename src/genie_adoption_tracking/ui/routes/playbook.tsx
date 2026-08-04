@@ -7,7 +7,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ExternalLink, Sparkles } from "lucide-react";
+import {
+  ExternalLink,
+  Sparkles,
+  PlayCircle,
+  Rocket,
+  GraduationCap,
+  BarChart3,
+  BookOpen,
+  MessageSquare,
+  Users,
+  Wrench,
+  LifeBuoy,
+  type LucideIcon,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 import { openGenieChat } from "@/components/genie-chat";
 
 export const Route = createFileRoute("/playbook")({
@@ -27,25 +41,24 @@ function PlaybookPage() {
 
       {/* Ask Genie is the primary "how do I…" surface — the chat reads this playbook
           plus the docs and answers tailored to the account you're on. */}
-      <Card className="mb-6 border-primary/40">
-        <CardContent className="py-4 flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-sm font-semibold">Ask Genie</div>
-              <div className="text-sm text-muted-foreground">
-                What demo to show, how to handle an objection, hackathon prereqs — ask
-                in plain English.
-              </div>
+      <div className="mb-8 rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-5 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 rounded-xl bg-primary/15 text-primary flex items-center justify-center shrink-0 ring-1 ring-primary/20">
+            <Sparkles className="h-6 w-6" />
+          </div>
+          <div>
+            <div className="text-base font-semibold">Ask Genie</div>
+            <div className="text-sm text-muted-foreground max-w-xl">
+              What demo to show, how to handle an objection, hackathon prereqs — ask in
+              plain English. Genie reads this playbook and answers for the account
+              you're on.
             </div>
           </div>
-          <Button className="gap-2 shrink-0" onClick={() => openGenieChat()}>
-            <Sparkles className="h-4 w-4" /> Ask Genie
-          </Button>
-        </CardContent>
-      </Card>
+        </div>
+        <Button size="lg" className="gap-2 shrink-0" onClick={() => openGenieChat()}>
+          <Sparkles className="h-4 w-4" /> Ask Genie
+        </Button>
+      </div>
 
       <Suspense fallback={<Skeleton className="h-96 w-full" />}>
         <Tabs defaultValue="resources">
@@ -79,6 +92,8 @@ const CONTACTS: {
   url: string;
   action2?: string;
   url2?: string;
+  icon: LucideIcon;
+  accent: string;
 }[] = [
   {
     title: "General Genie Questions",
@@ -87,24 +102,32 @@ const CONTACTS: {
     url: "https://databricks.enterprise.slack.com/archives/C077N5FSZDL",
     action2: "Pricing questions — #genie-paygo",
     url2: "https://docs.google.com/document/d/15VSQ95Kejw0bPzz24g7OKoAFmM6vYkYpkNJT4pXV52E/edit?tab=t.0#heading=h.g8pdpmh1xa4i",
+    icon: MessageSquare,
+    accent: "text-sky-600 bg-sky-500/10 ring-sky-500/20",
   },
   {
     title: "FINS Genie SME",
     desc: "Deep technical help on a specific Genie engagement — accuracy, modeling, evaluation, tricky setups.",
     action: "Post in #sme-genie-fins-amer",
     url: "https://databricks.enterprise.slack.com/archives/C0B1ZRYEUGM",
+    icon: Wrench,
+    accent: "text-violet-600 bg-violet-500/10 ring-violet-500/20",
   },
   {
     title: "SSA — Specialist Solutions Architects (raise an ASQ)",
     desc: "Advanced, deeply technical expertise in a specific specialization to help customers accelerate Genie adoption — especially 300+/400+ level use cases, evaluations, architecture, tuning, and production guidance.",
     action: "Raise an ASQ",
     url: "https://databricks.lightning.force.com/lightning/page/home",
+    icon: Users,
+    accent: "text-emerald-600 bg-emerald-500/10 ring-emerald-500/20",
   },
   {
     title: "Product / Brickroad (PM help)",
     desc: "Product gaps, roadmap questions, or a blocker that needs PM/engineering attention.",
     action: "File on Brickroad",
     url: "https://go/brickroad",
+    icon: LifeBuoy,
+    accent: "text-orange-600 bg-orange-500/10 ring-orange-500/20",
   },
 ];
 
@@ -120,67 +143,95 @@ function ContactsView() {
         pick the path that fits.
       </p>
       <div className="grid md:grid-cols-2 gap-4">
-        {CONTACTS.map((c) => (
-          <Card key={c.title}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">{c.title}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <p className="text-sm text-muted-foreground">{c.desc}</p>
-              <a
-                href={c.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                {c.action}
-              </a>
-              {c.action2 && c.url2 && (
-                <a
-                  href={c.url2}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1 text-sm text-primary hover:underline"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  {c.action2}
-                </a>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+        {CONTACTS.map((c) => {
+          const Icon = c.icon;
+          return (
+            <Card key={c.title} className="flex flex-col hover:border-primary/40 transition-colors">
+              <CardHeader className="pb-2">
+                <div className="flex items-start gap-2.5">
+                  <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center ring-1 shrink-0", c.accent)}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <CardTitle className="text-sm leading-snug pt-1">{c.title}</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2.5 flex-1 flex flex-col">
+                <p className="text-sm text-muted-foreground flex-1">{c.desc}</p>
+                <div className="space-y-1.5">
+                  <a
+                    href={c.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    {c.action}
+                  </a>
+                  {c.action2 && c.url2 && (
+                    <a
+                      href={c.url2}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      {c.action2}
+                    </a>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
-      <p className="text-sm text-muted-foreground pt-1">
+      <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
         Feedback on this Navigator — a data gap, a bug, or an idea? Email{" "}
-        <a href={RICHA_MAILTO} className="text-primary hover:underline">
+        <a href={RICHA_MAILTO} className="text-primary font-medium hover:underline">
           Richa Sethi
         </a>{" "}
         or{" "}
-        <a href={AMEE_MAILTO} className="text-primary hover:underline">
+        <a href={AMEE_MAILTO} className="text-primary font-medium hover:underline">
           Amee Vora
         </a>
         .
-      </p>
+      </div>
     </div>
   );
 }
 
 
+// Per-bucket icon + accent color so each resource group has a visual identity.
+const BUCKET_META: Record<string, { icon: LucideIcon; accent: string }> = {
+  "Product & Reference": { icon: BookOpen, accent: "text-sky-600 bg-sky-500/10 ring-sky-500/20" },
+  "Demo Assets": { icon: PlayCircle, accent: "text-violet-600 bg-violet-500/10 ring-violet-500/20" },
+  "Plays": { icon: Rocket, accent: "text-orange-600 bg-orange-500/10 ring-orange-500/20" },
+  "Workshops and Training": { icon: GraduationCap, accent: "text-emerald-600 bg-emerald-500/10 ring-emerald-500/20" },
+  "Proof & Dashboards": { icon: BarChart3, accent: "text-indigo-600 bg-indigo-500/10 ring-indigo-500/20" },
+};
+const DEFAULT_BUCKET_META = { icon: BookOpen, accent: "text-muted-foreground bg-muted ring-border" };
+
 function ResourcesView() {
   const { data } = useGetPlaybookSuspense(selector());
   const buckets = Array.from(new Set(data.resources.map((r) => r.bucket)));
   return (
-    <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
-      {buckets.map((bucket) => (
-        <Card key={bucket}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">{bucket}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {data.resources
-              .filter((r) => r.bucket === bucket)
-              .map((r) => (
+    <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+      {buckets.map((bucket) => {
+        const meta = BUCKET_META[bucket] ?? DEFAULT_BUCKET_META;
+        const Icon = meta.icon;
+        const items = data.resources.filter((r) => r.bucket === bucket);
+        return (
+          <Card key={bucket} className="flex flex-col overflow-hidden">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center ring-1 shrink-0", meta.accent)}>
+                  <Icon className="h-4 w-4" />
+                </div>
+                <CardTitle className="text-sm">{bucket}</CardTitle>
+                <span className="ml-auto text-xs text-muted-foreground">{items.length}</span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-0.5 flex-1">
+              {items.map((r) => (
                 <a
                   key={r.key}
                   href={r.url}
@@ -189,15 +240,16 @@ function ResourcesView() {
                   onClick={() =>
                     logResourceClick({ resource_key: r.key }).catch(() => {})
                   }
-                  className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors group"
+                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors group"
                 >
-                  {r.label}
-                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                  <span className="flex-1 min-w-0 truncate">{r.label}</span>
+                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0 opacity-40 group-hover:opacity-100 transition-opacity" />
                 </a>
               ))}
-          </CardContent>
-        </Card>
-      ))}
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }
