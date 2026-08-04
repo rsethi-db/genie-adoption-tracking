@@ -31,7 +31,7 @@ export function isPpEffectivelyEnabled(
 
 export function ppLabel(status: string): string {
   if (status === "on") return "Partner-Powered AI: On";
-  if (status === "on_default") return "Partner-Powered AI: On (default)";
+  if (status === "on_default") return "Partner-Powered AI: On";
   if (status === "off") return "Partner-Powered AI: Off";
   return "Partner-Powered AI: Unknown";
 }

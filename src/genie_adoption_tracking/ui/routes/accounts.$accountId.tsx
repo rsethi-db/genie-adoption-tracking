@@ -1557,9 +1557,7 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
               ppConsumeViaWs
                 ? "On (select workspaces)"
                 : isPpEnabled(pp)
-                  ? pp === "on_default"
-                    ? "On (default)"
-                    : "On"
+                  ? "On"
                   : pp === "off"
                     ? "Off"
                     : "Unknown"
@@ -1694,9 +1692,7 @@ function PartnerPoweredBanner({
           )}
           {consumeViaWs
             ? "Partner-Powered AI: account default Off, On for select workspaces — Genie can consume there, but not account-wide."
-            : status === "on_default"
-              ? "Partner-Powered AI is On (platform default) — Genie can consume."
-              : "Partner-Powered AI is On — Genie can consume."}
+            : "Partner-Powered AI is On — Genie can consume."}
         </div>
         {consumeViaWs && (
           <p className="text-sm text-muted-foreground mt-1">

@@ -240,7 +240,7 @@ const NUMERIC_SORTS: SortKey[] = ["arr", "genie_spend_90d", "use_case_count", "o
 
 const PP_LABEL: Record<string, string> = {
   on: "On",
-  on_default: "On (default)",
+  on_default: "On",
   off: "Off",
   unknown: "—",
 };
@@ -905,8 +905,8 @@ function GenieReadyTable({ data }: { data: DashboardOut }) {
                     <td className="py-2 pr-3 capitalize text-muted-foreground">
                       {a.provisioning_status}
                     </td>
-                    <td className="py-2 pr-3 capitalize text-muted-foreground">
-                      {(a.pp_status ?? "").replace("_", " ")}
+                    <td className="py-2 pr-3 text-muted-foreground">
+                      {PP_LABEL[a.pp_status ?? "unknown"] ?? a.pp_status}
                     </td>
                     <td className="py-2 pr-3 text-right">
                       {(a.genie_dollars_t30d ?? 0) > 0 ? fmtDbus(a.genie_dollars_t30d ?? 0) : "—"}
