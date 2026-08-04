@@ -34,8 +34,7 @@ function PlaybookPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Getting Help</h1>
         <p className="text-sm text-muted-foreground">
-          Ask Genie for anything you need mid-engagement, or browse the playbook's
-          blocker plays and go/ resources. Version <PlaybookVersion />.
+          Ask Genie, browse the resources, or find who to contact.
         </p>
       </div>
 
@@ -76,11 +75,6 @@ function PlaybookPage() {
       </Suspense>
     </AppShell>
   );
-}
-
-function PlaybookVersion() {
-  const { data } = useGetPlaybookSuspense(selector());
-  return <span className="font-mono">{data.version}</span>;
 }
 
 // Escalation paths when the field is still stuck after the playbook + Ask Genie.
