@@ -261,11 +261,13 @@ _WORKFLOW_TASK_TOTAL = len(_WORKFLOW_TASK_KEYS)
 
 
 def _workflow_readiness(states: dict[str, str]) -> int:
-    """states: task_key -> status. % of matrix tasks marked completed."""
-    if _WORKFLOW_TASK_TOTAL == 0:
+    """states: task_key -> status. % of applicable Happy Path tasks marked completed.
+    N/A tasks are excluded from the denominator (not applicable to this account)."""
+    applicable = [k for k in _WORKFLOW_TASK_KEYS if states.get(k) != "na"]
+    if not applicable:
         return 0
-    done = sum(1 for k in _WORKFLOW_TASK_KEYS if states.get(k) == "completed")
-    return round(100 * done / _WORKFLOW_TASK_TOTAL)
+    done = sum(1 for k in applicable if states.get(k) == "completed")
+    return round(100 * done / len(applicable))
 
 
 def _account_workflow_readiness(session: Session, account_id: str) -> int:

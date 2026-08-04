@@ -309,6 +309,7 @@ const ADOPTION_STATUSES: { value: string; label: string }[] = [
   { value: "in_progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
   { value: "blocked", label: "Blocked" },
+  { value: "na", label: "N/A" },
 ];
 
 // Task-specific blocker reasons. When a task is Blocked, the team picks the reason
@@ -1363,8 +1364,10 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
   const prov = data.provisioning_status ?? "unknown";
   // Readiness reflects the team-filled Genie Playbook — Happy Path tasks only (the
   // core adoption path; Recommended / As Needed / Security tasks don't count toward
-  // the score). Done = marked "completed".
-  const workflowTasks = (data.adoption?.tasks ?? []).filter((t) => t.lane === "happy_path");
+  // the score). N/A tasks are excluded from the score (not applicable to this account).
+  // Done = marked "completed".
+  const happyPathTasks = (data.adoption?.tasks ?? []).filter((t) => t.lane === "happy_path");
+  const workflowTasks = happyPathTasks.filter((t) => t.status !== "na");
   const applicable = workflowTasks;
   const done = workflowTasks.filter((t) => t.status === "completed");
   const readinessPct =
@@ -1372,7 +1375,7 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
       ? Math.round((done.length / workflowTasks.length) * 100)
       : 0;
   // Consolidate the breakdown by stage (U1–U6): one row per stage with done/total +
-  // the tasks still open, instead of a flat 28-item list.
+  // the tasks still open (N/A excluded), instead of a flat list.
   const stageGroups = (data.adoption?.stages ?? []).map((s) => {
     const tasks = workflowTasks.filter((t) => t.stage === s.key);
     return {
