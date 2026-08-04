@@ -637,52 +637,35 @@ function GenieAccountsTab({ data }: { data: DashboardOut }) {
         )}
       </div>
 
-      {/* Use cases by UCO stage — Total first, U1→U6, Whitespace last. All clickable. */}
-      <div>
-        <h2 className="text-sm font-semibold text-muted-foreground mb-2">
-          Use cases by UCO stage
-        </h2>
-        <TileGrid
-          cols="lg:grid-cols-4 xl:grid-cols-8"
-          tiles={[
-            {
-              key: "total",
-              icon: <Layers className="h-4 w-4" />,
-              label: "Total Genie use cases",
-              value: data.total_use_cases,
-              filter: { label: "Accounts with a Genie use case", params: { has_usecase: "true" } },
-            },
-            ...data.funnel
-              .filter((f) => f.stage !== "prereqs")
-              .map((f) => ({
-                key: f.stage,
-                icon: <span className="font-mono text-xs">{f.code}</span>,
-                label: f.name,
-                value: f.count,
-                tone: (f.stage === "u6" ? "good" : undefined) as
-                  | "good"
-                  | undefined,
-                filter:
-                  f.count > 0
-                    ? {
-                        label: `Use case at stage ${f.code} — ${f.name}`,
-                        params: { stage: f.stage },
-                      }
-                    : undefined,
-              })),
-            {
-              key: "whitespace",
-              icon: <Layers className="h-4 w-4" />,
-              label: "Whitespace",
-              value: data.whitespace_accounts ?? 0,
-              tone: ((data.whitespace_accounts ?? 0) > 0 ? "warn" : undefined) as
-                | "warn"
-                | undefined,
-              filter: { label: "Whitespace — no Genie use case", params: { whitespace: "true" } },
-            },
-          ]}
-        />
-      </div>
+      {/* Summary tiles — the per-stage breakdown lives in the funnel below. */}
+      <TileGrid
+        cols="lg:grid-cols-3"
+        tiles={[
+          {
+            key: "total",
+            icon: <Layers className="h-4 w-4" />,
+            label: "Total Genie use cases",
+            value: data.total_use_cases,
+            filter: { label: "Accounts with a Genie use case", params: { has_usecase: "true" } },
+          },
+          {
+            key: "live",
+            icon: <Sparkles className="h-4 w-4" />,
+            label: "Live (U6)",
+            value: data.live_use_cases,
+            tone: "good",
+            filter: { label: "Accounts with a Live (U6) use case", params: { stage: "u6" } },
+          },
+          {
+            key: "whitespace",
+            icon: <Layers className="h-4 w-4" />,
+            label: "Whitespace",
+            value: data.whitespace_accounts ?? 0,
+            tone: (data.whitespace_accounts ?? 0) > 0 ? "warn" : undefined,
+            filter: { label: "Whitespace — no Genie use case", params: { whitespace: "true" } },
+          },
+        ]}
+      />
 
       <Funnel data={data} active={stageFilter} onPick={setStageFilter} />
       {stageFilter && (

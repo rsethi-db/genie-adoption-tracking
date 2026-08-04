@@ -1143,12 +1143,14 @@ def get_dashboard(session: Dependencies.Session):
     clicks = session.exec(select(ResourceClick)).all()
     account_names = {a.id: a.name for a in accounts}
 
-    # Funnel: count use cases (and sum DBU value) currently at each stage.
-    stage_counts: dict[str, int] = {}
+    # Funnel: count distinct ACCOUNTS with a use case at each stage (matches the
+    # drill-down, which lists accounts) + sum the DBU value at that stage.
+    stage_accts: dict[str, set[str]] = {}
     stage_dbus: dict[str, float] = {}
     for uc in use_cases:
-        stage_counts[uc.stage] = stage_counts.get(uc.stage, 0) + 1
+        stage_accts.setdefault(uc.stage, set()).add(uc.account_id)
         stage_dbus[uc.stage] = stage_dbus.get(uc.stage, 0.0) + uc.estimated_monthly_dbus
+    stage_counts = {k: len(v) for k, v in stage_accts.items()}
     funnel = [
         FunnelBucketOut(
             stage=s["key"],
