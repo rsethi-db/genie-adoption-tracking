@@ -736,6 +736,7 @@ def main() -> None:
                     #  table times out on logfood; existing values are left untouched.)
                     genie_spend_90d=g30.get("genie_revenue_30d", 0.0),
                     genie_dollars_t30d=g30.get("genie_revenue_30d", 0.0),
+                    est_pipeline_per_month=g30.get("est_pipeline_per_month", 0.0),
                     genie_active=g30.get("genie_active", False),
                 )
                 # Match by sfdc id; else adopt an existing name-keyed row (first run);

@@ -1208,6 +1208,7 @@ def get_dashboard(session: Dependencies.Session):
     open_blocker_total = sum(1 for b in blockers if not b.resolved)
     live_total = sum(1 for uc in use_cases if uc.stage == "u6")
     total_dbus = round(sum(uc.estimated_monthly_dbus for uc in use_cases), 2)
+    est_pipeline_total = round(sum(a.est_pipeline_per_month for a in accounts), 2)
     # PP genuinely blocked: default off AND (enforce on, or no workspace has it on).
     # Enforce-off with some workspaces on can still consume Genie → not counted.
     pp_off_total = sum(
@@ -1318,6 +1319,7 @@ def get_dashboard(session: Dependencies.Session):
         open_blockers=open_blocker_total,
         live_use_cases=live_total,
         total_monthly_dbus=total_dbus,
+        est_pipeline_per_month=est_pipeline_total,
         pp_off_accounts=pp_off_total,
         aim_off_accounts=aim_off_total,
         avg_readiness_pct=avg_readiness,

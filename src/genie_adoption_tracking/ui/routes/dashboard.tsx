@@ -17,7 +17,6 @@ import {
   Gauge,
   Bug,
   Sparkles,
-  MessageSquare,
   ArrowUpDown,
   X,
   Loader2,
@@ -144,9 +143,8 @@ function DashboardBody() {
             tone: "good",
             filter: { label: "Accounts with Genie spend (30d)", params: { has_spend: "true" } },
           },
-          { key: "spaces", icon: <MessageSquare className="h-4 w-4" />, label: "Active Genie spaces", value: data.active_genie_spaces ?? 0 },
           { key: "readiness", icon: <Gauge className="h-4 w-4" />, label: "Avg readiness", display: `${data.avg_readiness_pct ?? 0}%` },
-          { key: "pipeline", icon: <DollarSign className="h-4 w-4" />, label: "Est. pipeline $/mo", display: fmtDbus(data.total_monthly_dbus ?? 0) },
+          { key: "pipeline", icon: <DollarSign className="h-4 w-4" />, label: "Est. pipeline $/mo", display: fmtDbus(data.est_pipeline_per_month ?? 0) },
         ]}
       />
 
@@ -448,7 +446,9 @@ function PartnerPoweredTab({ data }: { data: DashboardOut }) {
   return (
     <div className="space-y-6">
       <SoWhat>
-        Partner-Powered AI must be on for Genie to consume.
+        Partner-Powered AI must be on for Genie to consume. Flagged “off” when an
+        account has an explicitly-off, actively-consuming workspace (matches the FINS
+        Genie logfood dashboard).
       </SoWhat>
 
       <TileGrid
@@ -476,14 +476,6 @@ function PartnerPoweredTab({ data }: { data: DashboardOut }) {
             value: data.pp_off_enforce_off ?? 0,
             tone: (data.pp_off_enforce_off ?? 0) > 0 ? "warn" : undefined,
             filter: { label: "PP AI off · enforce off", params: { pp: "off_enforce_off" } },
-          },
-          {
-            key: "revenue",
-            icon: <DollarSign className="h-4 w-4" />,
-            label: "Genie revenue (30d)",
-            display: fmtDbus(data.genie_revenue_t30d ?? 0),
-            tone: "good",
-            filter: { label: "Accounts with Genie spend (30d)", params: { has_spend: "true" } },
           },
         ]}
       />
@@ -559,7 +551,6 @@ function GenieAccountsTab({ data }: { data: DashboardOut }) {
             tone: (data.whitespace_accounts ?? 0) > 0 ? "warn" : undefined,
             filter: { label: "Whitespace — no Genie use case", params: { whitespace: "true" } },
           },
-          { key: "pipeline", icon: <DollarSign className="h-4 w-4" />, label: "Est. pipeline $/mo", display: fmtDbus(data.total_monthly_dbus ?? 0) },
         ]}
       />
 

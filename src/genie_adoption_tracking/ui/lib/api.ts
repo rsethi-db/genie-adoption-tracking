@@ -254,6 +254,7 @@ export interface DashboardOut {
     avg_readiness_pct?: number;
     blockers_by_category: BlockerAggOut[];
     brickroad_issues?: BrickroadIssueOut[];
+    est_pipeline_per_month?: number;
     funnel: FunnelBucketOut[];
     genie_active_accounts?: number;
     genie_ready_accounts?: GenieReadyAccountOut[];
@@ -268,6 +269,7 @@ export interface DashboardOut {
     pp_off_enforce_on?: number;
     spend_buckets?: SpendBucketOut[];
     stalled: StalledUseCaseOut[];
+    sub_verticals?: SubVerticalStatOut[];
     tier_green?: number;
     tier_red?: number;
     tier_unknown?: number;
@@ -383,6 +385,15 @@ export interface StalledUseCaseOut {
     stage: string;
     title: string;
 }
+export interface SubVerticalStatOut {
+    accounts: number;
+    arr?: number;
+    avg_readiness_pct?: number;
+    genie_active: number;
+    genie_spend_90d?: number;
+    sub_vertical: string;
+    whitespace: number;
+}
 export interface TaskResourceOut {
     label: string;
     url: string;
@@ -476,6 +487,7 @@ export interface ListAccountsParams {
     open_issues?: boolean;
     genie_active?: boolean;
     has_spend?: boolean;
+    sub_vertical?: string;
 }
 export const listAccounts = async (params?: ListAccountsParams, options?: RequestInit): Promise<{
     data: AccountOut[];
@@ -491,6 +503,7 @@ export const listAccounts = async (params?: ListAccountsParams, options?: Reques
     if (params?.open_issues != null) searchParams.set("open_issues", String(params?.open_issues));
     if (params?.genie_active != null) searchParams.set("genie_active", String(params?.genie_active));
     if (params?.has_spend != null) searchParams.set("has_spend", String(params?.has_spend));
+    if (params?.sub_vertical != null) searchParams.set("sub_vertical", String(params?.sub_vertical));
     const queryString = searchParams.toString();
     const url = queryString ? `/api/accounts?${queryString}` : "/api/accounts";
     const res = await fetch(url, {

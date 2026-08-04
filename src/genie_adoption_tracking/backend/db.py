@@ -75,6 +75,8 @@ class Account(SQLModel, table=True):
     # Active Genie spaces (data rooms with usage in the trailing 30 days), summed
     # across the account's workspaces (metric_store.fct_data_room_messages_daily).
     active_genie_spaces: int = Field(default=0)
+    # Est. pipeline $/mo — open-opportunity booking ARR / 12 (gtm_silver.opportunity_detail).
+    est_pipeline_per_month: float = Field(default=0.0)
     created_at: datetime = Field(default_factory=_utcnow)
     created_by: str = Field(default="")
 
