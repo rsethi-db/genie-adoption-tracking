@@ -446,9 +446,7 @@ function PartnerPoweredTab({ data }: { data: DashboardOut }) {
   return (
     <div className="space-y-6">
       <SoWhat>
-        Partner-Powered AI must be on for Genie to consume. Flagged “off” when an
-        account has an explicitly-off, actively-consuming workspace (matches the FINS
-        Genie logfood dashboard).
+        Partner-Powered AI must be on for Genie to consume.
       </SoWhat>
 
       <TileGrid
