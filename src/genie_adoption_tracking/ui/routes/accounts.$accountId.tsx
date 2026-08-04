@@ -576,6 +576,7 @@ function AdoptionTaskCard({
   const blocked = value.status === "blocked";
   // All five statuses (incl. Blocked) are available on every task.
   const statusOptions = ADOPTION_STATUSES;
+  const [showResources, setShowResources] = useState(false);
   return (
     <div
       className={cn(
@@ -661,19 +662,37 @@ function AdoptionTaskCard({
         );
         if (deduped.length === 0) return null;
         return (
-          <div className="mt-2 space-y-1">
-            {deduped.map((r) => (
-              <a
-                key={r.url}
-                href={r.url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1 text-xs text-primary hover:underline"
-              >
-                <ExternalLink className="h-3 w-3 shrink-0" />
-                {r.label}
-              </a>
-            ))}
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => setShowResources((s) => !s)}
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              <ChevronDown
+                className={cn(
+                  "h-3.5 w-3.5 transition-transform",
+                  showResources && "rotate-180"
+                )}
+              />
+              Resources
+              <span className="text-muted-foreground/70">({deduped.length})</span>
+            </button>
+            {showResources && (
+              <div className="mt-1.5 space-y-1 pl-4">
+                {deduped.map((r) => (
+                  <a
+                    key={r.url}
+                    href={r.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                    {r.label}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
         );
       })()}
