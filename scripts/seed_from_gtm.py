@@ -90,23 +90,37 @@ STAGE_MAP = {
 }
 # Everything else (Lost, Disqualified) is skipped — not actionable for the playbook.
 
-# ALL FINS customer accounts (the full 517 universe) with owners, sub-vertical and
-# ARR. Accounts with no Genie use case are "whitespace" — still shown so the field
-# and leadership see the untapped list.
+# LIVE FINS customer accounts, keyed by SFDC account_id (the stable identity — two
+# accounts can share a display name, so we never dedupe by name). Universe = active
+# customers: on the latest account_dim snapshot, status Customer%, FINS, with ANY paid
+# usage (> $0) ever in fin_live_gold.paid_usage_metering. Dormant/expired accounts
+# (no paid usage) are excluded so they don't inflate whitespace or drag ratios.
+# Accounts with no Genie use case are still "whitespace" — shown as the untapped list.
 ACCOUNTS_QUERY = """
-SELECT DISTINCT account_name,
-  COALESCE(account_executive, '') AS ae,
-  COALESCE(last_solution_architect_engaged_user_name,
-           last_solution_architect_engaged, '') AS sa,
-  COALESCE(dsa, '') AS dsa,
-  COALESCE(sales_subregion_level_2, '') AS sub_vertical,
-  COALESCE(t3m_annualized, arr, 0) AS arr
-FROM main.gtm_silver.account_dim
-WHERE sales_business_unit = 'AMER Industries'
-  AND sales_subregion_level_1 = 'FINS'
-  AND account_status LIKE '%Customer%'
-  AND account_name IS NOT NULL
-ORDER BY account_name
+WITH latest_accounts AS (
+  SELECT * FROM main.gtm_silver.account_dim
+  WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM main.gtm_silver.account_dim)
+),
+active_usage AS (
+  SELECT DISTINCT sfdc_account_id
+  FROM main.fin_live_gold.paid_usage_metering
+  WHERE usage_dollars > 0 AND date <= current_date()
+)
+SELECT a.account_id,
+  a.account_name,
+  COALESCE(a.account_executive, '') AS ae,
+  COALESCE(a.last_solution_architect_engaged_user_name,
+           a.last_solution_architect_engaged, '') AS sa,
+  COALESCE(a.dsa, '') AS dsa,
+  COALESCE(a.sales_subregion_level_2, '') AS sub_vertical,
+  COALESCE(a.t3m_annualized, a.arr, 0) AS arr
+FROM latest_accounts a
+JOIN active_usage u ON a.account_id = u.sfdc_account_id
+WHERE a.sales_business_unit = 'AMER Industries'
+  AND a.sales_subregion_level_1 = 'FINS'
+  AND a.account_status LIKE 'Customer%'
+  AND a.account_name IS NOT NULL
+ORDER BY a.account_name
 """
 
 # Partner-Powered AI status per FINS account, from prod_settings_log. PP must be ON
@@ -307,7 +321,7 @@ genie_issue_ids AS (
   WHERE pa.category_path LIKE 'Genie%' OR pa.name LIKE '%Genie%'
   GROUP BY ipa.brick_road_issue_id
 )
-SELECT f.account_name,
+SELECT f.sfdc_id AS account_id,
   i.id, COALESCE(i.display_id,'') AS display_id, COALESCE(i.title,'') AS title,
   COALESCE(i.severity,'') AS severity, COALESCE(i.status,'') AS status,
   COALESCE(g.product_area,'') AS product_area,
@@ -317,7 +331,7 @@ FROM main.it_brick_road.issues i
   JOIN genie_issue_ids g ON i.id = g.issue_id
   JOIN fins f ON i.customer_id = f.sfdc_id
 WHERE i.is_deleted = false
-ORDER BY f.account_name
+ORDER BY f.sfdc_id
 """
 
 # ONE ROW PER real Genie use case from use_case_detail, with its actual name, stage
@@ -331,7 +345,7 @@ WITH filtered_accounts AS (
     AND account_status LIKE '%Customer%'
     AND account_name IS NOT NULL
 )
-SELECT a.account_name,
+SELECT a.account_id,
   u.usecase_id,
   COALESCE(NULLIF(TRIM(u.usecase_name), ''), 'Genie use case') AS usecase_name,
   COALESCE(u.usecase_description, u.description, '') AS description,
@@ -341,7 +355,7 @@ FROM main.gtm_silver.use_case_detail u
   JOIN filtered_accounts a ON u.account_id = a.account_id
 WHERE LOWER(COALESCE(u.usecase_name, '')) LIKE '%genie%'
    OR LOWER(COALESCE(u.description, '')) LIKE '%genie%'
-ORDER BY a.account_name, u.stage
+ORDER BY a.account_id, u.stage
 """
 
 
@@ -399,12 +413,13 @@ def fetch_accounts(ws) -> list[dict]:
     for r in _run_query(ws, ACCOUNTS_QUERY):
         rows.append(
             {
-                "name": r[0],
-                "ae": r[1] or "",
-                "sa": r[2] or "",
-                "dsa": r[3] or "",
-                "sub_vertical": r[4] or "",
-                "arr": float(r[5] or 0),
+                "account_id": r[0],
+                "name": r[1],
+                "ae": r[2] or "",
+                "sa": r[3] or "",
+                "dsa": r[4] or "",
+                "sub_vertical": r[5] or "",
+                "arr": float(r[6] or 0),
             }
         )
     return rows
@@ -415,7 +430,7 @@ def fetch_use_cases(ws) -> list[dict]:
     for r in _run_query(ws, USE_CASES_QUERY):
         rows.append(
             {
-                "name": r[0],
+                "account_id": r[0],
                 "usecase_id": r[1],
                 "usecase_name": r[2] or "Genie use case",
                 "description": r[3] or "",
@@ -489,7 +504,7 @@ def fetch_issues(ws) -> list[dict]:
     for r in _run_query(ws, ISSUES_QUERY):
         rows.append(
             {
-                "account_name": r[0],
+                "account_id": r[0],
                 "id": r[1],
                 "display_id": r[2] or "",
                 "title": r[3] or "",
@@ -644,32 +659,37 @@ def main() -> None:
             "so its startup migration adds the column, then re-run this seed."
         )
 
-    # UPSERT-BY-NAME + TRANSACTIONAL refresh.
-    #   * Accounts are matched by NAME: existing rows keep their id and get their GTM
-    #     fields updated in place; new accounts are inserted. IDs never change, so
-    #     user-entered data (gat_adoption_task_state, gat_account_plan_item) keeps its
-    #     FK and is never touched — old entries are ALWAYS maintained.
-    #   * GTM-mirror children (use_case + its stage_transition, account_issue) are
-    #     rebuilt fresh (they carry no user data).
-    #   * The ENTIRE refresh runs in ONE transaction: if anything fails midway it rolls
-    #     back to the previous good state — a dropped connection can never empty the DB.
-    n_accounts = n_new = n_use_cases = n_issues = 0
+    # UPSERT-BY-SFDC-ACCOUNT-ID + TRANSACTIONAL refresh.
+    #   * Accounts are matched by SFDC account_id (the stable identity — distinct
+    #     accounts can share a display name, so name is NOT a safe key). On the FIRST
+    #     id-keyed run, existing rows have no sfdc_account_id yet, so we FALL BACK to
+    #     matching by name to adopt their internal uuid + backfill the id — this keeps
+    #     hand-entered data (task states/plan/history, FK'd to the uuid) attached.
+    #   * Enrichment (PP/WS/AIM/spend/t30d) is still keyed by NAME; the few accounts
+    #     that share a name will share those status values (small, explainable).
+    #   * GTM-mirror children (use_case + stage_transition, account_issue) rebuilt fresh.
+    #   * ONE transaction: any failure rolls back to the previous good state.
+    n_accounts = n_new = n_use_cases = n_issues = n_pruned = 0
     with Session(engine) as session:
         with session.begin():  # atomic: commit-all-or-rollback
-            existing = {a.name: a for a in session.exec(select(Account)).all()}
-            account_ids: dict[str, str] = {}
+            all_existing = session.exec(select(Account)).all()
+            by_sfdc = {a.sfdc_account_id: a for a in all_existing if a.sfdc_account_id}
+            by_name = {a.name: a for a in all_existing}  # first-run fallback
+            account_ids: dict[str, str] = {}  # sfdc_account_id -> internal uuid
 
-            # --- Accounts: update in place by name, or insert new ---
+            # --- Accounts: update in place by sfdc id (or name on first run), else insert ---
             seen: set[str] = set()
             for a in accounts:
-                name = a["name"]
-                if name in seen:
+                sfdc = a["account_id"]
+                if not sfdc or sfdc in seen:
                     continue
-                seen.add(name)
+                seen.add(sfdc)
+                name = a["name"]
                 pp_row = pp.get(name, {})
                 ws_row = wsc.get(name, {})
                 aim_row = aim.get(name, {})
                 fields = dict(
+                    name=name,
                     sub_vertical=a["sub_vertical"],
                     ae_owner=a["ae"],
                     sa_owner=a["sa"],
@@ -691,16 +711,24 @@ def main() -> None:
                     active_genie_spaces=t30d.get(name, {}).get("active_genie_spaces", 0),
                     genie_active=pp_row.get("genie_active", False),
                 )
-                acct = existing.get(name)
+                # Match by sfdc id; else adopt an existing name-keyed row (first run);
+                # else it's genuinely new. by_name is only used when NOT already claimed
+                # by another sfdc id this run (guards duplicate names on first run).
+                acct = by_sfdc.get(sfdc)
                 if acct is None:
-                    acct = Account(id=_uid(), name=name, created_by=SEED_MARKER, **fields)  # ty: ignore[invalid-argument-type]
+                    cand = by_name.get(name)
+                    if cand is not None and not cand.sfdc_account_id:
+                        acct = cand  # first-run adoption: keep its uuid, stamp the id
+                if acct is None:
+                    acct = Account(id=_uid(), sfdc_account_id=sfdc, created_by=SEED_MARKER, **fields)  # ty: ignore[invalid-argument-type]
                     session.add(acct)
                     n_new += 1
                 else:
+                    acct.sfdc_account_id = sfdc
                     for k, v in fields.items():
                         setattr(acct, k, v)
                     session.add(acct)
-                account_ids[name] = acct.id
+                account_ids[sfdc] = acct.id
                 n_accounts += 1
             session.flush()
 
@@ -721,7 +749,7 @@ def main() -> None:
                 stage = STAGE_MAP.get(row["stage"])
                 if stage is None:
                     continue
-                aid = account_ids.get(row["name"])
+                aid = account_ids.get(row["account_id"])
                 if aid is None:
                     continue
                 ucid = _uid()
@@ -745,7 +773,7 @@ def main() -> None:
                 )
 
             for row in issues:
-                aid = account_ids.get(row["account_name"])
+                aid = account_ids.get(row["account_id"])
                 if aid is None:
                     continue
                 session.add(
@@ -757,12 +785,52 @@ def main() -> None:
                     )
                 )
                 n_issues += 1
+
+            # --- Prune accounts that dropped out of the live universe --------------
+            # An account previously seeded but NOT in this run's active set (dormant /
+            # lost paid usage) is removed — BUT only if it is GTM-seeded AND carries no
+            # user-entered data (no adoption task state/history, no plan items). Any
+            # account someone has worked is always kept, so hand-entered signal is safe.
+            # Set-based (one statement per table, not a per-row loop — that made hundreds
+            # of round-trips and stranded on a slow Lakebase connection).
+            live_ids = set(account_ids.values())
+            prunable = [
+                a.id for a in all_existing
+                if a.id not in live_ids and a.created_by == SEED_MARKER
+            ]
+            if prunable:
+                conn = session.connection()  # raw SQL via the bound connection
+                worked = {
+                    r[0]
+                    for r in conn.execute(
+                        text(
+                            "SELECT account_id FROM gat_adoption_task_state WHERE account_id = ANY(:ids) "
+                            "UNION SELECT account_id FROM gat_adoption_task_history WHERE account_id = ANY(:ids) "
+                            "UNION SELECT account_id FROM gat_account_plan_item WHERE account_id = ANY(:ids)"
+                        ),
+                        {"ids": prunable},
+                    ).all()
+                }
+                to_drop = [aid for aid in prunable if aid not in worked]
+                if to_drop:
+                    p = {"ids": to_drop}
+                    conn.execute(
+                        text(
+                            "DELETE FROM gat_stage_transition WHERE use_case_id IN "
+                            "(SELECT id FROM gat_use_case WHERE account_id = ANY(:ids))"
+                        ),
+                        p,
+                    )
+                    conn.execute(text("DELETE FROM gat_use_case WHERE account_id = ANY(:ids)"), p)
+                    conn.execute(text("DELETE FROM gat_account_issue WHERE account_id = ANY(:ids)"), p)
+                    conn.execute(text("DELETE FROM gat_account WHERE id = ANY(:ids)"), p)
+                    n_pruned = len(to_drop)
             # session.begin() commits here on success, or rolls back on any exception.
 
     print(
         f"Refreshed {n_accounts} accounts ({n_new} new), {n_use_cases} use cases, "
-        f"{n_issues} issues. User entries (adoption tasks + plan notes) preserved "
-        f"in place — IDs unchanged."
+        f"{n_issues} issues. Pruned {n_pruned} dormant accounts (no user data). "
+        f"User entries (adoption tasks + plan notes) preserved in place."
     )
 
 

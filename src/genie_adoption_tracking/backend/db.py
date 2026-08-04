@@ -33,6 +33,11 @@ class Account(SQLModel, table=True):
     __tablename__ = "gat_account"
 
     id: str = Field(primary_key=True)
+    # SFDC account id — the stable GTM identity. Distinct accounts can share a display
+    # name (e.g. CRA International, E&Y HQ), so the seed keys/dedupes by this, not name.
+    # PK stays the internal uuid so existing FK'd user data (task states, plan, history)
+    # is never re-parented.
+    sfdc_account_id: str = Field(default="", index=True)
     name: str = Field(index=True)
     sub_vertical: str = Field(default="")
     ae_owner: str = Field(default="")
