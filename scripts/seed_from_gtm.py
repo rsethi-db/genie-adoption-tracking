@@ -92,9 +92,10 @@ STAGE_MAP = {
 
 # LIVE FINS customer accounts, keyed by SFDC account_id (the stable identity — two
 # accounts can share a display name, so we never dedupe by name). Universe = active
-# customers: on the latest account_dim snapshot, status Customer%, FINS, with ANY paid
-# usage (> $0) ever in fin_live_gold.paid_usage_metering. Dormant/expired accounts
-# (no paid usage) are excluded so they don't inflate whitespace or drag ratios.
+# customers: on the latest account_dim snapshot, status Customer%, FINS, with paid
+# usage (> $0) in the LAST 30 DAYS (fin_live_gold.paid_usage_metering). Lapsed/dormant
+# accounts (no recent usage, often no running workspace) are excluded so they don't
+# inflate whitespace or drag ratios.
 # Accounts with no Genie use case are still "whitespace" — shown as the untapped list.
 ACCOUNTS_QUERY = """
 WITH latest_accounts AS (
@@ -104,7 +105,8 @@ WITH latest_accounts AS (
 active_usage AS (
   SELECT DISTINCT sfdc_account_id
   FROM main.fin_live_gold.paid_usage_metering
-  WHERE usage_dollars > 0 AND date <= current_date()
+  WHERE usage_dollars > 0
+    AND date BETWEEN date_sub(current_date(), 30) AND current_date()
 )
 SELECT a.account_id,
   a.account_name,

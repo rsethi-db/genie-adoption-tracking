@@ -125,7 +125,7 @@ function DashboardBody() {
 
       {/* Headline row (start big) — click a tile to expand the accounts beneath it */}
       <TileGrid
-        cols="lg:grid-cols-3 xl:grid-cols-6"
+        cols="lg:grid-cols-5"
         tiles={[
           { key: "total", icon: <Users className="h-4 w-4" />, label: "FINS accounts", value: data.total_accounts },
           {
