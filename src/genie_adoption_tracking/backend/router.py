@@ -137,6 +137,22 @@ def _issue_is_open(status: str) -> bool:
     return status.lower() not in _CLOSED_ISSUE_STATUSES
 
 
+def _is_whitespace(a: Account) -> bool:
+    """Whitespace = a live opportunity: the account CAN consume Genie and is
+    provisioned, but has no active Genie agent right now. Specifically —
+      * PP AI can consume: on / on_default, OR off with enforce not on (workspaces
+        can still flip PP on) — i.e. NOT hard-blocked;
+      * user provisioning is available (on or partial); AND
+      * no active Genie agent in the last 30 days (active_genie_spaces == 0).
+    This surfaces "ready but idle → go activate" accounts, not just untracked ones."""
+    pp_can_consume = a.pp_status in ("on", "on_default") or (
+        a.pp_status == "off" and a.pp_enforce != "on"
+    )
+    provisioned = a.provisioning_status in ("on", "partial")
+    idle = (a.active_genie_spaces or 0) == 0
+    return pp_can_consume and provisioned and idle
+
+
 # Genie T30D-spend buckets, matching the logfood PP-off page's distribution histogram.
 _SPEND_BUCKETS: list[tuple[str, float]] = [
     ("$0", 0.0),
@@ -434,11 +450,16 @@ def list_accounts(
             a.pp_status == "off" and a.pp_enforce != "on"
         ):
             return False
-        if provisioning and a.provisioning_status != provisioning:
-            return False
+        if provisioning:
+            # "off" means not provisioned = off OR blank/unknown (GTM's treatment).
+            if provisioning == "off":
+                if a.provisioning_status in ("on", "partial"):
+                    return False
+            elif a.provisioning_status != provisioning:
+                return False
         if stage and stage not in stages_by_acct.get(a.id, set()):
             return False
-        if whitespace and a.id in stages_by_acct:
+        if whitespace and not _is_whitespace(a):
             return False
         if has_usecase and a.id not in stages_by_acct:
             return False
@@ -1224,7 +1245,11 @@ def get_dashboard(session: Dependencies.Session):
     pp_off_total = sum(1 for a in accounts if a.pp_status == "off")
     pp_on_total = sum(1 for a in accounts if a.pp_status in ("on", "on_default"))
     # "Provisioning off" = no user provisioning at all (neither AIM nor SCIM).
-    aim_off_total = sum(1 for a in accounts if a.provisioning_status == "off")
+    # GTM treats blank/unknown provisioning as NOT provisioned, so "No provisioning"
+    # counts off + unknown (only on/partial are considered provisioned).
+    aim_off_total = sum(
+        1 for a in accounts if a.provisioning_status not in ("on", "partial")
+    )
     all_issues = session.exec(select(AccountIssue)).all()
     open_issue_total = sum(1 for i in all_issues if _issue_is_open(i.status))
     accounts_with_issues = len(
@@ -1257,9 +1282,10 @@ def get_dashboard(session: Dependencies.Session):
         for i in range(len(_SPEND_BUCKETS))
     ]
 
-    # Genie Accounts page — whitespace (no Genie use case), ranked by ARR.
+    # Genie Accounts page — whitespace = can-consume + provisioned + idle (see
+    # _is_whitespace), ranked by ARR. (accts_with_uc kept for the sub-vertical rollup.)
     accts_with_uc = {uc.account_id for uc in use_cases}
-    whitespace = [a for a in accounts if a.id not in accts_with_uc]
+    whitespace = [a for a in accounts if _is_whitespace(a)]
     whitespace_top = [
         WhitespaceAccountOut(
             id=a.id, name=a.name, sub_vertical=a.sub_vertical,
@@ -1308,7 +1334,7 @@ def get_dashboard(session: Dependencies.Session):
             sub_vertical=sv,
             accounts=len(grp),
             genie_active=sum(1 for a in grp if a.genie_active),
-            whitespace=sum(1 for a in grp if a.id not in accts_with_uc),
+            whitespace=sum(1 for a in grp if _is_whitespace(a)),
             genie_spend_90d=round(sum(a.genie_spend_90d for a in grp), 2),
             avg_readiness_pct=round(
                 sum(_workflow_readiness(states_by_acct.get(a.id, {})) for a in grp)

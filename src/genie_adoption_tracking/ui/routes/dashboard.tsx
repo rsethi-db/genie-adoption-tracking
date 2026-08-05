@@ -625,7 +625,11 @@ function GenieAccountsTab({ data }: { data: DashboardOut }) {
 
   return (
     <div className="space-y-6">
-      <SoWhat>The UCO funnel, whitespace, and account lookup.</SoWhat>
+      <SoWhat>
+        The UCO funnel and account lookup. Whitespace = accounts that can consume Genie
+        (PP on, or off but not enforced) and are provisioned, but have no active Genie
+        agent yet — ready to activate.
+      </SoWhat>
 
       {/* Account search — find one account by name, sub-vertical, or owner */}
       <div>
@@ -681,7 +685,7 @@ function GenieAccountsTab({ data }: { data: DashboardOut }) {
             label: "Whitespace",
             value: data.whitespace_accounts ?? 0,
             tone: (data.whitespace_accounts ?? 0) > 0 ? "warn" : undefined,
-            filter: { label: "Whitespace — no Genie use case", params: { whitespace: "true" } },
+            filter: { label: "Whitespace — can consume + provisioned, no active agent", params: { whitespace: "true" } },
           },
         ]}
       />
