@@ -18,6 +18,7 @@ import {
   Gauge,
   Bug,
   Sparkles,
+  MessageSquare,
   ArrowUpDown,
   X,
   Loader2,
@@ -527,6 +528,12 @@ function PartnerPoweredTab({ data }: { data: DashboardOut }) {
             value: data.pp_off_enforce_off ?? 0,
             tone: (data.pp_off_enforce_off ?? 0) > 0 ? "warn" : undefined,
             filter: { label: "PP AI off · enforce off", params: { pp: "off_enforce_off" } },
+          },
+          {
+            key: "spaces",
+            icon: <MessageSquare className="h-4 w-4" />,
+            label: "Active Genie spaces (30d)",
+            value: data.active_genie_spaces ?? 0,
           },
         ]}
       />
