@@ -145,6 +145,34 @@ export interface AdoptionWorkflowOut {
     stages: AdoptionStageOut[];
     tasks: AdoptionTaskOut[];
 }
+export interface AudienceAccountOut {
+    account_id: string;
+    account_name: string;
+    ae_email?: string;
+    ae_owner?: string;
+    arr?: number;
+    genie_spend_90d?: number;
+    pp_status?: string;
+    sa_email?: string;
+    sa_owner?: string;
+}
+export interface AudienceFilters {
+    arr_max?: number | null;
+    arr_min?: number | null;
+    genie_active?: boolean | null;
+    genie_spend_max?: number | null;
+    genie_spend_min?: number | null;
+    pp_status?: string | null;
+    sub_vertical?: string | null;
+}
+export interface AudienceQueryIn {
+    text: string;
+}
+export interface AudienceQueryOut {
+    accounts: AudienceAccountOut[];
+    filters: AudienceFilters;
+    interpreted: string;
+}
 export interface BlockerAggOut {
     category_key: string;
     category_name: string;
@@ -174,41 +202,47 @@ export interface BlockerStateOut {
     resolved: boolean;
     stage: string;
 }
-export interface CampaignIn {
-    ask: string;
-    cta: string;
-    deadline?: string;
-    priority?: string;
-    segment?: string;
-    sub_vertical?: string;
-    title: string;
-}
-export interface CampaignOut {
-    active?: boolean;
-    ask: string;
-    created_at: string;
-    created_by?: string;
-    cta: string;
-    deadline?: string;
-    id: string;
-    mailto_url?: string;
-    priority?: string;
-    segment: string;
-    segment_label: string;
-    slack_text?: string;
-    sub_vertical?: string;
-    target_count?: number;
-    targets?: CampaignTargetOut[];
-    title: string;
-}
-export interface CampaignPreviewOut {
-    target_count: number;
-    targets?: CampaignTargetOut[];
-}
-export interface CampaignTargetOut {
+export interface CampaignAccountOut {
     account_id: string;
     account_name: string;
     owners: string[];
+}
+export interface CampaignActivateIn {
+    end_date?: string;
+    start_date?: string;
+}
+export interface CampaignFormOut {
+    accounts?: CampaignAccountOut[];
+    campaign_id: string;
+    end_date?: string;
+    questions?: QuestionOut[];
+    start_date?: string;
+    status: string;
+    title: string;
+}
+export interface CampaignIn {
+    account_ids?: string[];
+    audience_text?: string;
+    end_date?: string;
+    form_url?: string;
+    start_date?: string;
+    title: string;
+}
+export interface CampaignOut {
+    account_count?: number;
+    accounts?: CampaignAccountOut[];
+    audience_text?: string;
+    created_at: string;
+    created_by?: string;
+    end_date?: string;
+    form_token?: string;
+    form_url?: string;
+    id: string;
+    question_count?: number;
+    response_count?: number;
+    start_date?: string;
+    status?: string;
+    title: string;
 }
 export interface ChecklistItemOut {
     key: string;
@@ -307,6 +341,23 @@ export interface PlaybookOut {
     stages: StageOut[];
     version: string;
 }
+export interface QuestionIn {
+    options?: string[];
+    prompt: string;
+    qtype?: string;
+    required?: boolean;
+}
+export interface QuestionOut {
+    id: string;
+    options?: string[];
+    position: number;
+    prompt: string;
+    qtype: string;
+    required?: boolean;
+}
+export interface QuestionnaireSaveIn {
+    questions: QuestionIn[];
+}
 export interface ResourceClickIn {
     resource_key: string;
     stage?: string;
@@ -319,13 +370,18 @@ export interface ResourceOut {
     stages: string[];
     url: string;
 }
-export interface SegmentOut {
-    description: string;
-    key: string;
-    label: string;
-    tpl_ask?: string;
-    tpl_cta?: string;
-    tpl_title?: string;
+export interface ResponseOut {
+    account_id?: string;
+    account_name?: string;
+    answers?: Record<string, unknown>;
+    id: string;
+    submitted_at: string;
+    submitted_by?: string;
+}
+export interface ResponseSubmitIn {
+    account_id?: string;
+    account_name?: string;
+    answers?: Record<string, unknown>;
 }
 export interface StageAdvanceIn {
     to_stage: string;
@@ -804,64 +860,6 @@ export function useSaveAdoptionTasks(options?: {
         ...options?.mutation
     });
 }
-export interface ListAccountCampaignsParams {
-    account_id: string;
-}
-export const listAccountCampaigns = async (params: ListAccountCampaignsParams, options?: RequestInit): Promise<{
-    data: CampaignOut[];
-}> =>{
-    const res = await fetch(`/api/accounts/${params.account_id}/campaigns`, {
-        ...options,
-        method: "GET"
-    });
-    if (!res.ok) {
-        const body = await res.text();
-        let parsed: unknown;
-        try {
-            parsed = JSON.parse(body);
-        } catch  {
-            parsed = body;
-        }
-        throw new ApiError(res.status, res.statusText, parsed);
-    }
-    return {
-        data: await res.json()
-    };
-};
-export const listAccountCampaignsKey = (params?: ListAccountCampaignsParams)=>{
-    return [
-        "/api/accounts/{account_id}/campaigns",
-        params
-    ] as const;
-};
-export function useListAccountCampaigns<TData = {
-    data: CampaignOut[];
-}>(options: {
-    params: ListAccountCampaignsParams;
-    query?: Omit<UseQueryOptions<{
-        data: CampaignOut[];
-    }, ApiError, TData>, "queryKey" | "queryFn">;
-}) {
-    return useQuery({
-        queryKey: listAccountCampaignsKey(options.params),
-        queryFn: ()=>listAccountCampaigns(options.params),
-        ...options?.query
-    });
-}
-export function useListAccountCampaignsSuspense<TData = {
-    data: CampaignOut[];
-}>(options: {
-    params: ListAccountCampaignsParams;
-    query?: Omit<UseSuspenseQueryOptions<{
-        data: CampaignOut[];
-    }, ApiError, TData>, "queryKey" | "queryFn">;
-}) {
-    return useSuspenseQuery({
-        queryKey: listAccountCampaignsKey(options.params),
-        queryFn: ()=>listAccountCampaigns(options.params),
-        ...options?.query
-    });
-}
 export interface ToggleAccountPlanItemParams {
     account_id: string;
     "X-Forwarded-Host"?: string | null;
@@ -1081,21 +1079,17 @@ export function useCreateCampaign(options?: {
         ...options?.mutation
     });
 }
-export interface PreviewCampaignSegmentParams {
-    segment?: string;
-    sub_vertical?: string;
-}
-export const previewCampaignSegment = async (params?: PreviewCampaignSegmentParams, options?: RequestInit): Promise<{
-    data: CampaignPreviewOut;
+export const queryCampaignAudience = async (data: AudienceQueryIn, options?: RequestInit): Promise<{
+    data: AudienceQueryOut;
 }> =>{
-    const searchParams = new URLSearchParams();
-    if (params?.segment != null) searchParams.set("segment", String(params?.segment));
-    if (params?.sub_vertical != null) searchParams.set("sub_vertical", String(params?.sub_vertical));
-    const queryString = searchParams.toString();
-    const url = queryString ? `/api/campaigns/preview?${queryString}` : "/api/campaigns/preview";
-    const res = await fetch(url, {
+    const res = await fetch("/api/campaigns/audience/query", {
         ...options,
-        method: "GET"
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...options?.headers
+        },
+        body: JSON.stringify(data)
     });
     if (!res.ok) {
         const body = await res.text();
@@ -1111,46 +1105,22 @@ export const previewCampaignSegment = async (params?: PreviewCampaignSegmentPara
         data: await res.json()
     };
 };
-export const previewCampaignSegmentKey = (params?: PreviewCampaignSegmentParams)=>{
-    return [
-        "/api/campaigns/preview",
-        params
-    ] as const;
-};
-export function usePreviewCampaignSegment<TData = {
-    data: CampaignPreviewOut;
-}>(options?: {
-    params?: PreviewCampaignSegmentParams;
-    query?: Omit<UseQueryOptions<{
-        data: CampaignPreviewOut;
-    }, ApiError, TData>, "queryKey" | "queryFn">;
+export function useQueryCampaignAudience(options?: {
+    mutation?: UseMutationOptions<{
+        data: AudienceQueryOut;
+    }, ApiError, AudienceQueryIn>;
 }) {
-    return useQuery({
-        queryKey: previewCampaignSegmentKey(options?.params),
-        queryFn: ()=>previewCampaignSegment(options?.params),
-        ...options?.query
+    return useMutation({
+        mutationFn: (data)=>queryCampaignAudience(data),
+        ...options?.mutation
     });
 }
-export function usePreviewCampaignSegmentSuspense<TData = {
-    data: CampaignPreviewOut;
-}>(options?: {
-    params?: PreviewCampaignSegmentParams;
-    query?: Omit<UseSuspenseQueryOptions<{
-        data: CampaignPreviewOut;
-    }, ApiError, TData>, "queryKey" | "queryFn">;
-}) {
-    return useSuspenseQuery({
-        queryKey: previewCampaignSegmentKey(options?.params),
-        queryFn: ()=>previewCampaignSegment(options?.params),
-        ...options?.query
-    });
-}
-export const listCampaignSegments = async (options?: RequestInit): Promise<{
-    data: SegmentOut[];
+export const seedDemoAccounts = async (options?: RequestInit): Promise<{
+    data: unknown;
 }> =>{
-    const res = await fetch("/api/campaigns/segments", {
+    const res = await fetch("/api/campaigns/audience/seed-demo", {
         ...options,
-        method: "GET"
+        method: "POST"
     });
     if (!res.ok) {
         const body = await res.text();
@@ -1166,35 +1136,14 @@ export const listCampaignSegments = async (options?: RequestInit): Promise<{
         data: await res.json()
     };
 };
-export const listCampaignSegmentsKey = ()=>{
-    return [
-        "/api/campaigns/segments"
-    ] as const;
-};
-export function useListCampaignSegments<TData = {
-    data: SegmentOut[];
-}>(options?: {
-    query?: Omit<UseQueryOptions<{
-        data: SegmentOut[];
-    }, ApiError, TData>, "queryKey" | "queryFn">;
+export function useSeedDemoAccounts(options?: {
+    mutation?: UseMutationOptions<{
+        data: unknown;
+    }, ApiError, void>;
 }) {
-    return useQuery({
-        queryKey: listCampaignSegmentsKey(),
-        queryFn: ()=>listCampaignSegments(),
-        ...options?.query
-    });
-}
-export function useListCampaignSegmentsSuspense<TData = {
-    data: SegmentOut[];
-}>(options?: {
-    query?: Omit<UseSuspenseQueryOptions<{
-        data: SegmentOut[];
-    }, ApiError, TData>, "queryKey" | "queryFn">;
-}) {
-    return useSuspenseQuery({
-        queryKey: listCampaignSegmentsKey(),
-        queryFn: ()=>listCampaignSegments(),
-        ...options?.query
+    return useMutation({
+        mutationFn: ()=>seedDemoAccounts(),
+        ...options?.mutation
     });
 }
 export interface GetCampaignParams {
@@ -1255,13 +1204,91 @@ export function useGetCampaignSuspense<TData = {
         ...options?.query
     });
 }
-export interface ArchiveCampaignParams {
+export interface DeleteCampaignParams {
     campaign_id: string;
 }
-export const archiveCampaign = async (params: ArchiveCampaignParams, options?: RequestInit): Promise<{
+export const deleteCampaign = async (params: DeleteCampaignParams, options?: RequestInit): Promise<{
+    data: unknown;
+}> =>{
+    const res = await fetch(`/api/campaigns/${params.campaign_id}`, {
+        ...options,
+        method: "DELETE"
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export function useDeleteCampaign(options?: {
+    mutation?: UseMutationOptions<{
+        data: unknown;
+    }, ApiError, {
+        params: DeleteCampaignParams;
+    }>;
+}) {
+    return useMutation({
+        mutationFn: (vars)=>deleteCampaign(vars.params),
+        ...options?.mutation
+    });
+}
+export interface ActivateCampaignParams {
+    campaign_id: string;
+}
+export const activateCampaign = async (params: ActivateCampaignParams, data: CampaignActivateIn, options?: RequestInit): Promise<{
     data: CampaignOut;
 }> =>{
-    const res = await fetch(`/api/campaigns/${params.campaign_id}/archive`, {
+    const res = await fetch(`/api/campaigns/${params.campaign_id}/activate`, {
+        ...options,
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...options?.headers
+        },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export function useActivateCampaign(options?: {
+    mutation?: UseMutationOptions<{
+        data: CampaignOut;
+    }, ApiError, {
+        params: ActivateCampaignParams;
+        data: CampaignActivateIn;
+    }>;
+}) {
+    return useMutation({
+        mutationFn: (vars)=>activateCampaign(vars.params, vars.data),
+        ...options?.mutation
+    });
+}
+export interface CloseCampaignParams {
+    campaign_id: string;
+}
+export const closeCampaign = async (params: CloseCampaignParams, options?: RequestInit): Promise<{
+    data: CampaignOut;
+}> =>{
+    const res = await fetch(`/api/campaigns/${params.campaign_id}/close`, {
         ...options,
         method: "POST"
     });
@@ -1279,16 +1306,174 @@ export const archiveCampaign = async (params: ArchiveCampaignParams, options?: R
         data: await res.json()
     };
 };
-export function useArchiveCampaign(options?: {
+export function useCloseCampaign(options?: {
     mutation?: UseMutationOptions<{
         data: CampaignOut;
     }, ApiError, {
-        params: ArchiveCampaignParams;
+        params: CloseCampaignParams;
     }>;
 }) {
     return useMutation({
-        mutationFn: (vars)=>archiveCampaign(vars.params),
+        mutationFn: (vars)=>closeCampaign(vars.params),
         ...options?.mutation
+    });
+}
+export interface ListCampaignQuestionsParams {
+    campaign_id: string;
+}
+export const listCampaignQuestions = async (params: ListCampaignQuestionsParams, options?: RequestInit): Promise<{
+    data: QuestionOut[];
+}> =>{
+    const res = await fetch(`/api/campaigns/${params.campaign_id}/questions`, {
+        ...options,
+        method: "GET"
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export const listCampaignQuestionsKey = (params?: ListCampaignQuestionsParams)=>{
+    return [
+        "/api/campaigns/{campaign_id}/questions",
+        params
+    ] as const;
+};
+export function useListCampaignQuestions<TData = {
+    data: QuestionOut[];
+}>(options: {
+    params: ListCampaignQuestionsParams;
+    query?: Omit<UseQueryOptions<{
+        data: QuestionOut[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useQuery({
+        queryKey: listCampaignQuestionsKey(options.params),
+        queryFn: ()=>listCampaignQuestions(options.params),
+        ...options?.query
+    });
+}
+export function useListCampaignQuestionsSuspense<TData = {
+    data: QuestionOut[];
+}>(options: {
+    params: ListCampaignQuestionsParams;
+    query?: Omit<UseSuspenseQueryOptions<{
+        data: QuestionOut[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useSuspenseQuery({
+        queryKey: listCampaignQuestionsKey(options.params),
+        queryFn: ()=>listCampaignQuestions(options.params),
+        ...options?.query
+    });
+}
+export interface SaveCampaignQuestionsParams {
+    campaign_id: string;
+}
+export const saveCampaignQuestions = async (params: SaveCampaignQuestionsParams, data: QuestionnaireSaveIn, options?: RequestInit): Promise<{
+    data: QuestionOut[];
+}> =>{
+    const res = await fetch(`/api/campaigns/${params.campaign_id}/questions`, {
+        ...options,
+        method: "PUT",
+        headers: {
+            "Content-Type": "application/json",
+            ...options?.headers
+        },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export function useSaveCampaignQuestions(options?: {
+    mutation?: UseMutationOptions<{
+        data: QuestionOut[];
+    }, ApiError, {
+        params: SaveCampaignQuestionsParams;
+        data: QuestionnaireSaveIn;
+    }>;
+}) {
+    return useMutation({
+        mutationFn: (vars)=>saveCampaignQuestions(vars.params, vars.data),
+        ...options?.mutation
+    });
+}
+export interface ListCampaignResponsesParams {
+    campaign_id: string;
+}
+export const listCampaignResponses = async (params: ListCampaignResponsesParams, options?: RequestInit): Promise<{
+    data: ResponseOut[];
+}> =>{
+    const res = await fetch(`/api/campaigns/${params.campaign_id}/responses`, {
+        ...options,
+        method: "GET"
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export const listCampaignResponsesKey = (params?: ListCampaignResponsesParams)=>{
+    return [
+        "/api/campaigns/{campaign_id}/responses",
+        params
+    ] as const;
+};
+export function useListCampaignResponses<TData = {
+    data: ResponseOut[];
+}>(options: {
+    params: ListCampaignResponsesParams;
+    query?: Omit<UseQueryOptions<{
+        data: ResponseOut[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useQuery({
+        queryKey: listCampaignResponsesKey(options.params),
+        queryFn: ()=>listCampaignResponses(options.params),
+        ...options?.query
+    });
+}
+export function useListCampaignResponsesSuspense<TData = {
+    data: ResponseOut[];
+}>(options: {
+    params: ListCampaignResponsesParams;
+    query?: Omit<UseSuspenseQueryOptions<{
+        data: ResponseOut[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useSuspenseQuery({
+        queryKey: listCampaignResponsesKey(options.params),
+        queryFn: ()=>listCampaignResponses(options.params),
+        ...options?.query
     });
 }
 export interface CurrentUserParams {
@@ -1425,6 +1610,130 @@ export function useGetDashboardSuspense<TData = {
         queryKey: getDashboardKey(),
         queryFn: ()=>getDashboard(),
         ...options?.query
+    });
+}
+export interface GetCampaignFormParams {
+    form_token: string;
+}
+export const getCampaignForm = async (params: GetCampaignFormParams, options?: RequestInit): Promise<{
+    data: CampaignFormOut;
+}> =>{
+    const res = await fetch(`/api/forms/${params.form_token}`, {
+        ...options,
+        method: "GET"
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export const getCampaignFormKey = (params?: GetCampaignFormParams)=>{
+    return [
+        "/api/forms/{form_token}",
+        params
+    ] as const;
+};
+export function useGetCampaignForm<TData = {
+    data: CampaignFormOut;
+}>(options: {
+    params: GetCampaignFormParams;
+    query?: Omit<UseQueryOptions<{
+        data: CampaignFormOut;
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useQuery({
+        queryKey: getCampaignFormKey(options.params),
+        queryFn: ()=>getCampaignForm(options.params),
+        ...options?.query
+    });
+}
+export function useGetCampaignFormSuspense<TData = {
+    data: CampaignFormOut;
+}>(options: {
+    params: GetCampaignFormParams;
+    query?: Omit<UseSuspenseQueryOptions<{
+        data: CampaignFormOut;
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useSuspenseQuery({
+        queryKey: getCampaignFormKey(options.params),
+        queryFn: ()=>getCampaignForm(options.params),
+        ...options?.query
+    });
+}
+export interface SubmitCampaignFormParams {
+    form_token: string;
+    "X-Forwarded-Host"?: string | null;
+    "X-Forwarded-Preferred-Username"?: string | null;
+    "X-Forwarded-User"?: string | null;
+    "X-Forwarded-Email"?: string | null;
+    "X-Request-Id"?: string | null;
+    "X-Forwarded-Access-Token"?: string | null;
+}
+export const submitCampaignForm = async (params: SubmitCampaignFormParams, data: ResponseSubmitIn, options?: RequestInit): Promise<{
+    data: ResponseOut;
+}> =>{
+    const res = await fetch(`/api/forms/${params.form_token}/submit`, {
+        ...options,
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...(params?.["X-Forwarded-Host"] != null && {
+                "X-Forwarded-Host": params["X-Forwarded-Host"]
+            }),
+            ...(params?.["X-Forwarded-Preferred-Username"] != null && {
+                "X-Forwarded-Preferred-Username": params["X-Forwarded-Preferred-Username"]
+            }),
+            ...(params?.["X-Forwarded-User"] != null && {
+                "X-Forwarded-User": params["X-Forwarded-User"]
+            }),
+            ...(params?.["X-Forwarded-Email"] != null && {
+                "X-Forwarded-Email": params["X-Forwarded-Email"]
+            }),
+            ...(params?.["X-Request-Id"] != null && {
+                "X-Request-Id": params["X-Request-Id"]
+            }),
+            ...(params?.["X-Forwarded-Access-Token"] != null && {
+                "X-Forwarded-Access-Token": params["X-Forwarded-Access-Token"]
+            }),
+            ...options?.headers
+        },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export function useSubmitCampaignForm(options?: {
+    mutation?: UseMutationOptions<{
+        data: ResponseOut;
+    }, ApiError, {
+        params: SubmitCampaignFormParams;
+        data: ResponseSubmitIn;
+    }>;
+}) {
+    return useMutation({
+        mutationFn: (vars)=>submitCampaignForm(vars.params, vars.data),
+        ...options?.mutation
     });
 }
 export interface AskGenieParams {

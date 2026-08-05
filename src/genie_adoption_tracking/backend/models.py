@@ -377,31 +377,63 @@ AccountDetailOut.model_rebuild()
 
 
 # --------------------------------------------------------------------------------------
-# Campaigns — leadership push to account teams
+# Campaigns — time-boxed outreach to a chosen set of accounts + a Form of questions
 # --------------------------------------------------------------------------------------
-
-
-class SegmentOut(BaseModel):
-    key: str
-    label: str
-    description: str
-    # Pre-fill templates for the compose form (leadership starts from a strong draft).
-    tpl_title: str = ""
-    tpl_ask: str = ""
-    tpl_cta: str = ""
 
 
 class CampaignIn(BaseModel):
     title: str
-    ask: str
-    cta: str
-    segment: str = "all"
-    sub_vertical: str = ""
-    deadline: str = ""
-    priority: str = "normal"
+    start_date: str = ""
+    end_date: str = ""
+    audience_text: str = ""
+    account_ids: list[str] = []
+    form_url: str = ""
 
 
-class CampaignTargetOut(BaseModel):
+# --- Audience builder (natural-language account filter) ---
+
+
+class AudienceQueryIn(BaseModel):
+    """A natural-language description of the accounts to target, e.g.
+    'all FINS accounts where ARR > $250K, partner powered enabled and genie usage < $200'."""
+
+    text: str
+
+
+class AudienceFilters(BaseModel):
+    """Structured filters parsed from the NL text (all optional)."""
+
+    arr_min: float | None = None
+    arr_max: float | None = None
+    pp_status: str | None = None  # "on" | "off"
+    genie_spend_min: float | None = None
+    genie_spend_max: float | None = None
+    sub_vertical: str | None = None
+    genie_active: bool | None = None
+
+
+class AudienceAccountOut(BaseModel):
+    account_id: str
+    account_name: str
+    ae_owner: str = ""
+    sa_owner: str = ""
+    ae_email: str = ""
+    sa_email: str = ""
+    arr: float = 0.0
+    pp_status: str = "unknown"
+    genie_spend_90d: float = 0.0
+
+
+class AudienceQueryOut(BaseModel):
+    filters: AudienceFilters
+    # Human-readable echo of what the filters mean, so the user can sanity-check.
+    interpreted: str
+    accounts: list[AudienceAccountOut]
+
+
+class CampaignAccountOut(BaseModel):
+    """One chosen account, resolved to its name/owners for display."""
+
     account_id: str
     account_name: str
     owners: list[str]  # AE/SA/DSA names on the account
@@ -410,26 +442,79 @@ class CampaignTargetOut(BaseModel):
 class CampaignOut(BaseModel):
     id: str
     title: str
-    ask: str
-    cta: str
-    segment: str
-    segment_label: str
-    sub_vertical: str = ""
-    deadline: str = ""
-    priority: str = "normal"
-    active: bool = True
+    start_date: str = ""
+    end_date: str = ""
+    audience_text: str = ""
+    form_url: str = ""
+    form_token: str = ""
+    status: str = "draft"
     created_at: datetime
     created_by: str = ""
-    target_count: int = 0
-    # Populated on detail/preview only (not the list), to keep the feed light.
-    targets: list[CampaignTargetOut] = []
-    mailto_url: str = ""
-    slack_text: str = ""
+    account_count: int = 0
+    question_count: int = 0
+    response_count: int = 0
+    accounts: list[CampaignAccountOut] = []
 
 
-class CampaignPreviewOut(BaseModel):
-    target_count: int
-    targets: list[CampaignTargetOut] = []
+# --- Questionnaire (in-app g-form-style builder) ---
+
+
+class QuestionIn(BaseModel):
+    prompt: str
+    qtype: str = "text"  # text | textarea | single_choice | multi_choice | rating
+    options: list[str] = []
+    required: bool = False
+
+
+class QuestionOut(BaseModel):
+    id: str
+    position: int
+    prompt: str
+    qtype: str
+    options: list[str] = []
+    required: bool = False
+
+
+class QuestionnaireSaveIn(BaseModel):
+    """Save the whole ordered question list in one shot (the builder's Save)."""
+
+    questions: list[QuestionIn]
+
+
+# --- Public form (what an account team fills out) ---
+
+
+class CampaignFormOut(BaseModel):
+    """The form as served publicly by token — enough to render + submit it."""
+
+    campaign_id: str
+    title: str
+    status: str
+    start_date: str = ""
+    end_date: str = ""
+    # The audience accounts populate the fixed first field (account name).
+    accounts: list[CampaignAccountOut] = []
+    questions: list[QuestionOut] = []
+
+
+class ResponseSubmitIn(BaseModel):
+    account_id: str = ""
+    account_name: str = ""
+    answers: dict = {}  # {question_id: value}
+
+
+class ResponseOut(BaseModel):
+    id: str
+    account_id: str = ""
+    account_name: str = ""
+    answers: dict = {}
+    submitted_by: str = ""
+    submitted_at: datetime
+
+
+class CampaignActivateIn(BaseModel):
+    start_date: str = ""
+    end_date: str = ""
 
 
 # --------------------------------------------------------------------------------------

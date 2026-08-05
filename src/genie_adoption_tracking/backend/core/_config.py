@@ -33,6 +33,11 @@ class AppConfig(BaseSettings):
     # GENIE_ADOPTION_TRACKING_GENIE_SPACE_ID (see app.yml / .env). Empty = chat disabled.
     genie_space_id: str = Field(default="")
 
+    # Foundation-model serving endpoint used to parse a natural-language audience
+    # description into structured account filters (campaign audience builder). Set
+    # via GENIE_ADOPTION_TRACKING_LLM_ENDPOINT. Defaults to a small/fast chat model.
+    llm_endpoint: str = Field(default="databricks-gpt-5-4-nano")
+
     @property
     def static_assets_path(self) -> Path:
         return Path(str(resources.files(app_slug))).joinpath("__dist__")

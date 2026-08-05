@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel  # noqa: F401  (re-exported for scripts)
 
 
@@ -224,23 +225,66 @@ class GenieQuery(SQLModel, table=True):
 
 
 class Campaign(SQLModel, table=True):
-    """A leadership 'push' to account teams: a targeted ask with a clear call-to-action
-    and deadline, aimed at a segment of accounts (e.g. PP AI off, no provisioning).
+    """A campaign: a time-boxed outreach to a chosen set of accounts, with an
+    audience description and a link to a Form of questions to ask that audience.
 
-    Segment is a stored key (resolved to live accounts at read time, so a campaign
-    stays accurate as signals change). Only the campaign definition is persisted here;
-    delivery is via in-app feed + generated mailto/Slack drafts."""
+    The chosen accounts are stored as a JSON list of account ids (a manual pick,
+    not a live-resolved segment). Campaigns are shown newest-first, one per row."""
 
     __tablename__ = "gat_campaign"
 
     id: str = Field(primary_key=True)
     title: str = Field(default="")
-    ask: str = Field(default="")  # the body / context
-    cta: str = Field(default="")  # the specific call to action
-    segment: str = Field(default="all", index=True)  # segment key (see campaigns.py)
-    sub_vertical: str = Field(default="")  # optional refinement when segment=sub_vertical
-    deadline: str = Field(default="")  # ISO date string, optional
-    priority: str = Field(default="normal")  # normal | high
-    active: bool = Field(default=True, index=True)
+    # When the campaign runs (ISO date strings, optional).
+    start_date: str = Field(default="")
+    end_date: str = Field(default="")
+    # Free-text describing the intended audience of accounts.
+    audience_text: str = Field(default="")
+    # The accounts chosen for this campaign — a manual pick, stored as a JSON list
+    # of gat_account ids.
+    account_ids: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    # Link to an external Form (Google Form / Typeform / etc.) with questions.
+    # Retained for campaigns that point at an outside form; the in-app questionnaire
+    # (gat_campaign_question) is the primary path and is served at /forms/<form_token>.
+    form_url: str = Field(default="")
+    # In-app questionnaire: a unique, unguessable token used to build the form's
+    # shareable link (/forms/<token>). Generated when the campaign is created.
+    form_token: str = Field(default="", index=True)
+    # draft (being built) | active (live, in its date window) | closed.
+    status: str = Field(default="draft", index=True)
     created_at: datetime = Field(default_factory=_utcnow, index=True)
     created_by: str = Field(default="")
+
+
+class CampaignQuestion(SQLModel, table=True):
+    """One question in a campaign's in-app questionnaire (g-form style). The account
+    name is a fixed first field of every form and is NOT stored as a question row —
+    these are the questions that follow it. Ordered by `position`."""
+
+    __tablename__ = "gat_campaign_question"
+
+    id: str = Field(primary_key=True)
+    campaign_id: str = Field(index=True, foreign_key="gat_campaign.id")
+    position: int = Field(default=0)
+    prompt: str = Field(default="")
+    # text | textarea | single_choice | multi_choice | rating
+    qtype: str = Field(default="text")
+    # Choice options for single_choice / multi_choice (empty otherwise).
+    options: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    required: bool = Field(default=False)
+
+
+class CampaignResponse(SQLModel, table=True):
+    """One account team's submission to a campaign form — the 'campaignX_results'
+    signal. answers is a JSON map of {question_id: response}; account_id ties it to
+    the audience account chosen in the form's account-name field."""
+
+    __tablename__ = "gat_campaign_response"
+
+    id: str = Field(primary_key=True)
+    campaign_id: str = Field(index=True, foreign_key="gat_campaign.id")
+    account_id: str = Field(default="", index=True)
+    account_name: str = Field(default="")
+    answers: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    submitted_by: str = Field(default="")
+    submitted_at: datetime = Field(default_factory=_utcnow, index=True)

@@ -1,268 +1,129 @@
-"""Campaigns — a leadership 'push' channel to complement the playbook 'pull'.
+"""Campaigns — a time-boxed outreach to a chosen set of accounts.
 
-Leadership composes a targeted ask (clear CTA + deadline) aimed at a *segment* of
-accounts (PP AI off, no user provisioning, whitespace, blocked tasks, open issues, or
-a sub-vertical). The segment is stored as a key and resolved to live accounts at read
-time, so a campaign stays accurate as signals change.
+A campaign captures: a title, a run window (start/end date), free-text describing
+the intended audience, the specific accounts chosen for it, and a link to a Form
+(Google Form / Typeform / etc.) with the questions to ask that audience.
 
-Delivery is lightweight (per the chosen design): campaigns surface in-app to the
-targeted account teams, and we generate a ready-to-send mailto/Slack draft leadership
-can fire from their own client (owner fields are names, not emails, and Databricks Apps
-can't run SMTP — so no server-side send).
+The chosen accounts are a manual pick, stored as a JSON list of account ids and
+resolved to names/owners at read time. Campaigns are listed newest-first.
 """
 
 from __future__ import annotations
 
-import urllib.parse
+import uuid
 from collections.abc import Sequence
 
+from fastapi import HTTPException
 from sqlmodel import Session, select
 
 from .core import Dependencies, create_router
-from .db import Account, AccountIssue, AdoptionTaskState, Blocker, UseCase
+from .db import Account, Campaign, CampaignQuestion, CampaignResponse
 from .models import (
+    CampaignAccountOut,
+    CampaignActivateIn,
+    CampaignFormOut,
     CampaignIn,
     CampaignOut,
-    CampaignPreviewOut,
-    CampaignTargetOut,
-    SegmentOut,
+    QuestionOut,
+    QuestionnaireSaveIn,
+    ResponseOut,
+    ResponseSubmitIn,
 )
-from .db import Campaign
 
 router = create_router()
 
 
-# --------------------------------------------------------------------------------------
-# Segments — each maps to a predicate over an account (+ its derived signals)
-# --------------------------------------------------------------------------------------
-
-SEGMENTS: list[dict] = [
-    {"key": "all", "label": "All FINS accounts",
-     "description": "Every account the team owns.",
-     "tpl_title": "Genie adoption push — action needed",
-     "tpl_ask": "Team — as we drive Genie adoption across FINS this quarter, please "
-                "make sure your accounts are moving through the Field Adoption "
-                "Playbook. Take a few minutes to update each account's Adoption "
-                "Workflow in the Navigator so we have an accurate read on where "
-                "everyone is.",
-     "tpl_cta": "Review and update your accounts' Adoption Workflow in the Navigator."},
-    {"key": "pp_off", "label": "Partner-Powered AI off",
-     "description": "PP AI disabled — Genie can't consume until it's enabled.",
-     "tpl_title": "Turn on Partner-Powered AI to unblock Genie",
-     "tpl_ask": "Your account has Partner-Powered AI turned OFF — Genie can't consume "
-                "for the customer until it's enabled. This is the #1 blocker to getting "
-                "them live. Run an AI Security Review with the customer, then enable "
-                "Partner-Powered AI in the account console (Settings → Feature "
-                "enablement) and set Enforce so it applies to all workspaces.",
-     "tpl_cta": "Complete the AI Security Review and enable Partner-Powered AI "
-                "(with Enforce on)."},
-    {"key": "no_provisioning", "label": "No user provisioning (AIM or SCIM)",
-     "description": "Neither AIM nor SCIM — identities aren't set up for Genie sharing.",
-     "tpl_title": "Set up user provisioning (AIM or SCIM) for Genie readiness",
-     "tpl_ask": "Your account has no account-level user provisioning — neither AIM nor "
-                "SCIM — so users/groups aren't in place for Genie sharing and "
-                "governance. Per go/genieready this is a required readiness criterion. "
-                "Enable AIM (preferred, just-in-time provisioning) where the cloud/IdP "
-                "supports it, or configure account-level SCIM as the fallback.",
-     "tpl_cta": "Enable AIM (preferred) or account-level SCIM, then confirm on the "
-                "Genie Ready dashboard."},
-    {"key": "whitespace", "label": "Whitespace (no Genie use cases)",
-     "description": "Accounts with no Genie use cases yet.",
-     "tpl_title": "Let's find a first Genie use case",
-     "tpl_ask": "Your account has no Genie use cases in flight yet — it's whitespace "
-                "for Genie. Let's change that: identify one high-value business "
-                "question the customer asks repeatedly, and run a demo with their known "
-                "domain assets to spark it. Use Ask Genie in the Navigator for demo "
-                "and play ideas tailored to the account.",
-     "tpl_cta": "Identify one candidate use case and book a Genie demo with the "
-                "customer."},
-    {"key": "blocked", "label": "Has blocked adoption tasks",
-     "description": "Account has one or more tasks marked Blocked in the workflow.",
-     "tpl_title": "Let's clear your blocked adoption tasks",
-     "tpl_ask": "You've flagged one or more adoption tasks as Blocked on your account. "
-                "Let's get them unstuck so the engagement keeps moving. Open the "
-                "account in the Navigator, and use “Ask Genie how to get unstuck” on "
-                "each blocked task for the recommended play or resource — or reply here "
-                "if you need leadership help.",
-     "tpl_cta": "Work each blocked task with Ask Genie, or escalate here if you're "
-                "stuck."},
-    {"key": "open_issues", "label": "Has open Genie issues",
-     "description": "Open Brickroad issues against the account.",
-     "tpl_title": "Open Genie issues need attention",
-     "tpl_ask": "Your account has open Genie (Brickroad) issues that may be putting "
-                "revenue or the customer's confidence at risk. Please review the open "
-                "issues on the account in the Navigator, make sure each has an owner "
-                "and next step, and escalate any blockers that need PM or engineering "
-                "help.",
-     "tpl_cta": "Triage the open Genie issues and confirm an owner + next step for "
-                "each."},
-]
-
-_SEGMENT_LABEL = {s["key"]: s["label"] for s in SEGMENTS}
+def _uid() -> str:
+    return uuid.uuid4().hex
 
 
-def is_valid_segment(key: str) -> bool:
-    return key in _SEGMENT_LABEL
+def _token() -> str:
+    """Unguessable token for the public form link."""
+    import secrets
+
+    return secrets.token_urlsafe(16)
+
+
+def _actor(user_ws) -> str:
+    try:
+        return user_ws.current_user.me().user_name or ""
+    except Exception:
+        return ""
+
+
+def _counts(session: Session, campaign_id: str) -> tuple[int, int]:
+    questions = session.exec(
+        select(CampaignQuestion).where(CampaignQuestion.campaign_id == campaign_id)
+    ).all()
+    responses = session.exec(
+        select(CampaignResponse).where(CampaignResponse.campaign_id == campaign_id)
+    ).all()
+    return len(questions), len(responses)
 
 
 def _owners(a: Account) -> list[str]:
     return [o for o in (a.ae_owner, a.sa_owner, a.dsa_owner) if o]
 
 
-def _resolve_targets(
-    session: Session, segment: str, sub_vertical: str
-) -> list[Account]:
-    """Live accounts matching a segment."""
-    accounts = session.exec(select(Account)).all()
-
-    if segment == "all":
-        return list(accounts)
-    if segment == "pp_off":
-        # PP genuinely blocked: account default off AND (enforce on, or no workspace
-        # has it on). If enforce is off and some workspaces are on, they can still
-        # consume Genie there — not blocked, so exclude them.
-        return [
-            a
-            for a in accounts
-            if a.pp_status == "off"
-            and (a.pp_enforce == "on" or (a.ws_pp_on or 0) == 0)
-        ]
-    if segment == "no_provisioning":
-        return [a for a in accounts if a.provisioning_status == "off"]
-    if segment == "whitespace":
-        with_uc = {
-            uc.account_id for uc in session.exec(select(UseCase)).all()
-        }
-        return [a for a in accounts if a.id not in with_uc]
-    if segment == "open_issues":
-        issue_accts = {
-            i.account_id
-            for i in session.exec(select(AccountIssue)).all()
-            if (i.status or "").lower() not in ("resolved", "will_not_solve")
-        }
-        return [a for a in accounts if a.id in issue_accts]
-    if segment == "blocked":
-        blocked_accts = {
-            s.account_id
-            for s in session.exec(select(AdoptionTaskState)).all()
-            if s.status == "blocked"
-        }
-        return [a for a in accounts if a.id in blocked_accts]
-    return []
-
-
-def _target_out(accounts: Sequence[Account]) -> list[CampaignTargetOut]:
-    return [
-        CampaignTargetOut(
-            account_id=a.id, account_name=a.name, owners=_owners(a)
-        )
-        for a in sorted(accounts, key=lambda a: a.name.lower())
-    ]
-
-
-def _draft_body(c: Campaign, target_count: int) -> str:
-    """Plain-text body shared by the mailto + Slack drafts."""
-    lines = [c.ask.strip(), ""]
-    if c.cta:
-        lines += [f"Action needed: {c.cta.strip()}"]
-    if c.deadline:
-        lines += [f"Deadline: {c.deadline}"]
-    lines += ["", f"(Targeted to {target_count} account team(s) via the Genie "
-              "Adoption Navigator.)"]
-    return "\n".join(lines)
-
-
-def _mailto(c: Campaign, target_count: int) -> str:
-    subject = f"[Genie Adoption] {c.title}"
-    body = _draft_body(c, target_count)
-    q = urllib.parse.urlencode({"subject": subject, "body": body})
-    return f"mailto:?{q}"
-
-
-def _slack_text(c: Campaign, target_count: int) -> str:
-    head = f"*{c.title}*"
-    if c.priority == "high":
-        head = f":rotating_light: {head}"
-    return f"{head}\n{_draft_body(c, target_count)}"
-
-
-def _to_out(
-    session: Session, c: Campaign, *, with_targets: bool
-) -> CampaignOut:
-    targets = _resolve_targets(session, c.segment, c.sub_vertical)
-    return CampaignOut(
-        id=c.id,
-        title=c.title,
-        ask=c.ask,
-        cta=c.cta,
-        segment=c.segment,
-        segment_label=_SEGMENT_LABEL.get(c.segment, c.segment),
-        sub_vertical=c.sub_vertical,
-        deadline=c.deadline,
-        priority=c.priority,
-        active=c.active,
-        created_at=c.created_at,
-        created_by=c.created_by,
-        target_count=len(targets),
-        targets=_target_out(targets) if with_targets else [],
-        mailto_url=_mailto(c, len(targets)) if with_targets else "",
-        slack_text=_slack_text(c, len(targets)) if with_targets else "",
-    )
-
-
-# --------------------------------------------------------------------------------------
-# Routes
-# --------------------------------------------------------------------------------------
-
-# Import helpers lazily from router to avoid a circular import.
-def _uid() -> str:
-    import uuid
-
-    return uuid.uuid4().hex
-
-
-@router.get("/campaigns/segments", response_model=list[SegmentOut],
-            operation_id="listCampaignSegments")
-def list_segments():
-    return [SegmentOut(**s) for s in SEGMENTS]
-
-
-@router.get("/accounts/{account_id}/campaigns", response_model=list[CampaignOut],
-            operation_id="listAccountCampaigns")
-def account_campaigns(account_id: str, session: Dependencies.Session):
-    """Active campaigns whose segment currently targets this account — so the account
-    team sees the leadership ask (with CTA + deadline) right on the account page."""
-    campaigns = [
-        c
-        for c in session.exec(select(Campaign)).all()
-        if c.active
-    ]
-    out: list[CampaignOut] = []
-    for c in sorted(campaigns, key=lambda c: c.created_at, reverse=True):
-        target_ids = {a.id for a in _resolve_targets(session, c.segment, c.sub_vertical)}
-        if account_id in target_ids:
-            out.append(_to_out(session, c, with_targets=False))
+def _resolve_accounts(
+    session: Session, account_ids: Sequence[str]
+) -> list[CampaignAccountOut]:
+    """Resolve the stored account ids to name/owners for display, preserving the
+    chosen order and silently dropping ids that no longer exist."""
+    if not account_ids:
+        return []
+    by_id = {a.id: a for a in session.exec(select(Account)).all()}
+    out: list[CampaignAccountOut] = []
+    for aid in account_ids:
+        a = by_id.get(aid)
+        if a is not None:
+            out.append(
+                CampaignAccountOut(
+                    account_id=a.id, account_name=a.name, owners=_owners(a)
+                )
+            )
     return out
 
 
-@router.get("/campaigns/preview", response_model=CampaignPreviewOut,
-            operation_id="previewCampaignSegment")
-def preview_segment(
-    session: Dependencies.Session, segment: str = "all", sub_vertical: str = ""
-):
-    """Live target accounts for a segment — powers the count shown while composing."""
-    targets = _resolve_targets(session, segment, sub_vertical)
-    return CampaignPreviewOut(
-        target_count=len(targets), targets=_target_out(targets)
+def _to_out(session: Session, c: Campaign, *, with_accounts: bool) -> CampaignOut:
+    ids = c.account_ids or []
+    accounts = _resolve_accounts(session, ids) if with_accounts else []
+    q_count, r_count = _counts(session, c.id)
+    return CampaignOut(
+        id=c.id,
+        title=c.title,
+        start_date=c.start_date,
+        end_date=c.end_date,
+        audience_text=c.audience_text,
+        form_url=c.form_url,
+        form_token=c.form_token,
+        status=c.status,
+        created_at=c.created_at,
+        created_by=c.created_by,
+        account_count=len(ids),
+        question_count=q_count,
+        response_count=r_count,
+        accounts=accounts,
     )
 
 
-@router.get("/campaigns", response_model=list[CampaignOut],
-            operation_id="listCampaigns")
+def _question_out(q: CampaignQuestion) -> QuestionOut:
+    return QuestionOut(
+        id=q.id,
+        position=q.position,
+        prompt=q.prompt,
+        qtype=q.qtype,
+        options=q.options or [],
+        required=q.required,
+    )
+
+
+@router.get("/campaigns", response_model=list[CampaignOut], operation_id="listCampaigns")
 def list_campaigns(session: Dependencies.Session):
+    """All campaigns, newest first — one per row, with their chosen accounts."""
     campaigns = session.exec(select(Campaign)).all()
     campaigns = sorted(campaigns, key=lambda c: c.created_at, reverse=True)
-    return [_to_out(session, c, with_targets=False) for c in campaigns]
+    return [_to_out(session, c, with_accounts=True) for c in campaigns]
 
 
 @router.post("/campaigns", response_model=CampaignOut, operation_id="createCampaign")
@@ -271,11 +132,8 @@ def create_campaign(
     session: Dependencies.Session,
     user_ws: Dependencies.UserClient,
 ):
-    if not is_valid_segment(body.segment):
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=400, detail="Unknown segment")
-    actor = ""
+    if not body.title.strip():
+        raise HTTPException(status_code=400, detail="Title is required")
     try:
         actor = user_ws.current_user.me().user_name or ""
     except Exception:
@@ -283,19 +141,19 @@ def create_campaign(
     c = Campaign(
         id=_uid(),
         title=body.title.strip(),
-        ask=body.ask.strip(),
-        cta=body.cta.strip(),
-        segment=body.segment,
-        sub_vertical=body.sub_vertical.strip(),
-        deadline=body.deadline.strip(),
-        priority=body.priority if body.priority in ("normal", "high") else "normal",
-        active=True,
+        start_date=body.start_date.strip(),
+        end_date=body.end_date.strip(),
+        audience_text=body.audience_text.strip(),
+        account_ids=list(dict.fromkeys(body.account_ids)),  # dedupe, keep order
+        form_url=body.form_url.strip(),
+        form_token=_token(),
+        status="draft",
         created_by=actor,
     )
     session.add(c)
     session.commit()
     session.refresh(c)
-    return _to_out(session, c, with_targets=True)
+    return _to_out(session, c, with_accounts=True)
 
 
 @router.get("/campaigns/{campaign_id}", response_model=CampaignOut,
@@ -303,22 +161,218 @@ def create_campaign(
 def get_campaign(campaign_id: str, session: Dependencies.Session):
     c = session.get(Campaign, campaign_id)
     if c is None:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=404, detail="Campaign not found")
-    return _to_out(session, c, with_targets=True)
+    return _to_out(session, c, with_accounts=True)
 
 
-@router.post("/campaigns/{campaign_id}/archive", response_model=CampaignOut,
-             operation_id="archiveCampaign")
-def archive_campaign(campaign_id: str, session: Dependencies.Session):
+@router.delete("/campaigns/{campaign_id}", operation_id="deleteCampaign")
+def delete_campaign(campaign_id: str, session: Dependencies.Session):
     c = session.get(Campaign, campaign_id)
     if c is None:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=404, detail="Campaign not found")
-    c.active = False
+    # Cascade: remove the campaign's questions and responses first, flushing so the
+    # child deletes hit the DB before the parent delete (else the FK constraint on
+    # gat_campaign_response / gat_campaign_question is violated).
+    for q in session.exec(
+        select(CampaignQuestion).where(CampaignQuestion.campaign_id == campaign_id)
+    ).all():
+        session.delete(q)
+    for r in session.exec(
+        select(CampaignResponse).where(CampaignResponse.campaign_id == campaign_id)
+    ).all():
+        session.delete(r)
+    session.flush()
+    session.delete(c)
+    session.commit()
+    return {"ok": True}
+
+
+# --------------------------------------------------------------------------------------
+# Questionnaire builder (g-form style). The account-name field is implicit/fixed and
+# always the first field of the rendered form; these are the questions that follow.
+# --------------------------------------------------------------------------------------
+
+
+def _require(session: Session, campaign_id: str) -> Campaign:
+    c = session.get(Campaign, campaign_id)
+    if c is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return c
+
+
+@router.get(
+    "/campaigns/{campaign_id}/questions",
+    response_model=list[QuestionOut],
+    operation_id="listCampaignQuestions",
+)
+def list_questions(campaign_id: str, session: Dependencies.Session):
+    _require(session, campaign_id)
+    qs = session.exec(
+        select(CampaignQuestion).where(CampaignQuestion.campaign_id == campaign_id)
+    ).all()
+    qs = sorted(qs, key=lambda q: q.position)
+    return [_question_out(q) for q in qs]
+
+
+@router.put(
+    "/campaigns/{campaign_id}/questions",
+    response_model=list[QuestionOut],
+    operation_id="saveCampaignQuestions",
+)
+def save_questions(
+    campaign_id: str, body: QuestionnaireSaveIn, session: Dependencies.Session
+):
+    """Replace the campaign's whole question list (ordered by array position)."""
+    _require(session, campaign_id)
+    for q in session.exec(
+        select(CampaignQuestion).where(CampaignQuestion.campaign_id == campaign_id)
+    ).all():
+        session.delete(q)
+    for i, qi in enumerate(body.questions):
+        session.add(
+            CampaignQuestion(
+                id=_uid(),
+                campaign_id=campaign_id,
+                position=i,
+                prompt=qi.prompt.strip(),
+                qtype=qi.qtype,
+                options=[o for o in qi.options if o.strip()],
+                required=qi.required,
+            )
+        )
+    session.commit()
+    qs = session.exec(
+        select(CampaignQuestion).where(CampaignQuestion.campaign_id == campaign_id)
+    ).all()
+    return [_question_out(q) for q in sorted(qs, key=lambda q: q.position)]
+
+
+# --------------------------------------------------------------------------------------
+# Activation — set the campaign live within a date window; produces the shareable link
+# and a copyable recipient list / mailto draft (no server-side SMTP in Databricks Apps).
+# --------------------------------------------------------------------------------------
+
+
+@router.post(
+    "/campaigns/{campaign_id}/activate",
+    response_model=CampaignOut,
+    operation_id="activateCampaign",
+)
+def activate_campaign(
+    campaign_id: str, body: CampaignActivateIn, session: Dependencies.Session
+):
+    c = _require(session, campaign_id)
+    if body.start_date:
+        c.start_date = body.start_date.strip()
+    if body.end_date:
+        c.end_date = body.end_date.strip()
+    if not c.form_token:
+        c.form_token = _token()
+    c.status = "active"
     session.add(c)
     session.commit()
     session.refresh(c)
-    return _to_out(session, c, with_targets=False)
+    return _to_out(session, c, with_accounts=True)
+
+
+@router.post(
+    "/campaigns/{campaign_id}/close",
+    response_model=CampaignOut,
+    operation_id="closeCampaign",
+)
+def close_campaign(campaign_id: str, session: Dependencies.Session):
+    c = _require(session, campaign_id)
+    c.status = "closed"
+    session.add(c)
+    session.commit()
+    session.refresh(c)
+    return _to_out(session, c, with_accounts=True)
+
+
+# --------------------------------------------------------------------------------------
+# Public form (served by unguessable token) + response capture -> campaign results
+# --------------------------------------------------------------------------------------
+
+
+@router.get(
+    "/forms/{form_token}",
+    response_model=CampaignFormOut,
+    operation_id="getCampaignForm",
+)
+def get_form(form_token: str, session: Dependencies.Session):
+    c = session.exec(select(Campaign).where(Campaign.form_token == form_token)).first()
+    if c is None:
+        raise HTTPException(status_code=404, detail="Form not found")
+    qs = session.exec(
+        select(CampaignQuestion).where(CampaignQuestion.campaign_id == c.id)
+    ).all()
+    return CampaignFormOut(
+        campaign_id=c.id,
+        title=c.title,
+        status=c.status,
+        start_date=c.start_date,
+        end_date=c.end_date,
+        accounts=_resolve_accounts(session, c.account_ids or []),
+        questions=[_question_out(q) for q in sorted(qs, key=lambda q: q.position)],
+    )
+
+
+@router.post(
+    "/forms/{form_token}/submit",
+    response_model=ResponseOut,
+    operation_id="submitCampaignForm",
+)
+def submit_form(
+    form_token: str,
+    body: ResponseSubmitIn,
+    session: Dependencies.Session,
+    user_ws: Dependencies.UserClient,
+):
+    c = session.exec(select(Campaign).where(Campaign.form_token == form_token)).first()
+    if c is None:
+        raise HTTPException(status_code=404, detail="Form not found")
+    if c.status != "active":
+        raise HTTPException(status_code=400, detail="This campaign is not accepting responses")
+    r = CampaignResponse(
+        id=_uid(),
+        campaign_id=c.id,
+        account_id=body.account_id,
+        account_name=body.account_name.strip(),
+        answers=body.answers or {},
+        submitted_by=_actor(user_ws),
+    )
+    session.add(r)
+    session.commit()
+    session.refresh(r)
+    return ResponseOut(
+        id=r.id,
+        account_id=r.account_id,
+        account_name=r.account_name,
+        answers=r.answers,
+        submitted_by=r.submitted_by,
+        submitted_at=r.submitted_at,
+    )
+
+
+@router.get(
+    "/campaigns/{campaign_id}/responses",
+    response_model=list[ResponseOut],
+    operation_id="listCampaignResponses",
+)
+def list_responses(campaign_id: str, session: Dependencies.Session):
+    _require(session, campaign_id)
+    rows = session.exec(
+        select(CampaignResponse).where(CampaignResponse.campaign_id == campaign_id)
+    ).all()
+    rows = sorted(rows, key=lambda r: r.submitted_at, reverse=True)
+    return [
+        ResponseOut(
+            id=r.id,
+            account_id=r.account_id,
+            account_name=r.account_name,
+            answers=r.answers,
+            submitted_by=r.submitted_by,
+            submitted_at=r.submitted_at,
+        )
+        for r in rows
+    ]
