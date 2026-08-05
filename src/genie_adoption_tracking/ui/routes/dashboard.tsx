@@ -436,6 +436,11 @@ function InlineAccounts({
             </table>
           </div>
         )}
+        {sorted !== null && sorted.length > 0 && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Tier = GTM Genie-Ready: 🟢 ready · 🟡 partial · 🔴 gaps · ⚪ unknown.
+          </p>
+        )}
       </CardContent>
     </Card>
   );
@@ -926,9 +931,21 @@ function GenieReadyTab({ data }: { data: DashboardOut }) {
   return (
     <div className="space-y-6">
       <SoWhat>
-        GTM Genie-Ready tier per account (green / yellow / red). A readiness signal from
-        GTM, distinct from the team-filled workflow readiness. Click a tier to see those
-        accounts.
+        GTM Genie-Ready tier per account — a readiness signal from GTM (based on user
+        provisioning + eligibility), distinct from the team-filled workflow readiness:{" "}
+        <span className="text-emerald-700 dark:text-emerald-400 font-medium">🟢 ready</span>,{" "}
+        <span className="text-amber-700 dark:text-amber-400 font-medium">🟡 partial</span>,{" "}
+        <span className="text-destructive font-medium">🔴 gaps</span>, ⚪ unknown. Click a
+        tier to see those accounts, or open the{" "}
+        <a
+          href="https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f10313a17e11d6b0b11abfa2736836/published?o=2548836972759138"
+          target="_blank"
+          rel="noreferrer"
+          className="text-primary underline hover:no-underline"
+        >
+          full Genie-Ready dashboard
+        </a>
+        .
       </SoWhat>
 
       <TileGrid
