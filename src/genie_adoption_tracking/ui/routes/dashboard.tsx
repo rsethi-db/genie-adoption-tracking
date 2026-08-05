@@ -662,45 +662,14 @@ function SpendDistribution({ data }: { data: DashboardOut }) {
 // ------------------------------------------------------- Tab 2: Genie Accounts
 function GenieAccountsTab({ data }: { data: DashboardOut }) {
   const [stageFilter, setStageFilter] = useState<AcctFilter | null>(null);
-  const [q, setQ] = useState("");
-  const needle = q.trim();
 
   return (
     <div className="space-y-6">
       <SoWhat>
-        The UCO funnel and account lookup. Whitespace = accounts that can consume Genie
+        The UCO funnel and whitespace. Whitespace = accounts that can consume Genie
         (PP on, or off but not enforced) and are provisioned, but have no active Genie
         agent yet — ready to activate.
       </SoWhat>
-
-      {/* Account search — find one account by name, sub-vertical, or owner */}
-      <div>
-        <div className="relative max-w-xl">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search accounts by name, sub-vertical, AE, SA, or DSA…"
-            className="pl-9 h-10"
-          />
-          {q && (
-            <button
-              onClick={() => setQ("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        {needle && (
-          <div className="mt-3">
-            <InlineAccounts
-              filter={{ label: `Search: “${needle}”`, params: { q: needle } }}
-              onClose={() => setQ("")}
-            />
-          </div>
-        )}
-      </div>
 
       {/* Summary tiles — the per-stage breakdown lives in the funnel below. */}
       <TileGrid
