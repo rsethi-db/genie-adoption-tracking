@@ -132,7 +132,6 @@ function DashboardBody() {
           <TabsTrigger value="pp">Partner-Powered AI</TabsTrigger>
           <TabsTrigger value="accounts">Genie Accounts</TabsTrigger>
           <TabsTrigger value="brickroad">Brickroad</TabsTrigger>
-          <TabsTrigger value="ready">Genie Ready</TabsTrigger>
           <TabsTrigger value="subvertical">By Sub-Vertical</TabsTrigger>
         </TabsList>
 
@@ -144,9 +143,6 @@ function DashboardBody() {
         </TabsContent>
         <TabsContent value="brickroad" className="mt-4">
           <BrickroadTab data={data} />
-        </TabsContent>
-        <TabsContent value="ready" className="mt-4">
-          <GenieReadyTab data={data} />
         </TabsContent>
         <TabsContent value="subvertical" className="mt-4">
           <SubVerticalTab data={data} />
@@ -694,6 +690,38 @@ function GenieAccountsTab({ data }: { data: DashboardOut }) {
       {stageFilter && (
         <InlineAccounts filter={stageFilter} onClose={() => setStageFilter(null)} />
       )}
+
+      {/* GTM Genie-Ready tier — explained + drillable (replaces the old tab) */}
+      <div>
+        <h2 className="text-sm font-semibold text-muted-foreground mb-1">
+          Genie-Ready tier
+        </h2>
+        <SoWhat>
+          A GTM readiness signal (user provisioning + eligibility), distinct from the
+          team-filled workflow readiness:{" "}
+          <span className="text-emerald-700 dark:text-emerald-400 font-medium">🟢 ready</span>,{" "}
+          <span className="text-amber-700 dark:text-amber-400 font-medium">🟡 partial</span>,{" "}
+          <span className="text-destructive font-medium">🔴 gaps</span>, ⚪ unknown. Click a
+          tier for those accounts, or open the{" "}
+          <a
+            href="https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f10313a17e11d6b0b11abfa2736836/published?o=2548836972759138"
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary underline hover:no-underline"
+          >
+            full Genie-Ready dashboard
+          </a>
+          .
+        </SoWhat>
+        <TileGrid
+          tiles={[
+            { key: "green", icon: <span>🟢</span>, label: "Green", value: data.tier_green ?? 0, tone: "good", filter: { label: "Genie-Ready tier: Green", params: { tier: "green" } } },
+            { key: "yellow", icon: <span>🟡</span>, label: "Yellow", value: data.tier_yellow ?? 0, tone: "warn", filter: { label: "Genie-Ready tier: Yellow", params: { tier: "yellow" } } },
+            { key: "red", icon: <span>🔴</span>, label: "Red", value: data.tier_red ?? 0, tone: "bad", filter: { label: "Genie-Ready tier: Red", params: { tier: "red" } } },
+            { key: "unknown", icon: <span>⚪</span>, label: "Unknown", value: data.tier_unknown ?? 0, filter: { label: "Genie-Ready tier: Unknown", params: { tier: "unknown" } } },
+          ]}
+        />
+      </div>
     </div>
   );
 }
@@ -919,107 +947,6 @@ function BrickroadTable({ data }: { data: DashboardOut }) {
                     <td className="py-2 pr-3 text-right font-medium">
                       {(i.revenue_impact ?? 0) > 0 ? fmtDbus(i.revenue_impact ?? 0) : "—"}
                     </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------- Tab 4: Genie Ready
-function GenieReadyTab({ data }: { data: DashboardOut }) {
-  return (
-    <div className="space-y-6">
-      <SoWhat>
-        GTM Genie-Ready tier per account — a readiness signal from GTM (based on user
-        provisioning + eligibility), distinct from the team-filled workflow readiness:{" "}
-        <span className="text-emerald-700 dark:text-emerald-400 font-medium">🟢 ready</span>,{" "}
-        <span className="text-amber-700 dark:text-amber-400 font-medium">🟡 partial</span>,{" "}
-        <span className="text-destructive font-medium">🔴 gaps</span>, ⚪ unknown. Click a
-        tier to see those accounts, or open the{" "}
-        <a
-          href="https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f10313a17e11d6b0b11abfa2736836/published?o=2548836972759138"
-          target="_blank"
-          rel="noreferrer"
-          className="text-primary underline hover:no-underline"
-        >
-          full Genie-Ready dashboard
-        </a>
-        .
-      </SoWhat>
-
-      <TileGrid
-        tiles={[
-          { key: "green", icon: <span>🟢</span>, label: "Green", value: data.tier_green ?? 0, tone: "good", filter: { label: "Genie-Ready tier: Green", params: { tier: "green" } } },
-          { key: "yellow", icon: <span>🟡</span>, label: "Yellow", value: data.tier_yellow ?? 0, tone: "warn", filter: { label: "Genie-Ready tier: Yellow", params: { tier: "yellow" } } },
-          { key: "red", icon: <span>🔴</span>, label: "Red", value: data.tier_red ?? 0, tone: "bad", filter: { label: "Genie-Ready tier: Red", params: { tier: "red" } } },
-          { key: "unknown", icon: <span>⚪</span>, label: "Unknown", value: data.tier_unknown ?? 0, filter: { label: "Genie-Ready tier: Unknown", params: { tier: "unknown" } } },
-        ]}
-      />
-
-      <GenieReadyTable data={data} />
-    </div>
-  );
-}
-
-function GenieReadyTable({ data }: { data: DashboardOut }) {
-  const rows = data.genie_ready_accounts ?? [];
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Genie-Ready accounts (by ARR)</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No accounts yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-muted-foreground border-b">
-                  <th className="py-2 pr-3 font-medium">Account</th>
-                  <th className="py-2 pr-3 font-medium">Tier</th>
-                  <th className="py-2 pr-3 font-medium">Provisioning</th>
-                  <th className="py-2 pr-3 font-medium">PP AI</th>
-                  <th className="py-2 pr-3 font-medium text-right">Genie $ (30d)</th>
-                  <th className="py-2 pr-3 font-medium text-right">ARR</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((a) => (
-                  <tr key={a.id} className="border-b last:border-0">
-                    <td className="py-2 pr-3">
-                      <Link
-                        to="/accounts/$accountId"
-                        params={{ accountId: a.id }}
-                        className="font-medium hover:underline"
-                      >
-                        {a.name}
-                      </Link>
-                      <div className="text-xs text-muted-foreground">{a.sub_vertical || "—"}</div>
-                    </td>
-                    <td className="py-2 pr-3">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span
-                          className={`h-2 w-2 rounded-full ${TIER_DOT[a.readiness_tier ?? "unknown"] ?? TIER_DOT.unknown}`}
-                        />
-                        <span className="capitalize">{a.readiness_tier}</span>
-                      </span>
-                    </td>
-                    <td className="py-2 pr-3 capitalize text-muted-foreground">
-                      {a.provisioning_status}
-                    </td>
-                    <td className="py-2 pr-3 text-muted-foreground">
-                      {PP_LABEL[a.pp_status ?? "unknown"] ?? a.pp_status}
-                    </td>
-                    <td className="py-2 pr-3 text-right">
-                      {(a.genie_dollars_t30d ?? 0) > 0 ? fmtDbus(a.genie_dollars_t30d ?? 0) : "—"}
-                    </td>
-                    <td className="py-2 pr-3 text-right font-medium">{fmtDbus(a.arr ?? 0)}</td>
                   </tr>
                 ))}
               </tbody>
