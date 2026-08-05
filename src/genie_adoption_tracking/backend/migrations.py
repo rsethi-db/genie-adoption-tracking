@@ -47,10 +47,23 @@ _MIGRATIONS = [
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS genie_active BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS readiness_tier VARCHAR NOT NULL DEFAULT 'unknown'",
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS genie_spend_90d DOUBLE PRECISION NOT NULL DEFAULT 0",
+    # New gat_account columns from main (Genie spend/spaces, SFDC id, pipeline).
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS genie_dollars_t30d DOUBLE PRECISION NOT NULL DEFAULT 0",
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS active_genie_spaces INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS sfdc_account_id VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS est_pipeline_per_month DOUBLE PRECISION NOT NULL DEFAULT 0",
+    # Campaign redesign: time-boxed outreach to a chosen set of accounts + a Form.
+    # New columns are added to any pre-existing gat_campaign; the dropped legacy
+    # columns (ask/cta/segment/sub_vertical/deadline/priority/active) are simply left
+    # in place if present — harmless and avoids destructive DDL.
+    "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS start_date VARCHAR NOT NULL DEFAULT ''",
+    "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS end_date VARCHAR NOT NULL DEFAULT ''",
+    "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS audience_text VARCHAR NOT NULL DEFAULT ''",
+    "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS account_ids JSON NOT NULL DEFAULT '[]'",
+    "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS form_url VARCHAR NOT NULL DEFAULT ''",
+    # In-app questionnaire + activation.
+    "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS form_token VARCHAR NOT NULL DEFAULT ''",
+    "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS status VARCHAR NOT NULL DEFAULT 'draft'",
 ]
 
 

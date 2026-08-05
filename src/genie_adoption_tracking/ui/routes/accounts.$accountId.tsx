@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Suspense, useState, useEffect, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 import {
   useGetAccountSuspense,
   useToggleAccountPlanItem,
@@ -36,8 +36,6 @@ import {
   Circle,
   MinusCircle,
   ChevronDown,
-  Megaphone,
-  CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -127,9 +125,6 @@ function AccountDetail({ accountId }: { accountId: string }) {
         </div>
       </div>
 
-      {/* Active leadership campaigns targeting this account */}
-      <AccountCampaigns accountId={data.id} />
-
       {/* Readiness & eligibility — one compact card replacing the 3 stacked banners */}
       <ReadinessEligibility data={data} />
 
@@ -150,72 +145,6 @@ function AccountDetail({ accountId }: { accountId: string }) {
         plan={data.plan ?? []}
         issues={data.issues ?? []}
       />
-    </div>
-  );
-}
-
-// Active leadership campaigns targeting this account — shown as a banner so the
-// account team sees the ask (CTA + deadline) right where they work the account.
-interface AccountCampaign {
-  id: string;
-  title: string;
-  ask: string;
-  cta: string;
-  deadline?: string;
-  priority: string;
-}
-
-function AccountCampaigns({ accountId }: { accountId: string }) {
-  const [campaigns, setCampaigns] = useState<AccountCampaign[]>([]);
-  useEffect(() => {
-    fetch(`/api/accounts/${accountId}/campaigns`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => setCampaigns(Array.isArray(d) ? d : []))
-      .catch(() => setCampaigns([]));
-  }, [accountId]);
-  if (campaigns.length === 0) return null;
-  return (
-    <div className="mb-4 space-y-2">
-      {campaigns.map((c) => (
-        <div
-          key={c.id}
-          className={cn(
-            "rounded-lg border p-3 flex items-start gap-3",
-            c.priority === "high"
-              ? "border-destructive/50 bg-destructive/5"
-              : "border-primary/40 bg-primary/5"
-          )}
-        >
-          <Megaphone
-            className={cn(
-              "h-4 w-4 mt-0.5 shrink-0",
-              c.priority === "high" ? "text-destructive" : "text-primary"
-            )}
-          />
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold flex items-center gap-2">
-              {c.title}
-              {c.priority === "high" && (
-                <Badge variant="destructive" className="text-xs">
-                  High
-                </Badge>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground mt-0.5">{c.ask}</p>
-            {c.cta && (
-              <p className="text-sm mt-1">
-                <span className="font-medium">Action: </span>
-                {c.cta}
-              </p>
-            )}
-            {c.deadline && (
-              <p className="text-xs text-muted-foreground mt-1 inline-flex items-center gap-1">
-                <CalendarClock className="h-3 w-3" /> Due {c.deadline}
-              </p>
-            )}
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
@@ -299,7 +228,7 @@ function AccountIssues({ issues }: { issues: AccountIssueOut[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Genie Playbook — "What happens at every stage".
+// Adoption Workflow — "What happens at every stage".
 // Stage columns (U1–U6); tasks colored by lane (border). Edits are held locally
 // and persisted to Lakebase in one shot via the Save button.
 // ---------------------------------------------------------------------------
@@ -309,7 +238,6 @@ const ADOPTION_STATUSES: { value: string; label: string }[] = [
   { value: "in_progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
   { value: "blocked", label: "Blocked" },
-  { value: "na", label: "N/A" },
 ];
 
 // Task-specific blocker reasons. When a task is Blocked, the team picks the reason
@@ -461,9 +389,6 @@ const LANE_DOT: Record<string, string> = {
 };
 
 // Reference links shown under specific workflow/security questions (by task key).
-// Extra links for the Security & Review tasks, which aren't part of the go/ resource
-// buckets in playbook.RESOURCES. Workflow-stage tasks get their resources from the
-// backend (task.resources, resolved from playbook.RESOURCES) so they never drift.
 const TASK_RESOURCES: Record<string, { label: string; url: string }[]> = {
   sec_authority_review: [
     {
@@ -521,7 +446,7 @@ function StatusRadio({
             aria-checked={selected}
             onClick={() => onPick(s.value)}
             className={cn(
-              "flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs transition-colors",
+              "flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors",
               selected
                 ? isBlocked
                   ? "border-destructive bg-destructive/10 text-destructive font-medium"
@@ -577,7 +502,6 @@ function AdoptionTaskCard({
   const blocked = value.status === "blocked";
   // All five statuses (incl. Blocked) are available on every task.
   const statusOptions = ADOPTION_STATUSES;
-  const [showResources, setShowResources] = useState(false);
   return (
     <div
       className={cn(
@@ -598,7 +522,7 @@ function AdoptionTaskCard({
           reasons), then the note, then the Ask-Genie link. */}
       {blocked && (
         <div className="mt-2">
-          <label className="text-xs font-medium uppercase tracking-wide text-destructive">
+          <label className="text-[10px] font-medium uppercase tracking-wide text-destructive">
             What's blocking this?
           </label>
           <select
@@ -650,58 +574,27 @@ function AdoptionTaskCard({
           Ask Genie how to get unstuck
         </button>
       )}
-      {(() => {
-        // Backend-resolved resources (from playbook.RESOURCES) + any security-only
-        // extras, de-duped by URL.
-        const links = [
-          ...(task.resources ?? []),
-          ...(TASK_RESOURCES[task.key] ?? []),
-        ];
-        const seen = new Set<string>();
-        const deduped = links.filter((r) =>
-          r.url && !seen.has(r.url) && seen.add(r.url)
-        );
-        if (deduped.length === 0) return null;
-        return (
-          <div className="mt-2">
-            <button
-              type="button"
-              onClick={() => setShowResources((s) => !s)}
-              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+      {(TASK_RESOURCES[task.key] ?? []).length > 0 && (
+        <div className="mt-2 space-y-1">
+          {TASK_RESOURCES[task.key].map((r) => (
+            <a
+              key={r.url}
+              href={r.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
             >
-              <ChevronDown
-                className={cn(
-                  "h-3.5 w-3.5 transition-transform",
-                  showResources && "rotate-180"
-                )}
-              />
-              Resources
-              <span className="text-muted-foreground/70">({deduped.length})</span>
-            </button>
-            {showResources && (
-              <div className="mt-1.5 space-y-1 pl-4">
-                {deduped.map((r) => (
-                  <a
-                    key={r.url}
-                    href={r.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-1 text-xs text-primary hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3 shrink-0" />
-                    {r.label}
-                  </a>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })()}
+              <ExternalLink className="h-3 w-3 shrink-0" />
+              {r.label}
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-// Append-only edit history for the account's Genie Playbook tasks — who changed
+// Append-only edit history for the account's Adoption Workflow tasks — who changed
 // what, when. Collapsed by default; fetched on expand.
 interface HistoryEntry {
   task_key: string;
@@ -719,36 +612,6 @@ const STATUS_LABEL: Record<string, string> = {
   completed: "Completed",
   blocked: "Blocked",
 };
-
-// Group history entries (already newest-first) into [dateLabel, entries] sections by
-// calendar day, so the activity reads as a dated timeline. "Today"/"Yesterday" for the
-// two most recent days, otherwise a full date.
-function groupByDate(entries: HistoryEntry[]): [string, HistoryEntry[]][] {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const dayLabel = (d: Date): string => {
-    const dd = new Date(d);
-    dd.setHours(0, 0, 0, 0);
-    if (dd.getTime() === today.getTime()) return "Today";
-    if (dd.getTime() === yesterday.getTime()) return "Yesterday";
-    return dd.toLocaleDateString([], {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      year: dd.getFullYear() === today.getFullYear() ? undefined : "numeric",
-    });
-  };
-  const groups: [string, HistoryEntry[]][] = [];
-  for (const e of entries) {
-    const label = dayLabel(new Date(e.changed_at));
-    const last = groups[groups.length - 1];
-    if (last && last[0] === label) last[1].push(e);
-    else groups.push([label, [e]]);
-  }
-  return groups;
-}
 
 function AdoptionHistory({ accountId }: { accountId: string }) {
   const [open, setOpen] = useState(false);
@@ -795,52 +658,32 @@ function AdoptionHistory({ accountId }: { accountId: string }) {
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : entries.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No changes recorded yet — edits to the Genie Playbook will appear
+                No changes recorded yet — edits to the Adoption Workflow will appear
                 here.
               </p>
             ) : (
-              <div className="space-y-5">
-                {groupByDate(entries).map(([day, dayEntries]) => (
-                  <div key={day}>
-                    {/* Date header — one section per day, newest first */}
-                    <div className="flex items-center gap-2 mb-2">
-                      <CalendarClock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {day}
-                      </span>
-                      <span className="text-xs text-muted-foreground/70">
-                        · {dayEntries.length} change{dayEntries.length === 1 ? "" : "s"}
-                      </span>
-                      <div className="flex-1 border-t" />
+              <ul className="space-y-3">
+                {entries.map((e, i) => (
+                  <li key={i} className="flex gap-3 text-sm">
+                    <div className="mt-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-x-2">
+                        <span className="font-medium">{e.task_label}</span>
+                        <Badge variant="outline" className="text-[10px]">
+                          {STATUS_LABEL[e.status] ?? e.status}
+                        </Badge>
+                      </div>
+                      {e.note && (
+                        <p className="text-muted-foreground mt-0.5">“{e.note}”</p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {new Date(e.changed_at).toLocaleString()}
+                        {e.changed_by ? ` · ${e.changed_by}` : ""}
+                      </p>
                     </div>
-                    <ul className="space-y-2.5 pl-1 border-l ml-1.5">
-                      {dayEntries.map((e, i) => (
-                        <li key={i} className="flex gap-3 text-sm pl-3 relative">
-                          <div className="absolute -left-[5px] top-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-wrap items-center gap-x-2">
-                              <span className="font-medium">{e.task_label}</span>
-                              <Badge variant="outline" className="text-xs">
-                                {STATUS_LABEL[e.status] ?? e.status}
-                              </Badge>
-                            </div>
-                            {e.note && (
-                              <p className="text-muted-foreground mt-0.5">“{e.note}”</p>
-                            )}
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {new Date(e.changed_at).toLocaleTimeString([], {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                              {e.changed_by ? ` · ${e.changed_by}` : ""}
-                            </p>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </CardContent>
         </Card>
@@ -936,7 +779,7 @@ function AdoptionWorkflow({
           Save button (and unsaved / blocked counts) are always reachable. */}
       <CardHeader className="pb-3 sticky top-16 z-20 bg-card/95 backdrop-blur-sm rounded-t-xl border-b flex flex-row items-start justify-between gap-4">
         <div>
-          <CardTitle className="text-base">The Genie Playbook</CardTitle>
+          <CardTitle className="text-base">The Adoption Workflow</CardTitle>
           <p className="text-sm text-muted-foreground">
             What happens at every stage — set the status and add notes per task, then
             Save.
@@ -957,7 +800,7 @@ function AdoptionWorkflow({
                 : "Save"}
           </Button>
           {dirty && !save.isPending && (
-            <span className="text-xs text-muted-foreground">Unsaved changes</span>
+            <span className="text-[10px] text-muted-foreground">Unsaved changes</span>
           )}
         </div>
       </CardHeader>
@@ -1071,7 +914,7 @@ const UC_STAGES: { key: string; code: string }[] = [
 ];
 
 // Genie use cases arranged as a horizontal U1–U6 stage flow (matches the
-// Genie Playbook layout). Read-only — no create option here.
+// Adoption Workflow layout). Read-only — no create option here.
 function UseCaseFlow({ useCases }: { useCases: UseCaseListOut[] }) {
   const [open, setOpen] = useState(false);
   const byStage = new Map<string, UseCaseListOut[]>();
@@ -1309,20 +1152,20 @@ function PlanRow({
             {item.label}
           </span>
           {item.auto && (
-            <Badge variant="outline" className="gap-1 text-xs">
+            <Badge variant="outline" className="gap-1 text-[10px]">
               <Sparkles className="h-2.5 w-2.5" />
               auto
             </Badge>
           )}
           {isNa && (
-            <Badge variant="outline" className="text-xs text-muted-foreground">
+            <Badge variant="outline" className="text-[10px] text-muted-foreground">
               N/A
             </Badge>
           )}
           {item.status === "in_progress" && (
             <Badge
               variant="outline"
-              className="text-xs border-amber-600/50 text-amber-700 dark:text-amber-400"
+              className="text-[10px] border-amber-600/50 text-amber-700 dark:text-amber-400"
             >
               in progress
             </Badge>
@@ -1339,7 +1182,7 @@ function PlanRow({
                 <li key={iss.id} className="flex items-center gap-2 text-xs">
                   <Badge
                     variant="outline"
-                    className={`shrink-0 text-xs ${sev?.cls ?? "text-muted-foreground"}`}
+                    className={`shrink-0 text-[10px] ${sev?.cls ?? "text-muted-foreground"}`}
                   >
                     {sev?.label ?? iss.severity}
                   </Badge>
@@ -1412,12 +1255,9 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
   // User-provisioning readiness = AIM OR SCIM (provisioning_status is the broader
   // "any provisioning" signal); aim tells us whether the preferred method is used.
   const prov = data.provisioning_status ?? "unknown";
-  // Readiness reflects the team-filled Genie Playbook — Happy Path tasks only (the
-  // core adoption path; Recommended / As Needed / Security tasks don't count toward
-  // the score). N/A tasks are excluded from the score (not applicable to this account).
-  // Done = marked "completed".
-  const happyPathTasks = (data.adoption?.tasks ?? []).filter((t) => t.lane === "happy_path");
-  const workflowTasks = happyPathTasks.filter((t) => t.status !== "na");
+  // Readiness reflects the team-filled Adoption Workflow (matrix tasks, excluding the
+  // Security & Review questions) — not GTM auto-signals. Done = marked "completed".
+  const workflowTasks = (data.adoption?.tasks ?? []).filter((t) => t.lane !== "security");
   const applicable = workflowTasks;
   const done = workflowTasks.filter((t) => t.status === "completed");
   const readinessPct =
@@ -1425,7 +1265,7 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
       ? Math.round((done.length / workflowTasks.length) * 100)
       : 0;
   // Consolidate the breakdown by stage (U1–U6): one row per stage with done/total +
-  // the tasks still open (N/A excluded), instead of a flat list.
+  // the tasks still open, instead of a flat 28-item list.
   const stageGroups = (data.adoption?.stages ?? []).map((s) => {
     const tasks = workflowTasks.filter((t) => t.stage === s.key);
     return {
@@ -1457,34 +1297,35 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
         <CardTitle className="text-base">Readiness &amp; eligibility</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Readiness — the headline of this card; made prominent so it isn't skipped. */}
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <div className="flex items-end justify-between gap-3 mb-2">
+        {/* Readiness bar + expandable breakdown */}
+        <div className="max-w-md">
+          <div className="flex justify-between text-xs mb-1">
             <button
               type="button"
               onClick={() => setShowBreakdown((s) => !s)}
-              className="inline-flex items-center gap-1.5 text-sm font-semibold hover:text-primary"
+              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
             >
               Account readiness
               <ChevronDown
                 className={cn(
-                  "h-4 w-4 transition-transform",
+                  "h-3 w-3 transition-transform",
                   showBreakdown && "rotate-180"
                 )}
               />
             </button>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold">{readinessPct}%</span>
-              <span className="text-sm text-muted-foreground">
-                {done.length}/{applicable.length} tasks
+            <span className="font-medium">
+              {readinessPct}%
+              <span className="text-muted-foreground font-normal">
+                {" "}
+                ({done.length}/{applicable.length})
               </span>
-            </div>
+            </span>
           </div>
-          <Progress value={readinessPct} className="h-2.5" />
+          <Progress value={readinessPct} />
           {showBreakdown && (
             <>
-              <p className="text-xs text-muted-foreground mt-1.5">
-                By stage — from the Genie Playbook the team fills below.{" "}
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                By stage — from the Adoption Workflow the team fills below.{" "}
                 <span className="font-medium">{done.length}/{applicable.length}</span>{" "}
                 tasks done.
               </p>
@@ -1557,7 +1398,9 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
               ppConsumeViaWs
                 ? "On (select workspaces)"
                 : isPpEnabled(pp)
-                  ? "On"
+                  ? pp === "on_default"
+                    ? "On (default)"
+                    : "On"
                   : pp === "off"
                     ? "Off"
                     : "Unknown"
@@ -1638,14 +1481,14 @@ function EligibilityRow({
         className="w-full flex items-center gap-2.5 py-2.5 text-left"
       >
         <span className={cn("h-2 w-2 rounded-full shrink-0", ROW_DOT[tone])} />
-        <span className="text-sm">{label}</span>
+        <span className="text-sm flex-1">{label}</span>
+        <span className="text-sm font-medium">{value}</span>
         <ChevronDown
           className={cn(
-            "h-4 w-4 text-muted-foreground transition-transform shrink-0",
+            "h-4 w-4 text-muted-foreground transition-transform",
             open && "rotate-180"
           )}
         />
-        <span className="text-sm font-medium ml-auto">{value}</span>
       </button>
       {open && <div className="pb-3">{children}</div>}
     </div>
@@ -1692,7 +1535,9 @@ function PartnerPoweredBanner({
           )}
           {consumeViaWs
             ? "Partner-Powered AI: account default Off, On for select workspaces — Genie can consume there, but not account-wide."
-            : "Partner-Powered AI is On — Genie can consume."}
+            : status === "on_default"
+              ? "Partner-Powered AI is On (platform default) — Genie can consume."
+              : "Partner-Powered AI is On — Genie can consume."}
         </div>
         {consumeViaWs && (
           <p className="text-sm text-muted-foreground mt-1">
