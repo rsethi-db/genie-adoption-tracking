@@ -277,6 +277,8 @@ RESOURCES: list[dict] = [
      "url": "https://go/geniepricing", "stages": ["u3"]},
     {"key": "ref-pricing-faq", "bucket": "Product & Reference", "label": "Genie Products Pricing FAQ",
      "url": "https://docs.google.com/document/d/15VSQ95Kejw0bPzz24g7OKoAFmM6vYkYpkNJT4pXV52E/edit?tab=t.0#heading=h.l2pl401c73g6", "stages": ["u3"]},
+    {"key": "ref-ai-ready-semantics", "bucket": "Product & Reference", "label": "How to Build AI-Ready Business Semantics on Databricks",
+     "url": "https://go/aireadysemantics", "stages": ["u2", "u3"]},
 
     # ---- Demo Assets ------------------------------------------------------------------
     {"key": "demo-industry", "bucket": "Demo Assets", "label": "Existing Industry demos",
