@@ -32,6 +32,11 @@ function fmtDbus(n: number): string {
   return `$${n.toFixed(0)}`;
 }
 
+// Integer counts with thousands separators (7587 → 7,587).
+function fmtNum(n: number): string {
+  return (n ?? 0).toLocaleString("en-US");
+}
+
 const TIER_DOT: Record<string, string> = {
   green: "bg-emerald-500",
   yellow: "bg-amber-500",
@@ -132,8 +137,8 @@ function DashboardBody() {
         <TabsList>
           <TabsTrigger value="pp">Partner-Powered AI</TabsTrigger>
           <TabsTrigger value="accounts">Genie Accounts</TabsTrigger>
-          <TabsTrigger value="brickroad">Brickroad</TabsTrigger>
           <TabsTrigger value="subvertical">By Sub-Vertical</TabsTrigger>
+          <TabsTrigger value="brickroad">Brickroad</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pp" className="mt-4">
@@ -142,11 +147,11 @@ function DashboardBody() {
         <TabsContent value="accounts" className="mt-4">
           <GenieAccountsTab data={data} />
         </TabsContent>
-        <TabsContent value="brickroad" className="mt-4">
-          <BrickroadTab data={data} />
-        </TabsContent>
         <TabsContent value="subvertical" className="mt-4">
           <SubVerticalTab data={data} />
+        </TabsContent>
+        <TabsContent value="brickroad" className="mt-4">
+          <BrickroadTab data={data} />
         </TabsContent>
       </Tabs>
     </div>
@@ -386,12 +391,12 @@ function InlineAccounts({
                         {PROV_LABEL[a.provisioning_status ?? "unknown"] ?? a.provisioning_status}
                       </span>
                     </td>
-                    <td className="py-1.5 px-2 text-right tabular-nums">{a.use_case_count ?? 0}</td>
+                    <td className="py-1.5 px-2 text-right tabular-nums">{fmtNum(a.use_case_count ?? 0)}</td>
                     <td className="py-1.5 px-2 text-right tabular-nums">
                       {(a.genie_spend_90d ?? 0) > 0 ? fmtDbus(a.genie_spend_90d ?? 0) : "—"}
                     </td>
                     <td className="py-1.5 px-2 text-right tabular-nums">
-                      {(a.active_genie_spaces ?? 0) > 0 ? a.active_genie_spaces : "—"}
+                      {(a.active_genie_spaces ?? 0) > 0 ? fmtNum(a.active_genie_spaces ?? 0) : "—"}
                     </td>
                     <td className="py-1.5 px-2 text-right tabular-nums">
                       {(a.open_issues ?? 0) > 0 ? (
@@ -400,7 +405,7 @@ function InlineAccounts({
                           onClick={() => setOpenIssues((o) => (o === a.id ? null : a.id))}
                           className="text-destructive font-medium hover:underline"
                         >
-                          {a.open_issues}
+                          {fmtNum(a.open_issues ?? 0)}
                           {openIssues === a.id ? " ▾" : " ▸"}
                         </button>
                       ) : (
@@ -419,13 +424,13 @@ function InlineAccounts({
                   </Fragment>
                 ))}
               </tbody>
-              <tfoot className="sticky bottom-0 bg-muted/80 border-t text-xs font-medium">
+              <tfoot className="sticky bottom-0 bg-card border-t-2 text-xs font-medium shadow-[0_-1px_0_0_hsl(var(--border))]">
                 <tr>
                   <td className="py-1.5 px-2 text-muted-foreground">Totals</td>
                   <td colSpan={3}></td>
-                  <td className="py-1.5 px-2 text-right tabular-nums">{totalUc}</td>
+                  <td className="py-1.5 px-2 text-right tabular-nums">{fmtNum(totalUc)}</td>
                   <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalSpend)}</td>
-                  <td className="py-1.5 px-2 text-right tabular-nums">{totalSpaces}</td>
+                  <td className="py-1.5 px-2 text-right tabular-nums">{fmtNum(totalSpaces)}</td>
                   <td></td>
                   <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalArr)}</td>
                 </tr>
@@ -435,7 +440,16 @@ function InlineAccounts({
         )}
         {sorted !== null && sorted.length > 0 && (
           <p className="mt-2 text-xs text-muted-foreground">
-            Tier = GTM Genie-Ready: 🟢 ready · 🟡 partial · 🔴 gaps · ⚪ unknown.
+            Tier = GTM Genie-Ready (user provisioning + eligibility): 🟢 ready · 🟡 partial ·
+            🔴 gaps · ⚪ unknown ·{" "}
+            <a
+              href="https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f10313a17e11d6b0b11abfa2736836/published?o=2548836972759138"
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary underline hover:no-underline"
+            >
+              full dashboard
+            </a>
           </p>
         )}
       </CardContent>
@@ -691,38 +705,6 @@ function GenieAccountsTab({ data }: { data: DashboardOut }) {
       {stageFilter && (
         <InlineAccounts filter={stageFilter} onClose={() => setStageFilter(null)} />
       )}
-
-      {/* GTM Genie-Ready tier — explained + drillable (replaces the old tab) */}
-      <div>
-        <h2 className="text-sm font-semibold text-muted-foreground mb-1">
-          Genie-Ready tier
-        </h2>
-        <SoWhat>
-          A GTM readiness signal (user provisioning + eligibility), distinct from the
-          team-filled workflow readiness:{" "}
-          <span className="text-emerald-700 dark:text-emerald-400 font-medium">🟢 ready</span>,{" "}
-          <span className="text-amber-700 dark:text-amber-400 font-medium">🟡 partial</span>,{" "}
-          <span className="text-destructive font-medium">🔴 gaps</span>, ⚪ unknown. Click a
-          tier for those accounts, or open the{" "}
-          <a
-            href="https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f10313a17e11d6b0b11abfa2736836/published?o=2548836972759138"
-            target="_blank"
-            rel="noreferrer"
-            className="text-primary underline hover:no-underline"
-          >
-            full Genie-Ready dashboard
-          </a>
-          .
-        </SoWhat>
-        <TileGrid
-          tiles={[
-            { key: "green", icon: <span>🟢</span>, label: "Green", value: data.tier_green ?? 0, tone: "good", filter: { label: "Genie-Ready tier: Green", params: { tier: "green" } } },
-            { key: "yellow", icon: <span>🟡</span>, label: "Yellow", value: data.tier_yellow ?? 0, tone: "warn", filter: { label: "Genie-Ready tier: Yellow", params: { tier: "yellow" } } },
-            { key: "red", icon: <span>🔴</span>, label: "Red", value: data.tier_red ?? 0, tone: "bad", filter: { label: "Genie-Ready tier: Red", params: { tier: "red" } } },
-            { key: "unknown", icon: <span>⚪</span>, label: "Unknown", value: data.tier_unknown ?? 0, filter: { label: "Genie-Ready tier: Unknown", params: { tier: "unknown" } } },
-          ]}
-        />
-      </div>
     </div>
   );
 }
@@ -992,7 +974,7 @@ function StatTile({
         {icon} {label}
       </div>
       <div className={`text-2xl font-bold mt-1 ${toneClass}`}>
-        {display ?? value}
+        {display ?? fmtNum(value ?? 0)}
       </div>
       {clickable && (
         // Persistent affordance so it's obvious the tile drills in (not hover-only).
