@@ -96,7 +96,7 @@ _comments = {
     "gat_checklist_progress": "Per-use-case playbook action items checked off across the Happy Path / Recommended / As Needed lanes.",
     "gat_blocker": "Blockers flagged against use cases, categorized by the 5 'Getting Unstuck' categories.",
     "gat_resource_click": "Which go/ playbook resources the field pulled; engagement signal.",
-    "gat_adoption_task_state": "Per-account Adoption Workflow questionnaire responses: status (not_initiated/na/in_progress/completed/blocked) + note per task_key across the U1-U6 x lane matrix and Security & Review questions.",
+    "gat_adoption_task_state": "Per-account Genie Playbook questionnaire responses: status (not_initiated/na/in_progress/completed/blocked) + note per task_key across the U1-U6 x lane matrix and Security & Review questions.",
     "gat_account_plan_item": "Per-account readiness action-plan items (PP enabled, Security Review, AIM, data readiness, etc.) with done-state and notes; drives readiness_pct.",
     "gat_account_issue": "Genie Brickroad issues per account (all severities: blocked/risk/friction/nice_to_have) with revenue impact; open = status not resolved/will_not_solve.",
 }

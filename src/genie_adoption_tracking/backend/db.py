@@ -34,6 +34,11 @@ class Account(SQLModel, table=True):
     __tablename__ = "gat_account"
 
     id: str = Field(primary_key=True)
+    # SFDC account id — the stable GTM identity. Distinct accounts can share a display
+    # name (e.g. CRA International, E&Y HQ), so the seed keys/dedupes by this, not name.
+    # PK stays the internal uuid so existing FK'd user data (task states, plan, history)
+    # is never re-parented.
+    sfdc_account_id: str = Field(default="", index=True)
     name: str = Field(index=True)
     sub_vertical: str = Field(default="")
     ae_owner: str = Field(default="")
@@ -65,6 +70,14 @@ class Account(SQLModel, table=True):
     readiness_tier: str = Field(default="unknown", index=True)
     # Genie-specific spend, trailing 90 days (USD), from fins_data.genie_dbu_dollars.
     genie_spend_90d: float = Field(default=0.0)
+    # Genie-specific spend, trailing 30 days (USD) — the T30D figure the logfood
+    # dashboard's PP-off page reports (fins_data.genie_dbu_dollars, last 30 days).
+    genie_dollars_t30d: float = Field(default=0.0)
+    # Active Genie spaces (data rooms with usage in the trailing 30 days), summed
+    # across the account's workspaces (metric_store.fct_data_room_messages_daily).
+    active_genie_spaces: int = Field(default=0)
+    # Est. pipeline $/mo — open-opportunity booking ARR / 12 (gtm_silver.opportunity_detail).
+    est_pipeline_per_month: float = Field(default=0.0)
     created_at: datetime = Field(default_factory=_utcnow)
     created_by: str = Field(default="")
 
@@ -137,7 +150,7 @@ class AccountPlanItem(SQLModel, table=True):
 
 
 class AdoptionTaskState(SQLModel, table=True):
-    """Per-account status + note for one Adoption Workflow task (stage × lane grid).
+    """Per-account status + note for one Genie Playbook task (stage × lane grid).
     Task identity (stage, lane, label) is static content in adoption_workflow.py;
     only the team-entered status/note is persisted here (one row per account+task).
 
@@ -161,7 +174,7 @@ class AdoptionTaskState(SQLModel, table=True):
 
 
 class AdoptionTaskHistory(SQLModel, table=True):
-    """Append-only audit log — one row per change to an Adoption Workflow task, so the
+    """Append-only audit log — one row per change to an Genie Playbook task, so the
     account team can see the full history (who changed what, when) rather than only the
     latest value in AdoptionTaskState. Written on every save; never updated or deleted.
     FK to gat_account (stable id) so the nightly refresh preserves it."""

@@ -50,19 +50,25 @@ from .models import (
     BlockerDefOut,
     BlockerIn,
     BlockerStateOut,
+    BrickroadIssueOut,
     ChecklistItemOut,
     ChecklistStateOut,
     ChecklistToggleIn,
     DashboardOut,
     FunnelBucketOut,
+    GenieReadyAccountOut,
     OkOut,
     PlaybookOut,
     ResourceClickIn,
     ResourceOut,
+    SpendBucketOut,
     StageAdvanceIn,
     StageOut,
     StalledUseCaseOut,
+    SubVerticalStatOut,
+    TaskResourceOut,
     TopResourceOut,
+    WhitespaceAccountOut,
     UseCaseDetailOut,
     UseCaseIn,
     UseCaseListOut,
@@ -129,6 +135,58 @@ _CLOSED_ISSUE_STATUSES = {"resolved", "will_not_solve"}
 
 def _issue_is_open(status: str) -> bool:
     return status.lower() not in _CLOSED_ISSUE_STATUSES
+
+
+def _is_whitespace(a: Account) -> bool:
+    """Whitespace = a live opportunity: the account CAN consume Genie and is
+    provisioned, but has no active Genie agent right now. Specifically —
+      * PP AI can consume: on / on_default, OR off with enforce not on (workspaces
+        can still flip PP on) — i.e. NOT hard-blocked;
+      * user provisioning is available (on or partial); AND
+      * no active Genie agent in the last 30 days (active_genie_spaces == 0).
+    This surfaces "ready but idle → go activate" accounts, not just untracked ones."""
+    pp_can_consume = a.pp_status in ("on", "on_default") or (
+        a.pp_status == "off" and a.pp_enforce != "on"
+    )
+    provisioned = a.provisioning_status in ("on", "partial")
+    idle = (a.active_genie_spaces or 0) == 0
+    return pp_can_consume and provisioned and idle
+
+
+# Genie T30D-spend buckets, matching the logfood PP-off page's distribution histogram.
+_SPEND_BUCKETS: list[tuple[str, float]] = [
+    ("$0", 0.0),
+    ("$1 - $100", 100.0),
+    ("$100 - $500", 500.0),
+    ("$500 - $1K", 1000.0),
+    ("$1K - $5K", 5000.0),
+    ("$5K - $10K", 10000.0),
+    ("$10K - $30K", 30000.0),
+    ("$30K+", float("inf")),
+]
+
+
+def _spend_bucket_index(dollars: float) -> int:
+    """Index into _SPEND_BUCKETS. $0 is its own bucket; otherwise the first bucket
+    whose upper bound the value falls under."""
+    if dollars <= 0:
+        return 0
+    for i, (_label, upper) in enumerate(_SPEND_BUCKETS):
+        if i == 0:
+            continue  # the $0 bucket
+        if dollars < upper:
+            return i
+    return len(_SPEND_BUCKETS) - 1
+
+
+# Map raw Brickroad severities → the app's blocker vocabulary shown in the UI.
+_SEVERITY_LABEL = {
+    "blocker": "Blocker",
+    "blocked": "Blocker",
+    "risk": "At Risk",
+    "feedback": "Feedback",
+    "nice_to_have": "Nice to have",
+}
 
 
 def _open_issue_count(session: Session, account_id: str) -> int:
@@ -210,19 +268,22 @@ def _readiness_pct(session: Session, account: Account) -> int:
     return pct
 
 
-# Readiness is driven by the team-filled Adoption Workflow (not GTM auto-signals):
-# share of workflow tasks the team has marked "completed". The stage×lane matrix tasks
-# count; the Security & Review questions are excluded from the score.
-_WORKFLOW_TASK_KEYS = [t["key"] for t in adoption_workflow.TASKS if t["lane"] != "security"]
+# Readiness is driven by the team-filled Genie Playbook (not GTM auto-signals):
+# share of HAPPY PATH tasks the team has marked "completed". Only the Happy Path lane
+# counts toward readiness (Recommended / As Needed / Security tasks are excluded), so
+# this matches the account-detail readiness %.
+_WORKFLOW_TASK_KEYS = [t["key"] for t in adoption_workflow.TASKS if t["lane"] == "happy_path"]
 _WORKFLOW_TASK_TOTAL = len(_WORKFLOW_TASK_KEYS)
 
 
 def _workflow_readiness(states: dict[str, str]) -> int:
-    """states: task_key -> status. % of matrix tasks marked completed."""
-    if _WORKFLOW_TASK_TOTAL == 0:
+    """states: task_key -> status. % of applicable Happy Path tasks marked completed.
+    N/A tasks are excluded from the denominator (not applicable to this account)."""
+    applicable = [k for k in _WORKFLOW_TASK_KEYS if states.get(k) != "na"]
+    if not applicable:
         return 0
-    done = sum(1 for k in _WORKFLOW_TASK_KEYS if states.get(k) == "completed")
-    return round(100 * done / _WORKFLOW_TASK_TOTAL)
+    done = sum(1 for k in applicable if states.get(k) == "completed")
+    return round(100 * done / len(applicable))
 
 
 def _account_workflow_readiness(session: Session, account_id: str) -> int:
@@ -236,7 +297,7 @@ def _account_workflow_readiness(session: Session, account_id: str) -> int:
 
 
 def _avg_readiness(session: Session, accounts: Sequence[Account]) -> int:
-    """Average readiness % across accounts, driven by the team-filled Adoption Workflow
+    """Average readiness % across accounts, driven by the team-filled Genie Playbook
     (share of matrix tasks marked completed). Batched: one query for all task states."""
     if not accounts:
         return 0
@@ -248,7 +309,7 @@ def _avg_readiness(session: Session, accounts: Sequence[Account]) -> int:
 
 
 def _build_adoption(session: Session, account: Account) -> AdoptionWorkflowOut:
-    """The Adoption Workflow matrix for one account: static stage/lane/task content
+    """The Genie Playbook matrix for one account: static stage/lane/task content
     merged with the account's stored per-task status + note."""
     stored = {
         s.task_key: s
@@ -258,6 +319,14 @@ def _build_adoption(session: Session, account: Account) -> AdoptionWorkflowOut:
             )
         ).all()
     }
+    def _task_resources(task_key: str) -> list[TaskResourceOut]:
+        out: list[TaskResourceOut] = []
+        for rkey in adoption_workflow.TASK_RESOURCE_KEYS.get(task_key, []):
+            meta = _RESOURCE_META.get(rkey)
+            if meta:
+                out.append(TaskResourceOut(label=meta["label"], url=meta["url"]))
+        return out
+
     tasks = [
         AdoptionTaskOut(
             key=t["key"],
@@ -267,6 +336,7 @@ def _build_adoption(session: Session, account: Account) -> AdoptionWorkflowOut:
             status=(stored[t["key"]].status if t["key"] in stored
                     else adoption_workflow.DEFAULT_STATUS),
             note=stored[t["key"]].note if t["key"] in stored else "",
+            resources=_task_resources(t["key"]),
         )
         for t in adoption_workflow.TASKS
     ]
@@ -324,14 +394,23 @@ def list_accounts(
     stage: str = "",
     whitespace: bool = False,
     open_issues: bool = False,
+    genie_active: bool = False,
+    has_spend: bool = False,
+    sub_vertical: str = "",
+    spend_bucket: int = -1,
+    has_usecase: bool = False,
 ):
     """Account lookup. Pass `q` for text search (name/owner/sub-vertical), or one/more
-    filters (tier, pp, provisioning, stage, whitespace, open_issues) for a Signals
-    drill-down. With NO q and NO filter, returns nothing so the page loads instantly.
-    Filters return up to `limit` matches (500 when a filter is set, to show a segment)."""
+    filters (tier, pp, provisioning, stage, whitespace, open_issues, genie_active,
+    has_spend, sub_vertical, spend_bucket) for a Signals drill-down. `pp` accepts on/off
+    plus off_enforce_on and off_enforce_off; `spend_bucket` is a Genie-spend bucket index
+    (see _SPEND_BUCKETS). With NO q and NO filter, returns nothing so the page loads
+    instantly. Filters return up to `limit` matches (500 when set)."""
     needle = q.strip().lower()
     has_filter = bool(
         tier or pp or provisioning or stage or whitespace or open_issues
+        or genie_active or has_spend or sub_vertical or spend_bucket >= 0
+        or has_usecase
     )
     if not needle and not has_filter:
         return []
@@ -359,19 +438,40 @@ def list_accounts(
             return False
         if tier and a.readiness_tier != tier:
             return False
-        if pp == "off" and not (
-            a.pp_status == "off" and (a.pp_enforce == "on" or (a.ws_pp_on or 0) == 0)
-        ):
+        if pp == "off" and a.pp_status != "off":
             return False
         if pp == "on" and a.pp_status not in ("on", "on_default"):
             return False
-        if provisioning and a.provisioning_status != provisioning:
+        if pp == "off_enforce_on" and not (
+            a.pp_status == "off" and a.pp_enforce == "on"
+        ):
             return False
+        if pp == "off_enforce_off" and not (
+            a.pp_status == "off" and a.pp_enforce != "on"
+        ):
+            return False
+        if provisioning:
+            # "off" means not provisioned = off OR blank/unknown (GTM's treatment).
+            if provisioning == "off":
+                if a.provisioning_status in ("on", "partial"):
+                    return False
+            elif a.provisioning_status != provisioning:
+                return False
         if stage and stage not in stages_by_acct.get(a.id, set()):
             return False
-        if whitespace and a.id in stages_by_acct:
+        if whitespace and not _is_whitespace(a):
+            return False
+        if has_usecase and a.id not in stages_by_acct:
             return False
         if open_issues and a.id not in issue_accts:
+            return False
+        if genie_active and not a.genie_active:
+            return False
+        if has_spend and (a.genie_dollars_t30d or 0) <= 0:
+            return False
+        if sub_vertical and (a.sub_vertical or "Unspecified") != sub_vertical:
+            return False
+        if spend_bucket >= 0 and _spend_bucket_index(a.genie_dollars_t30d or 0) != spend_bucket:
             return False
         return True
 
@@ -424,6 +524,7 @@ def list_accounts(
             provisioning_ws_total=a.provisioning_ws_total,
             readiness_tier=a.readiness_tier,
             genie_spend_90d=a.genie_spend_90d,
+            active_genie_spaces=a.active_genie_spaces,
             genie_active=a.genie_active,
             # Not shown on the account lookup; skip the per-account plan resolve
             # (it was an N+1 that ran several Lakebase queries per account).
@@ -499,7 +600,7 @@ def get_account(account_id: str, session: Dependencies.Session):
             )
         )
     plan_items, _ = _build_plan(session, acct)
-    # Readiness is driven by the team-filled Adoption Workflow, not GTM auto-signals.
+    # Readiness is driven by the team-filled Genie Playbook, not GTM auto-signals.
     plan_pct = _account_workflow_readiness(session, account_id)
     # Genie-related issues (all severities), open first then by revenue impact.
     issue_rows = session.exec(
@@ -622,7 +723,7 @@ def save_adoption_tasks(
     session: Dependencies.Session,
     user_ws: Dependencies.UserClient,
 ):
-    """Persist the whole Adoption Workflow questionnaire in one request (Save button)."""
+    """Persist the whole Genie Playbook questionnaire in one request (Save button)."""
     acct = session.get(Account, account_id)
     if acct is None:
         raise HTTPException(status_code=404, detail="Account not found")
@@ -677,7 +778,7 @@ def save_adoption_tasks(
     operation_id="getAdoptionHistory",
 )
 def adoption_history(account_id: str, session: Dependencies.Session):
-    """Append-only edit history for an account's Adoption Workflow tasks, newest first."""
+    """Append-only edit history for an account's Genie Playbook tasks, newest first."""
     labels = {t["key"]: t["label"] for t in adoption_workflow.TASKS}
     rows = session.exec(
         select(AdoptionTaskHistory).where(
@@ -1064,12 +1165,14 @@ def get_dashboard(session: Dependencies.Session):
     clicks = session.exec(select(ResourceClick)).all()
     account_names = {a.id: a.name for a in accounts}
 
-    # Funnel: count use cases (and sum DBU value) currently at each stage.
-    stage_counts: dict[str, int] = {}
+    # Funnel: count distinct ACCOUNTS with a use case at each stage (matches the
+    # drill-down, which lists accounts) + sum the DBU value at that stage.
+    stage_accts: dict[str, set[str]] = {}
     stage_dbus: dict[str, float] = {}
     for uc in use_cases:
-        stage_counts[uc.stage] = stage_counts.get(uc.stage, 0) + 1
+        stage_accts.setdefault(uc.stage, set()).add(uc.account_id)
         stage_dbus[uc.stage] = stage_dbus.get(uc.stage, 0.0) + uc.estimated_monthly_dbus
+    stage_counts = {k: len(v) for k, v in stage_accts.items()}
     funnel = [
         FunnelBucketOut(
             stage=s["key"],
@@ -1135,15 +1238,18 @@ def get_dashboard(session: Dependencies.Session):
     open_blocker_total = sum(1 for b in blockers if not b.resolved)
     live_total = sum(1 for uc in use_cases if uc.stage == "u6")
     total_dbus = round(sum(uc.estimated_monthly_dbus for uc in use_cases), 2)
-    # PP genuinely blocked: default off AND (enforce on, or no workspace has it on).
-    # Enforce-off with some workspaces on can still consume Genie → not counted.
-    pp_off_total = sum(
-        1
-        for a in accounts
-        if a.pp_status == "off" and (a.pp_enforce == "on" or (a.ws_pp_on or 0) == 0)
-    )
+    est_pipeline_total = round(sum(a.est_pipeline_per_month for a in accounts), 2)
+    # PP-off is decided ONCE in the seed (logfood's rule: an explicitly-off Databricks
+    # account that is actually consuming in T30D). pp_status == "off" IS that set — so
+    # everywhere in the app just trusts the stored status, no re-derivation.
+    pp_off_total = sum(1 for a in accounts if a.pp_status == "off")
+    pp_on_total = sum(1 for a in accounts if a.pp_status in ("on", "on_default"))
     # "Provisioning off" = no user provisioning at all (neither AIM nor SCIM).
-    aim_off_total = sum(1 for a in accounts if a.provisioning_status == "off")
+    # GTM treats blank/unknown provisioning as NOT provisioned, so "No provisioning"
+    # counts off + unknown (only on/partial are considered provisioned).
+    aim_off_total = sum(
+        1 for a in accounts if a.provisioning_status not in ("on", "partial")
+    )
     all_issues = session.exec(select(AccountIssue)).all()
     open_issue_total = sum(1 for i in all_issues if _issue_is_open(i.status))
     accounts_with_issues = len(
@@ -1157,13 +1263,98 @@ def get_dashboard(session: Dependencies.Session):
     for a in accounts:
         tier_counts[a.readiness_tier if a.readiness_tier in tier_counts else "unknown"] += 1
 
+    # --- logfood parity aggregates ------------------------------------------------
+    # Headline / Partner-Powered AI page.
+    genie_revenue_t30d = round(sum(a.genie_dollars_t30d for a in accounts), 2)
+    active_genie_spaces = sum(a.active_genie_spaces for a in accounts)
+    pp_off_enforce_on = sum(
+        1 for a in accounts if a.pp_status == "off" and a.pp_enforce == "on"
+    )
+    pp_off_enforce_off = sum(
+        1 for a in accounts if a.pp_status == "off" and a.pp_enforce != "on"
+    )
+    # Genie-spend distribution (T30D) buckets.
+    bucket_counts = [0] * len(_SPEND_BUCKETS)
+    for a in accounts:
+        bucket_counts[_spend_bucket_index(a.genie_dollars_t30d)] += 1
+    spend_buckets = [
+        SpendBucketOut(label=_SPEND_BUCKETS[i][0], order=i, account_count=bucket_counts[i])
+        for i in range(len(_SPEND_BUCKETS))
+    ]
+
+    # Genie Accounts page — whitespace = can-consume + provisioned + idle (see
+    # _is_whitespace), ranked by ARR. (accts_with_uc kept for the sub-vertical rollup.)
+    accts_with_uc = {uc.account_id for uc in use_cases}
+    whitespace = [a for a in accounts if _is_whitespace(a)]
+    whitespace_top = [
+        WhitespaceAccountOut(
+            id=a.id, name=a.name, sub_vertical=a.sub_vertical,
+            ae_owner=a.ae_owner, arr=a.arr,
+        )
+        for a in sorted(whitespace, key=lambda x: x.arr, reverse=True)[:25]
+    ]
+
+    # Brickroad page — Genie issues with severity + revenue impact.
+    open_issues = [i for i in all_issues if _issue_is_open(i.status)]
+    issues_at_risk = sum(
+        1 for i in open_issues if i.severity.lower() in ("risk", "at risk")
+    )
+    total_revenue_impact = round(sum(i.revenue_impact for i in open_issues), 2)
+    brickroad_issues = [
+        BrickroadIssueOut(
+            id=i.id, display_id=i.display_id, title=i.title,
+            account_id=i.account_id,
+            account_name=account_names.get(i.account_id, "(unknown)"),
+            severity=_SEVERITY_LABEL.get(i.severity.lower(), i.severity or "Unknown"),
+            status=i.status, product_area=i.product_area,
+            revenue_impact=i.revenue_impact, investigator=i.investigator,
+        )
+        for i in sorted(open_issues, key=lambda x: x.revenue_impact, reverse=True)[:50]
+    ]
+
+    # Genie-Ready page — tier + provisioning + spend, ranked by ARR (t3m proxy).
+    genie_ready_accounts = [
+        GenieReadyAccountOut(
+            id=a.id, name=a.name, sub_vertical=a.sub_vertical,
+            readiness_tier=a.readiness_tier, provisioning_status=a.provisioning_status,
+            pp_status=a.pp_status, genie_dollars_t30d=a.genie_dollars_t30d, arr=a.arr,
+        )
+        for a in sorted(accounts, key=lambda x: x.arr, reverse=True)[:100]
+    ]
+
+    # Sub-vertical rollup — adoption grouped by sub-vertical (batched readiness).
+    states_by_acct: dict[str, dict[str, str]] = {}
+    for s in session.exec(select(AdoptionTaskState)).all():
+        states_by_acct.setdefault(s.account_id, {})[s.task_key] = s.status
+    sv_groups: dict[str, list[Account]] = {}
+    for a in accounts:
+        sv_groups.setdefault(a.sub_vertical or "Unspecified", []).append(a)
+    sub_verticals = [
+        SubVerticalStatOut(
+            sub_vertical=sv,
+            accounts=len(grp),
+            genie_active=sum(1 for a in grp if a.genie_active),
+            whitespace=sum(1 for a in grp if _is_whitespace(a)),
+            genie_spend_90d=round(sum(a.genie_spend_90d for a in grp), 2),
+            avg_readiness_pct=round(
+                sum(_workflow_readiness(states_by_acct.get(a.id, {})) for a in grp)
+                / len(grp)
+            ),
+            arr=round(sum(a.arr for a in grp), 2),
+        )
+        for sv, grp in sv_groups.items()
+    ]
+    sub_verticals.sort(key=lambda x: x.accounts, reverse=True)
+
     return DashboardOut(
         total_accounts=len(accounts),
         total_use_cases=len(use_cases),
         open_blockers=open_blocker_total,
         live_use_cases=live_total,
         total_monthly_dbus=total_dbus,
+        est_pipeline_per_month=est_pipeline_total,
         pp_off_accounts=pp_off_total,
+        pp_on_accounts=pp_on_total,
         aim_off_accounts=aim_off_total,
         avg_readiness_pct=avg_readiness,
         open_issues=open_issue_total,
@@ -1171,6 +1362,13 @@ def get_dashboard(session: Dependencies.Session):
         genie_active_accounts=genie_active_total,
         workspaces_with_genie=ws_with_genie,
         genie_spend_90d=genie_spend_total,
+        genie_revenue_t30d=genie_revenue_t30d,
+        active_genie_spaces=active_genie_spaces,
+        pp_off_enforce_on=pp_off_enforce_on,
+        pp_off_enforce_off=pp_off_enforce_off,
+        whitespace_accounts=len(whitespace),
+        issues_at_risk=issues_at_risk,
+        total_revenue_impact=total_revenue_impact,
         tier_green=tier_counts["green"],
         tier_yellow=tier_counts["yellow"],
         tier_red=tier_counts["red"],
@@ -1179,4 +1377,9 @@ def get_dashboard(session: Dependencies.Session):
         blockers_by_category=blockers_by_category,
         stalled=stalled[:10],
         top_resources=top_resources,
+        spend_buckets=spend_buckets,
+        whitespace_top=whitespace_top,
+        brickroad_issues=brickroad_issues,
+        genie_ready_accounts=genie_ready_accounts,
+        sub_verticals=sub_verticals,
     )

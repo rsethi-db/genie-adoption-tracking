@@ -398,7 +398,7 @@ function GetUnstuck({
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-sm">{blk.name}</span>
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className="text-xs">
                         {blk.gate}
                       </Badge>
                     </div>
@@ -504,7 +504,7 @@ function ContextResources({
             className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors group"
           >
             <span>
-              <span className="text-[10px] uppercase text-muted-foreground mr-2">
+              <span className="text-xs uppercase text-muted-foreground mr-2">
                 {r.bucket}
               </span>
               {r.label}

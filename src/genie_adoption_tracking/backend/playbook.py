@@ -268,9 +268,19 @@ BLOCKERS: list[dict] = [
 # URLs sourced from the FINS Genie Field Adoption Playbook deck
 # (docs.google.com/presentation/d/1Vbwoj1dHBIGW1t3yIeKT4_9qY0faOTZpa2UsSHp5ojs).
 RESOURCES: list[dict] = [
+    # ---- Product & Reference ----------------------------------------------------------
+    {"key": "ref-go-genie", "bucket": "Product & Reference", "label": "Genie & AI/BI (go/genie)",
+     "url": "https://home.databricks.com/sales/field-performance/products/genie-and-ai-bi/", "stages": ["prereqs", "u1"]},
+    {"key": "workshops-genie-best-practices", "bucket": "Product & Reference", "label": "Genie Best Practices",
+     "url": "https://docs.databricks.com/aws/en/genie-agents/best-practices", "stages": ["u2", "u3", "u5"]},
+    {"key": "workshops-pricing", "bucket": "Product & Reference", "label": "Pricing",
+     "url": "https://go/geniepricing", "stages": ["u3"]},
+    {"key": "ref-pricing-faq", "bucket": "Product & Reference", "label": "Genie Products Pricing FAQ",
+     "url": "https://docs.google.com/document/d/15VSQ95Kejw0bPzz24g7OKoAFmM6vYkYpkNJT4pXV52E/edit?tab=t.0#heading=h.l2pl401c73g6", "stages": ["u3"]},
+
     # ---- Demo Assets ------------------------------------------------------------------
     {"key": "demo-industry", "bucket": "Demo Assets", "label": "Existing Industry demos",
-     "url": "https://go/industry-demos", "stages": ["u1"]},
+     "url": "https://dbdemos-demo-catalog-2556758628403379.aws.databricksapps.com/", "stages": ["u1"]},
     {"key": "demo-solution-builder", "bucket": "Demo Assets", "label": "Build a new demo (Solution Builder)",
      "url": "https://go/solution-builder", "stages": ["u1", "u2"]},
     {"key": "demo-gtm-rooms", "bucket": "Demo Assets", "label": "FS GTM Genie Rooms",
@@ -295,26 +305,28 @@ RESOURCES: list[dict] = [
      "url": "https://docs.google.com/presentation/d/1EcxZB5Q5bT3waYUMDM72OcxCEpz6XaXtmJzzPqwSu0E/edit", "stages": ["u2", "u5"]},
 
     # ---- Workshops --------------------------------------------------------------------
-    {"key": "workshops-geniewish", "bucket": "Workshops", "label": "Best Practices Genie Workshop",
+    {"key": "workshops-geniewish", "bucket": "Workshops and Training", "label": "Genie Agents Implementation Guide",
      "url": "https://docs.google.com/presentation/d/1qz0vIUW0QsIhGNFDHOVvtUf-g4CPnf9IjN1_P64qt2Q/edit", "stages": ["u2"]},
-    {"key": "workshops-genie-workshop", "bucket": "Workshops", "label": "Genie Workshop",
+    {"key": "workshops-genie-workshop", "bucket": "Workshops and Training", "label": "Genie Workshop",
      "url": "https://docs.google.com/presentation/d/1Hch4DwjZyvupg8rAhlfPBneKLZBGw04JtELWDNPJzag/edit", "stages": ["u2"]},
-    {"key": "workshops-workshop-in-box", "bucket": "Workshops", "label": "Genie Workshop in a Box",
+    {"key": "workshops-workshop-in-box", "bucket": "Workshops and Training", "label": "Genie Workshop in a Box",
      "url": "https://cso-workshop-7474655716427570.aws.databricksapps.com/", "stages": ["u2"]},
-    {"key": "workshops-hackathon-box", "bucket": "Workshops", "label": "Hackathon in a Box",
-     "url": "https://docs.google.com/document/d/1xbGJAaMS1MGy4Lq53axPOHQpyEXZWNzVIDDPZ1UgWmE/edit", "stages": ["u4"]},
-    {"key": "workshops-bia", "bucket": "Workshops", "label": "Business Impact Accelerator",
+    {"key": "workshops-genie-hackathon", "bucket": "Workshops and Training", "label": "Genie Acceleration Hackathon",
+     "url": "https://go/genie-hackathon", "stages": ["u2", "u4"]},
+    {"key": "workshops-training-investment", "bucket": "Workshops and Training", "label": "Training Investment (>100 learners)",
+     "url": "https://docs.google.com/presentation/d/1uDVzOgot6vRzK_dupJK7FJaFYrypYdC5oDtF8CpOnOs", "stages": ["u2", "u5"]},
+    {"key": "workshops-bia", "bucket": "Workshops and Training", "label": "Business Impact Accelerator",
      "url": "https://go/business-impact-accelerator", "stages": ["u3", "u4"]},
-    {"key": "workshops-pricing", "bucket": "Workshops", "label": "Pricing",
-     "url": "https://go/geniepricing", "stages": ["u3"]},
 
     # ---- Proof ------------------------------------------------------------------------
-    {"key": "proof-genie-ready-dashboard", "bucket": "Proof", "label": "Genie-Ready Dashboard",
+    {"key": "proof-genie-ready-dashboard", "bucket": "Proof & Dashboards", "label": "Genie-Ready Dashboard",
      "url": "https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f10313a17e11d6b0b11abfa2736836/published/pages/92049d91?o=2548836972759138", "stages": ["u3"]},
-    {"key": "proof-blockers-dashboard", "bucket": "Proof", "label": "Blockers Dashboard",
+    {"key": "proof-blockers-dashboard", "bucket": "Proof & Dashboards", "label": "Blockers Dashboard",
      "url": "https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f014ecfb601fa19ed40df16a1110ae/published/pages/1e023696?o=2548836972759138", "stages": ["u5", "u6"]},
-    {"key": "proof-customer-stories", "bucket": "Proof", "label": "Customer Stories",
+    {"key": "proof-customer-stories", "bucket": "Proof & Dashboards", "label": "Customer Stories",
      "url": "https://docs.google.com/presentation/d/1hLUBBrJ7oC2c5e8IiJiuvonbZ9u7ysw_bh21OFc0TYk/edit?usp=sharing", "stages": ["u4", "u6"]},
+    {"key": "proof-genie-cost-dashboard", "bucket": "Proof & Dashboards", "label": "Genie Cost Dashboard",
+     "url": "https://logfood.azuredatabricks.net/dashboardsv3/01f14a6ac7361099a4ae71135c942a45/published?o=2548836972759138", "stages": ["u5", "u6"]},
 ]
 
 

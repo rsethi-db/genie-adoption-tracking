@@ -47,7 +47,7 @@ from genie_adoption_tracking.backend.db import (  # noqa: E402
 
 FEVM_PROFILE = "fevm-richasethi"
 LOGFOOD_PROFILE = "logfood"
-LOGFOOD_WAREHOUSE = "927ac096f9833442"  # Shared SQL Endpoint - Stable
+LOGFOOD_WAREHOUSE = "9fb2ea023126d1f4"  # Metric Store (X-Large)
 INSTANCE = "genie-adoption-tracking"
 SEED_MARKER = "gtm-seed"
 
@@ -90,23 +90,39 @@ STAGE_MAP = {
 }
 # Everything else (Lost, Disqualified) is skipped — not actionable for the playbook.
 
-# ALL FINS customer accounts (the full 517 universe) with owners, sub-vertical and
-# ARR. Accounts with no Genie use case are "whitespace" — still shown so the field
-# and leadership see the untapped list.
+# LIVE FINS customer accounts, keyed by SFDC account_id (the stable identity — two
+# accounts can share a display name, so we never dedupe by name). Universe = active
+# customers: on the latest account_dim snapshot, status Customer%, FINS, with paid
+# usage (> $0) in the LAST 6 MONTHS (fin_live_gold.paid_usage_metering). Lapsed/dormant
+# accounts (no recent usage, often no running workspace) are excluded so they don't
+# inflate whitespace or drag ratios.
+# Accounts with no Genie use case are still "whitespace" — shown as the untapped list.
 ACCOUNTS_QUERY = """
-SELECT DISTINCT account_name,
-  COALESCE(account_executive, '') AS ae,
-  COALESCE(last_solution_architect_engaged_user_name,
-           last_solution_architect_engaged, '') AS sa,
-  COALESCE(dsa, '') AS dsa,
-  COALESCE(sales_subregion_level_2, '') AS sub_vertical,
-  COALESCE(t3m_annualized, arr, 0) AS arr
-FROM main.gtm_silver.account_dim
-WHERE sales_business_unit = 'AMER Industries'
-  AND sales_subregion_level_1 = 'FINS'
-  AND account_status LIKE '%Customer%'
-  AND account_name IS NOT NULL
-ORDER BY account_name
+WITH latest_accounts AS (
+  SELECT * FROM main.gtm_silver.account_dim
+  WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM main.gtm_silver.account_dim)
+),
+active_usage AS (
+  SELECT DISTINCT sfdc_account_id
+  FROM main.fin_live_gold.paid_usage_metering
+  WHERE usage_dollars > 0
+    AND date BETWEEN add_months(current_date(), -6) AND current_date()
+)
+SELECT a.account_id,
+  a.account_name,
+  COALESCE(a.account_executive, '') AS ae,
+  COALESCE(a.last_solution_architect_engaged_user_name,
+           a.last_solution_architect_engaged, '') AS sa,
+  COALESCE(a.dsa, '') AS dsa,
+  COALESCE(a.sales_subregion_level_2, '') AS sub_vertical,
+  COALESCE(a.t3m_annualized, a.arr, 0) AS arr
+FROM latest_accounts a
+JOIN active_usage u ON a.account_id = u.sfdc_account_id
+WHERE a.sales_business_unit = 'AMER Industries'
+  AND a.sales_subregion_level_1 = 'FINS'
+  AND a.account_status LIKE 'Customer%'
+  AND a.account_name IS NOT NULL
+ORDER BY a.account_name
 """
 
 # Partner-Powered AI status per FINS account, from prod_settings_log. PP must be ON
@@ -146,19 +162,39 @@ consume AS (
   SELECT DISTINCT accountId FROM main.field_usage_dashboard.fins_data fd
   WHERE fd.genie_dbu_dollars > 0
     AND fd.date >= add_months((SELECT MAX(date) FROM main.field_usage_dashboard.fins_data), -24)
+),
+-- SFDC accounts that have an EXPLICITLY-OFF Databricks account which is actually
+-- CONSUMING in T30D. This is logfood's PP-off definition: one SFDC account maps to
+-- many Databricks accounts, so "off" is determined by a real off+consuming db-account,
+-- not an optimistic "any on wins" rollup. Matches the logfood FINS dashboard.
+off_consuming AS (
+  SELECT DISTINCT m.sfdc_account_id
+  FROM account_mapping m
+    JOIN acct_settings a ON m.db_account_id = a.db_account_id
+  WHERE a.pp_value = 'false'
+    AND EXISTS (
+      SELECT 1 FROM main.field_usage_dashboard.fins_data fd
+        JOIN main.certified.workspaces_latest w
+          ON fd.workspaceId = w.workspace_id AND w.account_id = m.db_account_id
+      WHERE fd.accountId = m.sfdc_account_id
+        AND fd.date BETWEEN date_sub(fd.max_date, 29) AND fd.max_date
+        AND fd.dbu_dollars > 0
+    )
 )
-SELECT f.account_name,
+SELECT f.sfdc_account_id,
   MAX(CASE WHEN a.pp_value='true' THEN 1 ELSE 0 END) AS any_on,
   MAX(CASE WHEN a.pp_value='false' THEN 1 ELSE 0 END) AS any_off,
   MAX(CASE WHEN a.enforce_value='true' THEN 1 ELSE 0 END) AS enforce_on,
   MAX(CASE WHEN a.enforce_value='false' THEN 1 ELSE 0 END) AS enforce_off,
   MAX(CASE WHEN m.db_account_id IS NOT NULL THEN 1 ELSE 0 END) AS has_running_ws,
-  MAX(CASE WHEN c.accountId IS NOT NULL THEN 1 ELSE 0 END) AS consumes_genie
+  MAX(CASE WHEN c.accountId IS NOT NULL THEN 1 ELSE 0 END) AS consumes_genie,
+  MAX(CASE WHEN oc.sfdc_account_id IS NOT NULL THEN 1 ELSE 0 END) AS off_consuming
 FROM fins f
   LEFT JOIN account_mapping m ON f.sfdc_account_id = m.sfdc_account_id
   LEFT JOIN acct_settings a ON m.db_account_id = a.db_account_id
   LEFT JOIN consume c ON f.sfdc_account_id = c.accountId
-GROUP BY f.account_name
+  LEFT JOIN off_consuming oc ON f.sfdc_account_id = oc.sfdc_account_id
+GROUP BY f.sfdc_account_id
 """
 
 # Partner-Powered AI counts over ACTIVE workspaces only (consumed anything in the
@@ -204,7 +240,7 @@ fins AS (
   WHERE sales_business_unit='AMER Industries' AND sales_subregion_level_1='FINS'
     AND account_status LIKE '%Customer%' AND account_name IS NOT NULL
 )
-SELECT f.account_name,
+SELECT f.sfdc_account_id,
   COUNT(DISTINCT m.workspace_id) AS total_ws,
   COUNT(DISTINCT CASE WHEN COALESCE(ws.ws_pp_value, a.pp_value) IS NULL
     OR COALESCE(ws.ws_pp_value, a.pp_value)='true' THEN m.workspace_id END) AS ws_on,
@@ -215,7 +251,7 @@ FROM fins f
   JOIN active_ws aw ON m.workspace_id = aw.workspace_id
   LEFT JOIN acct_settings a ON m.db_account_id = a.db_account_id
   LEFT JOIN ws_settings ws ON m.workspace_id = ws.workspace_id
-GROUP BY f.account_name
+GROUP BY f.sfdc_account_id
 """
 
 # User provisioning per account, from the GTM Genie-ready report (same source the
@@ -224,7 +260,7 @@ GROUP BY f.account_name
 # acceptable path. So we pull BOTH the AIM workspace count and the broader
 # `workspaces_with_user_provisioning` count (any provisioning = AIM or SCIM).
 AIM_QUERY = """
-SELECT g.account_name,
+SELECT g.salesforce_account_id AS sfdc_account_id,
   COALESCE(g.total_workspaces, 0) AS total_ws,
   COALESCE(g.workspaces_with_aim_enabled, 0) AS aim_ws,
   COALESCE(g.workspaces_with_user_provisioning, 0) AS prov_ws,
@@ -232,27 +268,79 @@ SELECT g.account_name,
        WHEN g.is_red=1 THEN 'red' ELSE 'unknown' END AS readiness_tier
 FROM main.gtm_gold.rpt_account_genie_ready g
 JOIN (
-  SELECT DISTINCT account_name FROM main.gtm_silver.account_dim
+  SELECT DISTINCT account_id AS sfdc_account_id FROM main.gtm_silver.account_dim
   WHERE sales_business_unit='AMER Industries' AND sales_subregion_level_1='FINS'
     AND account_status LIKE '%Customer%' AND account_name IS NOT NULL
-) f ON g.account_name = f.account_name
+) f ON g.salesforce_account_id = f.sfdc_account_id
 """
 
-# Genie-specific spend (trailing 90 days) per FINS account, resolved to account_name.
-GENIE_SPEND_QUERY = """
-WITH fins AS (
-  SELECT DISTINCT account_id AS sfdc_account_id, account_name
-  FROM main.gtm_silver.account_dim
-  WHERE sales_business_unit='AMER Industries' AND sales_subregion_level_1='FINS'
-    AND account_status LIKE '%Customer%' AND account_name IS NOT NULL
+# Per-account Genie/pipeline signals over the trailing 30 days, keyed by SFDC
+# account_id — the EXACT definitions used by the logfood FINS Genie dashboard, so the
+# app matches it with no discrepancies:
+#   * genie_active           — has ≥1 Genie space with actual MESSAGE usage in the last
+#                              30d (metric_store.fct_data_room_messages_daily → the
+#                              logfood "agent_consuming" set). Genuinely using Genie now.
+#   * genie_revenue_30d      — standalone-Genie DBU $ over the last 30d
+#     (gtm_gold.account_consumption_daily.genie_standalone_dbu_dollars)
+#   * active_genie_spaces    — Genie spaces with usage in the last 30d, per account
+#   * est_pipeline_per_month — open-opportunity booking ARR / 12
+#     (gtm_silver.opportunity_detail, opportunity_status = 'open')
+GENIE_30D_QUERY = """
+WITH genie_space_counts AS (
+  SELECT workspace_id,
+    COUNT(DISTINCT CASE WHEN ds >= date_sub(current_date(), 30)
+      THEN dim_data_room_id END) AS genie_spaces_with_usage
+  FROM main.metric_store.fct_data_room_messages_daily
+  WHERE ds >= '2025-04-13'
+  GROUP BY workspace_id
+),
+acct_ws AS (
+  SELECT DISTINCT accountId, workspaceId
+  FROM main.field_usage_dashboard.fins_data
+  WHERE date BETWEEN date_sub(max_date, 29) AND max_date
+),
+spaces AS (
+  SELECT aw.accountId AS account_id,
+    SUM(COALESCE(gc.genie_spaces_with_usage, 0)) AS active_genie_spaces
+  FROM acct_ws aw
+    LEFT JOIN genie_space_counts gc ON aw.workspaceId = gc.workspace_id
+  GROUP BY aw.accountId
+),
+agent_consuming AS (
+  SELECT DISTINCT aw.accountId AS account_id
+  FROM acct_ws aw
+    LEFT JOIN genie_space_counts gc ON aw.workspaceId = gc.workspace_id
+  WHERE COALESCE(gc.genie_spaces_with_usage, 0) > 0
+),
+revenue AS (
+  SELECT account_id,
+    ROUND(SUM(COALESCE(genie_standalone_dbu_dollars, 0)), 2) AS genie_revenue_30d
+  FROM main.gtm_gold.account_consumption_daily
+  WHERE usage_date >= current_date() - INTERVAL 30 DAYS
+  GROUP BY account_id
+),
+pipeline AS (
+  SELECT account_id,
+    ROUND(SUM(COALESCE(booking_arr, 0)) / 12, 2) AS est_pipeline_per_month
+  FROM main.gtm_silver.opportunity_detail
+  WHERE opportunity_status = 'open'
+  GROUP BY account_id
+),
+ids AS (
+  SELECT account_id FROM spaces
+  UNION SELECT account_id FROM revenue
+  UNION SELECT account_id FROM pipeline
 )
-SELECT f.account_name,
-  ROUND(SUM(fd.genie_dbu_dollars), 2) AS genie_90d
-FROM main.field_usage_dashboard.fins_data fd
-  JOIN fins f ON fd.accountId = f.sfdc_account_id
-WHERE fd.date >= add_months((SELECT MAX(date) FROM main.field_usage_dashboard.fins_data), -3)
-GROUP BY f.account_name
-HAVING genie_90d > 0
+SELECT i.account_id,
+  COALESCE(r.genie_revenue_30d, 0) AS genie_revenue_30d,
+  COALESCE(p.est_pipeline_per_month, 0) AS est_pipeline_per_month,
+  CASE WHEN ac.account_id IS NOT NULL THEN 1 ELSE 0 END AS genie_active,
+  COALESCE(s.active_genie_spaces, 0) AS active_genie_spaces
+FROM ids i
+  LEFT JOIN spaces s ON i.account_id = s.account_id
+  LEFT JOIN revenue r ON i.account_id = r.account_id
+  LEFT JOIN pipeline p ON i.account_id = p.account_id
+  LEFT JOIN agent_consuming ac ON i.account_id = ac.account_id
 """
 
 # Genie-related Brickroad issues (ALL severities) per FINS account. customer_id on
@@ -271,7 +359,7 @@ genie_issue_ids AS (
   WHERE pa.category_path LIKE 'Genie%' OR pa.name LIKE '%Genie%'
   GROUP BY ipa.brick_road_issue_id
 )
-SELECT f.account_name,
+SELECT f.sfdc_id AS account_id,
   i.id, COALESCE(i.display_id,'') AS display_id, COALESCE(i.title,'') AS title,
   COALESCE(i.severity,'') AS severity, COALESCE(i.status,'') AS status,
   COALESCE(g.product_area,'') AS product_area,
@@ -281,7 +369,7 @@ FROM main.it_brick_road.issues i
   JOIN genie_issue_ids g ON i.id = g.issue_id
   JOIN fins f ON i.customer_id = f.sfdc_id
 WHERE i.is_deleted = false
-ORDER BY f.account_name
+ORDER BY f.sfdc_id
 """
 
 # ONE ROW PER real Genie use case from use_case_detail, with its actual name, stage
@@ -295,7 +383,7 @@ WITH filtered_accounts AS (
     AND account_status LIKE '%Customer%'
     AND account_name IS NOT NULL
 )
-SELECT a.account_name,
+SELECT a.account_id,
   u.usecase_id,
   COALESCE(NULLIF(TRIM(u.usecase_name), ''), 'Genie use case') AS usecase_name,
   COALESCE(u.usecase_description, u.description, '') AS description,
@@ -305,7 +393,7 @@ FROM main.gtm_silver.use_case_detail u
   JOIN filtered_accounts a ON u.account_id = a.account_id
 WHERE LOWER(COALESCE(u.usecase_name, '')) LIKE '%genie%'
    OR LOWER(COALESCE(u.description, '')) LIKE '%genie%'
-ORDER BY a.account_name, u.stage
+ORDER BY a.account_id, u.stage
 """
 
 
@@ -363,12 +451,13 @@ def fetch_accounts(ws) -> list[dict]:
     for r in _run_query(ws, ACCOUNTS_QUERY):
         rows.append(
             {
-                "name": r[0],
-                "ae": r[1] or "",
-                "sa": r[2] or "",
-                "dsa": r[3] or "",
-                "sub_vertical": r[4] or "",
-                "arr": float(r[5] or 0),
+                "account_id": r[0],
+                "name": r[1],
+                "ae": r[2] or "",
+                "sa": r[3] or "",
+                "dsa": r[4] or "",
+                "sub_vertical": r[5] or "",
+                "arr": float(r[6] or 0),
             }
         )
     return rows
@@ -379,7 +468,7 @@ def fetch_use_cases(ws) -> list[dict]:
     for r in _run_query(ws, USE_CASES_QUERY):
         rows.append(
             {
-                "name": r[0],
+                "account_id": r[0],
                 "usecase_id": r[1],
                 "usecase_name": r[2] or "Genie use case",
                 "description": r[3] or "",
@@ -391,7 +480,7 @@ def fetch_use_cases(ws) -> list[dict]:
 
 
 def fetch_pp(ws) -> dict[str, dict]:
-    """Map account_name -> {pp_status, pp_enforce}.
+    """Map SFDC account_id -> {pp_status, pp_enforce, genie_active}.
 
     Partner-Powered AI is enabled by default, so classification is:
       * off             — an explicit account setting of false (and none set true)
@@ -403,16 +492,25 @@ def fetch_pp(ws) -> dict[str, dict]:
     """
     out: dict[str, dict] = {}
     for r in _run_query(ws, PP_QUERY):
-        name = r[0]
-        any_on, any_off, enf_on, enf_off, has_ws, consumes = (
+        sfdc = r[0]
+        if not sfdc:
+            continue
+        any_on, any_off, enf_on, enf_off, has_ws, consumes, off_consuming = (
             int(r[1]),
             int(r[2]),
             int(r[3]),
             int(r[4]),
             int(r[5]),
             int(r[6]),
+            int(r[7]),
         )
-        if any_off and not any_on:
+        # PP-off matches logfood EXACTLY: an account is off ONLY if it has an
+        # explicitly-off Databricks account that is actually CONSUMING in T30D (a live
+        # risk to real usage). An explicit off that isn't consuming does NOT count as
+        # off — logfood excludes it, and a SFDC account fans out to many db-accounts
+        # (e.g. Morgan Stanley → 44), so a dormant off account shouldn't label the whole
+        # account off.
+        if off_consuming:
             pp = "off"
         elif any_on:
             pp = "on"
@@ -428,7 +526,7 @@ def fetch_pp(ws) -> dict[str, dict]:
             enforce = "off"
         else:
             enforce = "unknown"
-        out[name] = {
+        out[sfdc] = {
             "pp_status": pp,
             "pp_enforce": enforce,
             "genie_active": bool(consumes),
@@ -437,9 +535,11 @@ def fetch_pp(ws) -> dict[str, dict]:
 
 
 def fetch_ws(ws) -> dict[str, dict]:
-    """Map account_name -> {ws_total, ws_pp_on, ws_pp_off}."""
+    """Map SFDC account_id -> {ws_total, ws_pp_on, ws_pp_off}."""
     out: dict[str, dict] = {}
     for r in _run_query(ws, WS_QUERY):
+        if not r[0]:
+            continue
         out[r[0]] = {
             "ws_total": int(r[1] or 0),
             "ws_pp_on": int(r[2] or 0),
@@ -453,7 +553,7 @@ def fetch_issues(ws) -> list[dict]:
     for r in _run_query(ws, ISSUES_QUERY):
         rows.append(
             {
-                "account_name": r[0],
+                "account_id": r[0],
                 "id": r[1],
                 "display_id": r[2] or "",
                 "title": r[3] or "",
@@ -479,7 +579,7 @@ def _prov_status(total_ws: int, enabled_ws: int) -> str:
 
 
 def fetch_aim(ws) -> dict[str, dict]:
-    """Map account_name -> AIM + user-provisioning (AIM or SCIM) signals.
+    """Map SFDC account_id -> AIM + user-provisioning (AIM or SCIM) signals.
 
     Returns aim_status/aim_ws_enabled (AIM specifically) plus provisioning_status/
     provisioning_ws_enabled (ANY provisioning = AIM or SCIM). The readiness criterion
@@ -488,13 +588,15 @@ def fetch_aim(ws) -> dict[str, dict]:
     """
     out: dict[str, dict] = {}
     for r in _run_query(ws, AIM_QUERY):
-        name = r[0]
+        sfdc = r[0]
+        if not sfdc:
+            continue
         total_ws, aim_ws, prov_ws = int(r[1] or 0), int(r[2] or 0), int(r[3] or 0)
         tier = (r[4] or "unknown") if len(r) > 4 else "unknown"
         # If multiple report rows per account, keep the most-provisioned.
-        prev = out.get(name)
+        prev = out.get(sfdc)
         if prev is None or prov_ws > prev.get("provisioning_ws_enabled", -1):
-            out[name] = {
+            out[sfdc] = {
                 "aim_status": _prov_status(total_ws, aim_ws),
                 "aim_ws_enabled": aim_ws,
                 "provisioning_status": _prov_status(total_ws, prov_ws),
@@ -508,11 +610,21 @@ def fetch_aim(ws) -> dict[str, dict]:
     return out
 
 
-def fetch_genie_spend(ws) -> dict[str, float]:
-    """Map account_name -> Genie-specific spend (trailing 90 days, USD)."""
-    out: dict[str, float] = {}
-    for r in _run_query(ws, GENIE_SPEND_QUERY):
-        out[r[0]] = float(r[1] or 0)
+def fetch_genie_30d(ws) -> dict[str, dict]:
+    """Map SFDC account_id -> trailing-30d Genie/pipeline signals.
+    Columns: account_id, genie_revenue_30d, est_pipeline_per_month, genie_active,
+    active_genie_spaces."""
+    out: dict[str, dict] = {}
+    for r in _run_query(ws, GENIE_30D_QUERY):
+        aid = r[0]
+        if not aid:
+            continue
+        out[aid] = {
+            "genie_revenue_30d": float(r[1] or 0),
+            "est_pipeline_per_month": float(r[2] or 0),
+            "genie_active": bool(int(r[3] or 0)),
+            "active_genie_spaces": int(r[4] or 0),
+        }
     return out
 
 
@@ -545,20 +657,22 @@ def main() -> None:
     pp = fetch_pp(ws)
     wsc = fetch_ws(ws)
     aim = fetch_aim(ws)
-    spend = fetch_genie_spend(ws)
+    genie30 = fetch_genie_30d(ws)  # keyed by SFDC account_id
     issues = fetch_issues(ws)
     pp_off = sum(1 for v in pp.values() if v["pp_status"] == "off")
     aim_off = sum(1 for v in aim.values() if v["aim_status"] == "off")
+    genie_active_n = sum(1 for v in genie30.values() if v.get("genie_active"))
     print(
         f"Fetched {len(accounts)} FINS accounts, {len(use_cases)} Genie use cases, "
         f"PP status for {len(pp)} accounts ({pp_off} PP-off), "
         f"workspace counts for {len(wsc)}, AIM for {len(aim)} ({aim_off} AIM-off), "
+        f"30d Genie signals for {len(genie30)} accounts ({genie_active_n} genie-active), "
         f"{len(issues)} Genie issues"
     )
 
     # Guard: never wipe the app's data on a partial fetch (e.g. a cold-warehouse
     # timeout on one of the queries). All enrichment queries must return data,
-    # otherwise we'd re-seed with blank PP/WS/AIM signals.
+    # otherwise we'd re-seed with blank PP/WS/AIM/Genie signals.
     missing = [
         name
         for name, rows in (
@@ -567,6 +681,7 @@ def main() -> None:
             ("pp", pp),
             ("workspaces", wsc),
             ("aim", aim),
+            ("genie30", genie30),
         )
         if not rows
     ]
@@ -596,32 +711,41 @@ def main() -> None:
             "so its startup migration adds the column, then re-run this seed."
         )
 
-    # UPSERT-BY-NAME + TRANSACTIONAL refresh.
-    #   * Accounts are matched by NAME: existing rows keep their id and get their GTM
-    #     fields updated in place; new accounts are inserted. IDs never change, so
-    #     user-entered data (gat_adoption_task_state, gat_account_plan_item) keeps its
-    #     FK and is never touched — old entries are ALWAYS maintained.
-    #   * GTM-mirror children (use_case + its stage_transition, account_issue) are
-    #     rebuilt fresh (they carry no user data).
-    #   * The ENTIRE refresh runs in ONE transaction: if anything fails midway it rolls
-    #     back to the previous good state — a dropped connection can never empty the DB.
-    n_accounts = n_new = n_use_cases = n_issues = 0
+    # UPSERT-BY-SFDC-ACCOUNT-ID + TRANSACTIONAL refresh.
+    #   * Accounts are matched by SFDC account_id (the stable identity — distinct
+    #     accounts can share a display name, so name is NOT a safe key). On the FIRST
+    #     id-keyed run, existing rows have no sfdc_account_id yet, so we FALL BACK to
+    #     matching by name to adopt their internal uuid + backfill the id — this keeps
+    #     hand-entered data (task states/plan/history, FK'd to the uuid) attached.
+    #   * Enrichment (PP/WS/AIM/spend/t30d) is still keyed by NAME; the few accounts
+    #     that share a name will share those status values (small, explainable).
+    #   * GTM-mirror children (use_case + stage_transition, account_issue) rebuilt fresh.
+    #   * ONE transaction: any failure rolls back to the previous good state.
+    n_accounts = n_new = n_use_cases = n_issues = n_pruned = 0
     with Session(engine) as session:
         with session.begin():  # atomic: commit-all-or-rollback
-            existing = {a.name: a for a in session.exec(select(Account)).all()}
-            account_ids: dict[str, str] = {}
+            all_existing = session.exec(select(Account)).all()
+            by_sfdc = {a.sfdc_account_id: a for a in all_existing if a.sfdc_account_id}
+            by_name = {a.name: a for a in all_existing}  # first-run fallback
+            account_ids: dict[str, str] = {}  # sfdc_account_id -> internal uuid
 
-            # --- Accounts: update in place by name, or insert new ---
+            # --- Accounts: update in place by sfdc id (or name on first run), else insert ---
             seen: set[str] = set()
             for a in accounts:
-                name = a["name"]
-                if name in seen:
+                sfdc = a["account_id"]
+                if not sfdc or sfdc in seen:
                     continue
-                seen.add(name)
-                pp_row = pp.get(name, {})
-                ws_row = wsc.get(name, {})
-                aim_row = aim.get(name, {})
+                seen.add(sfdc)
+                name = a["name"]
+                # All enrichment is keyed by SFDC account_id (not name) so accounts
+                # sharing a display name never cross-contaminate, and each account gets
+                # exactly its own PP/WS/AIM/Genie signals.
+                pp_row = pp.get(sfdc, {})
+                ws_row = wsc.get(sfdc, {})
+                aim_row = aim.get(sfdc, {})
+                g30 = genie30.get(sfdc, {})  # 30d Genie signals, keyed by SFDC id
                 fields = dict(
+                    name=name,
                     sub_vertical=a["sub_vertical"],
                     ae_owner=a["ae"],
                     sa_owner=a["sa"],
@@ -638,19 +762,34 @@ def main() -> None:
                     provisioning_ws_enabled=aim_row.get("provisioning_ws_enabled", 0),
                     provisioning_ws_total=aim_row.get("provisioning_ws_total", 0),
                     readiness_tier=aim_row.get("readiness_tier", "unknown"),
-                    genie_spend_90d=spend.get(name, 0.0),
-                    genie_active=pp_row.get("genie_active", False),
+                    # Trailing-30d Genie signals, keyed by SFDC account_id (logfood-exact):
+                    #   genie_active = Genie space w/ message usage in last 30d
+                    #   genie_dollars_t30d / genie_spend_90d = standalone-Genie DBU $ (30d)
+                    #   active_genie_spaces = Genie spaces with usage (last 30d)
+                    genie_spend_90d=g30.get("genie_revenue_30d", 0.0),
+                    genie_dollars_t30d=g30.get("genie_revenue_30d", 0.0),
+                    active_genie_spaces=g30.get("active_genie_spaces", 0),
+                    est_pipeline_per_month=g30.get("est_pipeline_per_month", 0.0),
+                    genie_active=g30.get("genie_active", False),
                 )
-                acct = existing.get(name)
+                # Match by sfdc id; else adopt an existing name-keyed row (first run);
+                # else it's genuinely new. by_name is only used when NOT already claimed
+                # by another sfdc id this run (guards duplicate names on first run).
+                acct = by_sfdc.get(sfdc)
                 if acct is None:
-                    acct = Account(id=_uid(), name=name, created_by=SEED_MARKER, **fields)  # ty: ignore[invalid-argument-type]
+                    cand = by_name.get(name)
+                    if cand is not None and not cand.sfdc_account_id:
+                        acct = cand  # first-run adoption: keep its uuid, stamp the id
+                if acct is None:
+                    acct = Account(id=_uid(), sfdc_account_id=sfdc, created_by=SEED_MARKER, **fields)
                     session.add(acct)
                     n_new += 1
                 else:
+                    acct.sfdc_account_id = sfdc
                     for k, v in fields.items():
                         setattr(acct, k, v)
                     session.add(acct)
-                account_ids[name] = acct.id
+                account_ids[sfdc] = acct.id
                 n_accounts += 1
             session.flush()
 
@@ -661,11 +800,17 @@ def main() -> None:
             session.exec(delete(AccountIssue))
             session.flush()
 
+            # Insert use cases first and FLUSH before their stage_transition children:
+            # there's no ORM relationship between them, so SQLAlchemy orders inserts by
+            # mapper sort key — and gat_stage_transition sorts before gat_use_case, which
+            # would violate the FK. Two passes with a flush between guarantee the parent
+            # rows exist first.
+            pending_transitions: list[tuple[str, str]] = []  # (use_case_id, stage)
             for row in use_cases:
                 stage = STAGE_MAP.get(row["stage"])
                 if stage is None:
                     continue
-                aid = account_ids.get(row["name"])
+                aid = account_ids.get(row["account_id"])
                 if aid is None:
                     continue
                 ucid = _uid()
@@ -676,16 +821,20 @@ def main() -> None:
                         estimated_monthly_dbus=row["dbus"], created_by=SEED_MARKER,
                     )
                 )
+                pending_transitions.append((ucid, stage))
+                n_use_cases += 1
+            session.flush()  # parents committed to the FK's satisfaction
+
+            for ucid, stage in pending_transitions:
                 session.add(
                     StageTransition(
                         id=_uid(), use_case_id=ucid, from_stage="", to_stage=stage,
                         created_by=SEED_MARKER,
                     )
                 )
-                n_use_cases += 1
 
             for row in issues:
-                aid = account_ids.get(row["account_name"])
+                aid = account_ids.get(row["account_id"])
                 if aid is None:
                     continue
                 session.add(
@@ -697,12 +846,52 @@ def main() -> None:
                     )
                 )
                 n_issues += 1
+
+            # --- Prune accounts that dropped out of the live universe --------------
+            # An account previously seeded but NOT in this run's active set (dormant /
+            # lost paid usage) is removed — BUT only if it is GTM-seeded AND carries no
+            # user-entered data (no adoption task state/history, no plan items). Any
+            # account someone has worked is always kept, so hand-entered signal is safe.
+            # Set-based (one statement per table, not a per-row loop — that made hundreds
+            # of round-trips and stranded on a slow Lakebase connection).
+            live_ids = set(account_ids.values())
+            prunable = [
+                a.id for a in all_existing
+                if a.id not in live_ids and a.created_by == SEED_MARKER
+            ]
+            if prunable:
+                conn = session.connection()  # raw SQL via the bound connection
+                worked = {
+                    r[0]
+                    for r in conn.execute(
+                        text(
+                            "SELECT account_id FROM gat_adoption_task_state WHERE account_id = ANY(:ids) "
+                            "UNION SELECT account_id FROM gat_adoption_task_history WHERE account_id = ANY(:ids) "
+                            "UNION SELECT account_id FROM gat_account_plan_item WHERE account_id = ANY(:ids)"
+                        ),
+                        {"ids": prunable},
+                    ).all()
+                }
+                to_drop = [aid for aid in prunable if aid not in worked]
+                if to_drop:
+                    p = {"ids": to_drop}
+                    conn.execute(
+                        text(
+                            "DELETE FROM gat_stage_transition WHERE use_case_id IN "
+                            "(SELECT id FROM gat_use_case WHERE account_id = ANY(:ids))"
+                        ),
+                        p,
+                    )
+                    conn.execute(text("DELETE FROM gat_use_case WHERE account_id = ANY(:ids)"), p)
+                    conn.execute(text("DELETE FROM gat_account_issue WHERE account_id = ANY(:ids)"), p)
+                    conn.execute(text("DELETE FROM gat_account WHERE id = ANY(:ids)"), p)
+                    n_pruned = len(to_drop)
             # session.begin() commits here on success, or rolls back on any exception.
 
     print(
         f"Refreshed {n_accounts} accounts ({n_new} new), {n_use_cases} use cases, "
-        f"{n_issues} issues. User entries (adoption tasks + plan notes) preserved "
-        f"in place — IDs unchanged."
+        f"{n_issues} issues. Pruned {n_pruned} dormant accounts (no user data). "
+        f"User entries (adoption tasks + plan notes) preserved in place."
     )
 
 
