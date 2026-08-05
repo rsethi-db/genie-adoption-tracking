@@ -914,21 +914,21 @@ function BrickroadTable({ data }: { data: DashboardOut }) {
         {rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">No open Genie issues.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="max-h-[28rem] overflow-auto rounded-md border">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-card z-10">
                 <tr className="text-left text-xs text-muted-foreground border-b">
-                  <th className="py-2 pr-3 font-medium">Issue</th>
-                  <th className="py-2 pr-3 font-medium">Account</th>
-                  <th className="py-2 pr-3 font-medium">Severity</th>
-                  <th className="py-2 pr-3 font-medium">Product area</th>
-                  <th className="py-2 pr-3 font-medium text-right">Revenue impact</th>
+                  <th className="py-2 px-3 font-medium">Issue</th>
+                  <th className="py-2 px-3 font-medium">Account</th>
+                  <th className="py-2 px-3 font-medium">Severity</th>
+                  <th className="py-2 px-3 font-medium">Product area</th>
+                  <th className="py-2 px-3 font-medium text-right">Revenue impact</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((i) => (
                   <tr key={i.id} className="border-b last:border-0 align-top">
-                    <td className="py-2 pr-3">
+                    <td className="py-2 px-3">
                       {i.display_id ? (
                         <a
                           href={`https://brickroad.databricks.com/issues/${i.display_id}`}
@@ -943,7 +943,7 @@ function BrickroadTable({ data }: { data: DashboardOut }) {
                         {i.title}
                       </div>
                     </td>
-                    <td className="py-2 pr-3">
+                    <td className="py-2 px-3">
                       <Link
                         to="/accounts/$accountId"
                         params={{ accountId: i.account_id ?? "" }}
@@ -952,13 +952,13 @@ function BrickroadTable({ data }: { data: DashboardOut }) {
                         {i.account_name}
                       </Link>
                     </td>
-                    <td className="py-2 pr-3">
+                    <td className="py-2 px-3">
                       <Badge variant="outline" className={severityTone(i.severity ?? "")}>
                         {i.severity}
                       </Badge>
                     </td>
-                    <td className="py-2 pr-3 text-muted-foreground">{i.product_area || "—"}</td>
-                    <td className="py-2 pr-3 text-right font-medium">
+                    <td className="py-2 px-3 text-muted-foreground">{i.product_area || "—"}</td>
+                    <td className="py-2 px-3 text-right font-medium">
                       {(i.revenue_impact ?? 0) > 0 ? fmtDbus(i.revenue_impact ?? 0) : "—"}
                     </td>
                   </tr>
