@@ -873,16 +873,49 @@ function severityTone(sev: string): string {
 }
 
 function BrickroadTable({ data }: { data: DashboardOut }) {
-  const rows = data.brickroad_issues ?? [];
+  const all = data.brickroad_issues ?? [];
+  const [q, setQ] = useState("");
+  const f = q.trim().toLowerCase();
+  const rows = f
+    ? all.filter(
+        (i) =>
+          (i.title ?? "").toLowerCase().includes(f) ||
+          (i.account_name ?? "").toLowerCase().includes(f) ||
+          (i.severity ?? "").toLowerCase().includes(f) ||
+          (i.product_area ?? "").toLowerCase().includes(f) ||
+          (i.display_id ?? "").toLowerCase().includes(f)
+      )
+    : all;
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Genie Brickroad blockers</CardTitle>
       </CardHeader>
       <CardContent>
-        {rows.length === 0 ? (
+        {all.length === 0 ? (
           <p className="text-sm text-muted-foreground">No open Genie issues.</p>
         ) : (
+          <>
+          <div className="relative mb-2 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Filter issues by account, title, severity…"
+              className="pl-9 h-9"
+            />
+            {q && (
+              <button
+                onClick={() => setQ("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-2">No issues match your filter.</p>
+          ) : (
           <div className="max-h-[28rem] overflow-auto rounded-md border">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-card z-10">
@@ -935,6 +968,8 @@ function BrickroadTable({ data }: { data: DashboardOut }) {
               </tbody>
             </table>
           </div>
+          )}
+          </>
         )}
       </CardContent>
     </Card>
