@@ -766,6 +766,10 @@ def main() -> None:
                     #   genie_active = Genie space w/ message usage in last 30d
                     #   genie_dollars_t30d / genie_spend_90d = standalone-Genie DBU $ (30d)
                     #   active_genie_spaces = Genie spaces with usage (last 30d)
+                    # NOTE: genie_spend_90d is a legacy column name — it now holds the
+                    # SAME trailing-30d Genie revenue as genie_dollars_t30d (both 30d).
+                    # All user-facing labels say "30d"; the column name is not renamed to
+                    # avoid a schema migration.
                     genie_spend_90d=g30.get("genie_revenue_30d", 0.0),
                     genie_dollars_t30d=g30.get("genie_revenue_30d", 0.0),
                     active_genie_spaces=g30.get("active_genie_spaces", 0),
@@ -861,15 +865,23 @@ def main() -> None:
             ]
             if prunable:
                 conn = session.connection()  # raw SQL via the bound connection
+                # An account is protected from pruning if it carries ANY user-entered
+                # data: adoption task state/history, plan items, a user-created use case
+                # (created_by != seed marker), or a blocker on one of its use cases.
                 worked = {
                     r[0]
                     for r in conn.execute(
                         text(
                             "SELECT account_id FROM gat_adoption_task_state WHERE account_id = ANY(:ids) "
                             "UNION SELECT account_id FROM gat_adoption_task_history WHERE account_id = ANY(:ids) "
-                            "UNION SELECT account_id FROM gat_account_plan_item WHERE account_id = ANY(:ids)"
+                            "UNION SELECT account_id FROM gat_account_plan_item WHERE account_id = ANY(:ids) "
+                            "UNION SELECT account_id FROM gat_use_case "
+                            "  WHERE account_id = ANY(:ids) AND created_by <> :seed "
+                            "UNION SELECT u.account_id FROM gat_blocker b "
+                            "  JOIN gat_use_case u ON b.use_case_id = u.id "
+                            "  WHERE u.account_id = ANY(:ids)"
                         ),
-                        {"ids": prunable},
+                        {"ids": prunable, "seed": SEED_MARKER},
                     ).all()
                 }
                 to_drop = [aid for aid in prunable if aid not in worked]

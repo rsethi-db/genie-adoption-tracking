@@ -738,7 +738,7 @@ function SubVerticalTab({ data }: { data: DashboardOut }) {
                     <th className="py-2 px-2 font-medium">Accounts</th>
                     <th className="py-2 px-2 font-medium text-right">Genie-active</th>
                     <th className="py-2 px-2 font-medium text-right">Whitespace</th>
-                    <th className="py-2 px-2 font-medium text-right">Genie $ (90d)</th>
+                    <th className="py-2 px-2 font-medium text-right">Genie $ (30d)</th>
                     <th className="py-2 px-2 font-medium text-right">Avg readiness</th>
                     <th className="py-2 px-2 font-medium text-right">ARR</th>
                   </tr>
