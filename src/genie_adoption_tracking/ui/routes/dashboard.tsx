@@ -63,6 +63,7 @@ interface AcctRow {
   provisioning_status?: string;
   use_case_count?: number;
   genie_spend_90d?: number;
+  active_genie_spaces?: number;
   open_issues?: number;
   open_blockers?: number;
 }
@@ -211,8 +212,8 @@ function TileGrid({ tiles, cols = "lg:grid-cols-4" }: { tiles: TileSpec[]; cols?
 }
 
 // Sortable columns for the inline account table.
-type SortKey = "name" | "arr" | "genie_spend_90d" | "use_case_count" | "open_issues";
-const NUMERIC_SORTS: SortKey[] = ["arr", "genie_spend_90d", "use_case_count", "open_issues"];
+type SortKey = "name" | "arr" | "genie_spend_90d" | "use_case_count" | "open_issues" | "active_genie_spaces";
+const NUMERIC_SORTS: SortKey[] = ["arr", "genie_spend_90d", "use_case_count", "open_issues", "active_genie_spaces"];
 
 const PP_LABEL: Record<string, string> = {
   on: "On",
@@ -303,6 +304,7 @@ function InlineAccounts({
   const totalArr = sorted?.reduce((s, a) => s + (a.arr ?? 0), 0) ?? 0;
   const totalSpend = sorted?.reduce((s, a) => s + (a.genie_spend_90d ?? 0), 0) ?? 0;
   const totalUc = sorted?.reduce((s, a) => s + (a.use_case_count ?? 0), 0) ?? 0;
+  const totalSpaces = sorted?.reduce((s, a) => s + (a.active_genie_spaces ?? 0), 0) ?? 0;
 
   return (
     <Card className="border-primary/40 bg-primary/[0.03]">
@@ -340,6 +342,7 @@ function InlineAccounts({
                   <th className="py-2 px-2 font-medium">Provisioning</th>
                   <Th k="use_case_count" label="Use cases" align="right" />
                   <Th k="genie_spend_90d" label="Genie $ (30d)" align="right" />
+                  <Th k="active_genie_spaces" label="Agents (30d)" align="right" />
                   <Th k="open_issues" label="Issues" align="right" />
                   <Th k="arr" label="ARR" align="right" />
                 </tr>
@@ -391,6 +394,9 @@ function InlineAccounts({
                       {(a.genie_spend_90d ?? 0) > 0 ? fmtDbus(a.genie_spend_90d ?? 0) : "—"}
                     </td>
                     <td className="py-1.5 px-2 text-right tabular-nums">
+                      {(a.active_genie_spaces ?? 0) > 0 ? a.active_genie_spaces : "—"}
+                    </td>
+                    <td className="py-1.5 px-2 text-right tabular-nums">
                       {(a.open_issues ?? 0) > 0 ? (
                         <button
                           type="button"
@@ -408,7 +414,7 @@ function InlineAccounts({
                   </tr>
                   {openIssues === a.id && (
                     <tr>
-                      <td colSpan={8} className="p-0">
+                      <td colSpan={9} className="p-0">
                         <AccountIssues accountId={a.id} />
                       </td>
                     </tr>
@@ -422,6 +428,7 @@ function InlineAccounts({
                   <td colSpan={3}></td>
                   <td className="py-1.5 px-2 text-right tabular-nums">{totalUc}</td>
                   <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalSpend)}</td>
+                  <td className="py-1.5 px-2 text-right tabular-nums">{totalSpaces}</td>
                   <td></td>
                   <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalArr)}</td>
                 </tr>
@@ -532,7 +539,7 @@ function PartnerPoweredTab({ data }: { data: DashboardOut }) {
           {
             key: "spaces",
             icon: <MessageSquare className="h-4 w-4" />,
-            label: "Active Genie spaces (30d)",
+            label: "Active Genie Agents (30d)",
             value: data.active_genie_spaces ?? 0,
           },
         ]}

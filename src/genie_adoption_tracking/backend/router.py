@@ -503,6 +503,7 @@ def list_accounts(
             provisioning_ws_total=a.provisioning_ws_total,
             readiness_tier=a.readiness_tier,
             genie_spend_90d=a.genie_spend_90d,
+            active_genie_spaces=a.active_genie_spaces,
             genie_active=a.genie_active,
             # Not shown on the account lookup; skip the per-account plan resolve
             # (it was an N+1 that ran several Lakebase queries per account).

@@ -61,6 +61,7 @@ export interface AccountIssueOut {
     title: string;
 }
 export interface AccountOut {
+    active_genie_spaces?: number;
     ae_owner: string;
     aim_status?: string;
     aim_ws_enabled?: number;
@@ -489,6 +490,8 @@ export interface ListAccountsParams {
     genie_active?: boolean;
     has_spend?: boolean;
     sub_vertical?: string;
+    spend_bucket?: number;
+    has_usecase?: boolean;
 }
 export const listAccounts = async (params?: ListAccountsParams, options?: RequestInit): Promise<{
     data: AccountOut[];
@@ -505,6 +508,8 @@ export const listAccounts = async (params?: ListAccountsParams, options?: Reques
     if (params?.genie_active != null) searchParams.set("genie_active", String(params?.genie_active));
     if (params?.has_spend != null) searchParams.set("has_spend", String(params?.has_spend));
     if (params?.sub_vertical != null) searchParams.set("sub_vertical", String(params?.sub_vertical));
+    if (params?.spend_bucket != null) searchParams.set("spend_bucket", String(params?.spend_bucket));
+    if (params?.has_usecase != null) searchParams.set("has_usecase", String(params?.has_usecase));
     const queryString = searchParams.toString();
     const url = queryString ? `/api/accounts?${queryString}` : "/api/accounts";
     const res = await fetch(url, {

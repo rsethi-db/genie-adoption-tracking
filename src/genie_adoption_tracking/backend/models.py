@@ -93,6 +93,7 @@ class AccountOut(BaseModel):
     provisioning_ws_total: int = 0
     readiness_tier: str = "unknown"
     genie_spend_90d: float = 0.0
+    active_genie_spaces: int = 0
     genie_active: bool = False
     readiness_pct: int = 0
     open_issues: int = 0
