@@ -250,6 +250,7 @@ function InlineAccounts({
   const [sort, setSort] = useState<SortKey>("arr");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
   const [openIssues, setOpenIssues] = useState<string | null>(null); // account id
+  const [tableFilter, setTableFilter] = useState(""); // client-side filter within panel
   const seq = useRef(0);
 
   // Serialize params so the effect re-runs on value change (not object identity),
@@ -271,12 +272,23 @@ function InlineAccounts({
     return () => clearTimeout(t);
   }, [qs]);
 
+  const f = tableFilter.trim().toLowerCase();
   const sorted = rows
-    ? [...rows].sort((a, b) => {
-        const mul = dir === "asc" ? 1 : -1;
-        if (sort === "name") return mul * a.name.localeCompare(b.name);
-        return mul * (((a[sort] as number) ?? 0) - ((b[sort] as number) ?? 0));
-      })
+    ? [...rows]
+        .filter(
+          (a) =>
+            !f ||
+            a.name.toLowerCase().includes(f) ||
+            (a.sub_vertical ?? "").toLowerCase().includes(f) ||
+            (a.ae_owner ?? "").toLowerCase().includes(f) ||
+            (a.sa_owner ?? "").toLowerCase().includes(f) ||
+            (a.dsa_owner ?? "").toLowerCase().includes(f)
+        )
+        .sort((a, b) => {
+          const mul = dir === "asc" ? 1 : -1;
+          if (sort === "name") return mul * a.name.localeCompare(b.name);
+          return mul * (((a[sort] as number) ?? 0) - ((b[sort] as number) ?? 0));
+        })
     : null;
 
   const clickSort = (k: SortKey) => {
@@ -325,17 +337,36 @@ function InlineAccounts({
         </div>
       </CardHeader>
       <CardContent>
+        {rows !== null && rows.length > 0 && (
+          <div className="relative mb-2 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={tableFilter}
+              onChange={(e) => setTableFilter(e.target.value)}
+              placeholder="Filter these accounts…"
+              className="pl-9 h-9"
+            />
+            {tableFilter && (
+              <button
+                onClick={() => setTableFilter("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
         {sorted === null ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading accounts…
           </div>
         ) : sorted.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4">
-            No accounts match this filter.
+            No accounts match{tableFilter ? " your filter" : " this filter"}.
           </p>
         ) : (
           <div className="max-h-[28rem] overflow-auto rounded-md border bg-card">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[860px] text-sm">
               <thead className="sticky top-0 bg-card z-10 text-xs text-muted-foreground border-b">
                 <tr className="text-left">
                   <Th k="name" label="Account" />
@@ -361,7 +392,7 @@ function InlineAccounts({
                       >
                         {a.name}
                       </Link>
-                      <div className="text-xs text-muted-foreground truncate max-w-[14rem]">
+                      <div className="text-xs text-muted-foreground whitespace-nowrap">
                         {a.sub_vertical || "—"}
                         {a.ae_owner && <> · AE {a.ae_owner}</>}
                       </div>
