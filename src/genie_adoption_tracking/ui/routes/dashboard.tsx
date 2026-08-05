@@ -20,6 +20,7 @@ import {
   Sparkles,
   MessageSquare,
   ArrowUpDown,
+  ArrowRight,
   X,
   Loader2,
   Search,
@@ -984,25 +985,33 @@ function StatTile({
         : tone === "bad"
           ? "text-destructive"
           : "";
+  const clickable = !!onClick;
   const inner = (
-    <CardContent className="py-4">
+    <CardContent className="py-4 relative">
       <div className="flex items-center gap-2 text-muted-foreground text-sm">
         {icon} {label}
       </div>
       <div className={`text-2xl font-bold mt-1 ${toneClass}`}>
         {display ?? value}
       </div>
+      {clickable && (
+        // Persistent affordance so it's obvious the tile drills in (not hover-only).
+        <span className="absolute bottom-2 right-2 inline-flex items-center gap-0.5 text-[11px] font-medium text-primary/70">
+          {active ? "Showing" : "View"}
+          <ArrowRight className="h-3 w-3" />
+        </span>
+      )}
     </CardContent>
   );
   if (onClick) {
     return (
-      <button type="button" onClick={onClick} className="text-left">
+      <button type="button" onClick={onClick} className="text-left w-full cursor-pointer">
         <Card
           className={cn(
-            "transition-colors h-full",
+            "h-full transition-colors border-primary/30 bg-primary/[0.02]",
             active
-              ? "border-primary ring-2 ring-primary/40 bg-primary/[0.03]"
-              : "hover:border-primary/50"
+              ? "border-primary ring-2 ring-primary/40 bg-primary/[0.05]"
+              : "hover:border-primary/60 hover:bg-primary/[0.04]"
           )}
         >
           {inner}
@@ -1010,7 +1019,7 @@ function StatTile({
       </button>
     );
   }
-  return <Card>{inner}</Card>;
+  return <Card className="h-full">{inner}</Card>;
 }
 
 function Funnel({
