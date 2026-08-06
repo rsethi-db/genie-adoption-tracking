@@ -52,6 +52,13 @@ _MIGRATIONS = [
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS active_genie_spaces INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS sfdc_account_id VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS est_pipeline_per_month DOUBLE PRECISION NOT NULL DEFAULT 0",
+    # Adoption task state/history: human-readable account/task + questionnaire ordering.
+    "ALTER TABLE gat_adoption_task_state ADD COLUMN IF NOT EXISTS account_name VARCHAR NOT NULL DEFAULT ''",
+    "ALTER TABLE gat_adoption_task_state ADD COLUMN IF NOT EXISTS task_name VARCHAR NOT NULL DEFAULT ''",
+    "ALTER TABLE gat_adoption_task_state ADD COLUMN IF NOT EXISTS task_order INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE gat_adoption_task_history ADD COLUMN IF NOT EXISTS account_name VARCHAR NOT NULL DEFAULT ''",
+    "ALTER TABLE gat_adoption_task_history ADD COLUMN IF NOT EXISTS task_name VARCHAR NOT NULL DEFAULT ''",
+    "ALTER TABLE gat_adoption_task_history ADD COLUMN IF NOT EXISTS task_order INTEGER NOT NULL DEFAULT 0",
     # Campaign redesign: time-boxed outreach to a chosen set of accounts + a Form.
     # New columns are added to any pre-existing gat_campaign; the dropped legacy
     # columns (ask/cta/segment/sub_vertical/deadline/priority/active) are simply left

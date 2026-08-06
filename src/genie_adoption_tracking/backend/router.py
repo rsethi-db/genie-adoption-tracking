@@ -698,13 +698,19 @@ def update_adoption_task(
         existing.note = body.note
     now = _utcnow()
     actor = _actor(user_ws)
+    existing.account_name = acct.name
+    existing.task_name = adoption_workflow.TASK_LABEL.get(body.task_key, "")
+    existing.task_order = adoption_workflow.TASK_ORDER.get(body.task_key, 0)
     existing.updated_at = now
     existing.updated_by = actor
     session.add(existing)
     if changed:
         session.add(
             AdoptionTaskHistory(
-                id=_uid(), account_id=account_id, task_key=body.task_key,
+                id=_uid(), account_id=account_id, account_name=acct.name,
+                task_key=body.task_key,
+                task_name=adoption_workflow.TASK_LABEL.get(body.task_key, ""),
+                task_order=adoption_workflow.TASK_ORDER.get(body.task_key, 0),
                 status=new_status, note=new_note, changed_at=now, changed_by=actor,
             )
         )
@@ -758,13 +764,19 @@ def save_adoption_tasks(
             row.status = item.status
         if item.note is not None:
             row.note = item.note
+        row.account_name = acct.name
+        row.task_name = adoption_workflow.TASK_LABEL.get(item.task_key, "")
+        row.task_order = adoption_workflow.TASK_ORDER.get(item.task_key, 0)
         row.updated_at = now
         row.updated_by = actor
         session.add(row)
         if changed:
             session.add(
                 AdoptionTaskHistory(
-                    id=_uid(), account_id=account_id, task_key=item.task_key,
+                    id=_uid(), account_id=account_id, account_name=acct.name,
+                    task_key=item.task_key,
+                    task_name=adoption_workflow.TASK_LABEL.get(item.task_key, ""),
+                    task_order=adoption_workflow.TASK_ORDER.get(item.task_key, 0),
                     status=new_status, note=new_note, changed_at=now, changed_by=actor,
                 )
             )

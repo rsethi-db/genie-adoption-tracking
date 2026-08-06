@@ -47,6 +47,15 @@ class Task(TypedDict):
 
 # Tasks transcribed from the "What happens at every stage" workflow slide.
 TASKS: list[Task] = [
+    # --- Security & Review (shown first in the questionnaire; own section, not part
+    #     of the stage × lane grid) -----------------------------------------------
+    {"key": "sec_msa", "stage": "security", "lane": "security",
+     "label": "Is a signed Master Service Agreement (MSA) required for this "
+              "engagement, and what is its current status?"},
+    {"key": "sec_authority_review", "stage": "security", "lane": "security",
+     "label": "Has your account completed its Security Authority Review for "
+              "adopting Databricks Genie?"},
+
     # --- Happy Path ------------------------------------------------------------
     {"key": "hp_u1_demo", "stage": "u1", "lane": "happy_path",
      "label": "Demo with known domain assets"},
@@ -120,18 +129,15 @@ TASKS: list[Task] = [
 
     {"key": "an_u6_document", "stage": "u6", "lane": "as_needed",
      "label": "Document use cases → feed pipeline"},
-
-    # --- Security & Review (own section, not part of the stage × lane grid; mirrors
-    #     the Security & Review pillar in the genie-status app) --------------------
-    {"key": "sec_msa", "stage": "security", "lane": "security",
-     "label": "Is a signed Master Service Agreement (MSA) required for this "
-              "engagement, and what is its current status?"},
-    {"key": "sec_authority_review", "stage": "security", "lane": "security",
-     "label": "Has your account completed its Security Authority Review for "
-              "adopting Databricks Genie?"},
 ]
 
 _TASK_KEYS = {t["key"] for t in TASKS}
+
+# Position of each task in the questionnaire, and its human-readable label — used to
+# stamp task_order/task_name onto the persisted rows so the table can be ordered the
+# same way the questionnaire is (not alphabetically by task_key).
+TASK_ORDER = {t["key"]: i for i, t in enumerate(TASKS)}
+TASK_LABEL = {t["key"]: t["label"] for t in TASKS}
 
 
 # Which Getting-Help resources (by playbook.RESOURCES key) are relevant to each
