@@ -36,6 +36,7 @@ import {
   Circle,
   MinusCircle,
   ChevronDown,
+  CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -238,6 +239,7 @@ const ADOPTION_STATUSES: { value: string; label: string }[] = [
   { value: "in_progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
   { value: "blocked", label: "Blocked" },
+  { value: "na", label: "N/A" },
 ];
 
 // Task-specific blocker reasons. When a task is Blocked, the team picks the reason
@@ -502,6 +504,7 @@ function AdoptionTaskCard({
   const blocked = value.status === "blocked";
   // All five statuses (incl. Blocked) are available on every task.
   const statusOptions = ADOPTION_STATUSES;
+  const [showResources, setShowResources] = useState(false);
   return (
     <div
       className={cn(
@@ -574,22 +577,54 @@ function AdoptionTaskCard({
           Ask Genie how to get unstuck
         </button>
       )}
-      {(TASK_RESOURCES[task.key] ?? []).length > 0 && (
-        <div className="mt-2 space-y-1">
-          {TASK_RESOURCES[task.key].map((r) => (
-            <a
-              key={r.url}
-              href={r.url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+      {(() => {
+        // Backend-resolved resources (task.resources, from playbook.RESOURCES) +
+        // any security-only extras (TASK_RESOURCES), de-duped by URL, collapsed under
+        // a "Resources (N)" toggle.
+        const links = [
+          ...(task.resources ?? []),
+          ...(TASK_RESOURCES[task.key] ?? []),
+        ];
+        const seen = new Set<string>();
+        const deduped = links.filter(
+          (r) => r.url && !seen.has(r.url) && seen.add(r.url)
+        );
+        if (deduped.length === 0) return null;
+        return (
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => setShowResources((s) => !s)}
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
             >
-              <ExternalLink className="h-3 w-3 shrink-0" />
-              {r.label}
-            </a>
-          ))}
-        </div>
-      )}
+              <ChevronDown
+                className={cn(
+                  "h-3.5 w-3.5 transition-transform",
+                  showResources && "rotate-180"
+                )}
+              />
+              Resources
+              <span className="text-muted-foreground/70">({deduped.length})</span>
+            </button>
+            {showResources && (
+              <div className="mt-1.5 space-y-1 pl-4">
+                {deduped.map((r) => (
+                  <a
+                    key={r.url}
+                    href={r.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                    {r.label}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -612,6 +647,35 @@ const STATUS_LABEL: Record<string, string> = {
   completed: "Completed",
   blocked: "Blocked",
 };
+
+// Group history entries (already newest-first) into [dateLabel, entries] sections by
+// calendar day — "Today"/"Yesterday" for the two most recent days, else a full date.
+function groupByDate(entries: HistoryEntry[]): [string, HistoryEntry[]][] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const dayLabel = (d: Date): string => {
+    const dd = new Date(d);
+    dd.setHours(0, 0, 0, 0);
+    if (dd.getTime() === today.getTime()) return "Today";
+    if (dd.getTime() === yesterday.getTime()) return "Yesterday";
+    return dd.toLocaleDateString([], {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: dd.getFullYear() === today.getFullYear() ? undefined : "numeric",
+    });
+  };
+  const groups: [string, HistoryEntry[]][] = [];
+  for (const e of entries) {
+    const label = dayLabel(new Date(e.changed_at));
+    const last = groups[groups.length - 1];
+    if (last && last[0] === label) last[1].push(e);
+    else groups.push([label, [e]]);
+  }
+  return groups;
+}
 
 function AdoptionHistory({ accountId }: { accountId: string }) {
   const [open, setOpen] = useState(false);
@@ -662,28 +726,47 @@ function AdoptionHistory({ accountId }: { accountId: string }) {
                 here.
               </p>
             ) : (
-              <ul className="space-y-3">
-                {entries.map((e, i) => (
-                  <li key={i} className="flex gap-3 text-sm">
-                    <div className="mt-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-x-2">
-                        <span className="font-medium">{e.task_label}</span>
-                        <Badge variant="outline" className="text-[10px]">
-                          {STATUS_LABEL[e.status] ?? e.status}
-                        </Badge>
-                      </div>
-                      {e.note && (
-                        <p className="text-muted-foreground mt-0.5">“{e.note}”</p>
-                      )}
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {new Date(e.changed_at).toLocaleString()}
-                        {e.changed_by ? ` · ${e.changed_by}` : ""}
-                      </p>
+              <div className="space-y-5">
+                {groupByDate(entries).map(([day, dayEntries]) => (
+                  <div key={day}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <CalendarClock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {day}
+                      </span>
+                      <span className="text-xs text-muted-foreground/70">
+                        · {dayEntries.length} change{dayEntries.length === 1 ? "" : "s"}
+                      </span>
+                      <div className="flex-1 border-t" />
                     </div>
-                  </li>
+                    <ul className="space-y-2.5 pl-1 border-l ml-1.5">
+                      {dayEntries.map((e, i) => (
+                        <li key={i} className="flex gap-3 text-sm pl-3 relative">
+                          <div className="absolute -left-[5px] top-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-x-2">
+                              <span className="font-medium">{e.task_label}</span>
+                              <Badge variant="outline" className="text-[10px]">
+                                {STATUS_LABEL[e.status] ?? e.status}
+                              </Badge>
+                            </div>
+                            {e.note && (
+                              <p className="text-muted-foreground mt-0.5">“{e.note}”</p>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {new Date(e.changed_at).toLocaleTimeString([], {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                              {e.changed_by ? ` · ${e.changed_by}` : ""}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -1255,9 +1338,11 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
   // User-provisioning readiness = AIM OR SCIM (provisioning_status is the broader
   // "any provisioning" signal); aim tells us whether the preferred method is used.
   const prov = data.provisioning_status ?? "unknown";
-  // Readiness reflects the team-filled Adoption Workflow (matrix tasks, excluding the
-  // Security & Review questions) — not GTM auto-signals. Done = marked "completed".
-  const workflowTasks = (data.adoption?.tasks ?? []).filter((t) => t.lane !== "security");
+  // Readiness reflects the team-filled Genie Playbook — Happy Path tasks only (the core
+  // adoption path; Recommended / As Needed / Security don't count). N/A tasks are
+  // excluded from the score (not applicable). Done = marked "completed".
+  const happyPathTasks = (data.adoption?.tasks ?? []).filter((t) => t.lane === "happy_path");
+  const workflowTasks = happyPathTasks.filter((t) => t.status !== "na");
   const applicable = workflowTasks;
   const done = workflowTasks.filter((t) => t.status === "completed");
   const readinessPct =
