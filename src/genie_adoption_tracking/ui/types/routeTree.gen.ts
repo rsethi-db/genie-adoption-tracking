@@ -17,6 +17,9 @@ import { Route as PlaybookRouteImport } from './../routes/playbook'
 import { Route as UseCasesRouteImport } from './../routes/use-cases'
 import { Route as AccountsIndexRouteImport } from './../routes/accounts.index'
 import { Route as AccountsAccountIdRouteImport } from './../routes/accounts.$accountId'
+import { Route as CampaignsIndexRouteImport } from './../routes/campaigns.index'
+import { Route as CampaignsCampaignIdRouteImport } from './../routes/campaigns.$campaignId'
+import { Route as FormsTokenRouteImport } from './../routes/forms.$token'
 import { Route as UseCasesIdRouteImport } from './../routes/use-cases.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -59,6 +62,21 @@ const AccountsAccountIdRoute = AccountsAccountIdRouteImport.update({
   path: '/$accountId',
   getParentRoute: () => AccountsRoute,
 } as any)
+const CampaignsIndexRoute = CampaignsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => CampaignsRoute,
+} as any)
+const CampaignsCampaignIdRoute = CampaignsCampaignIdRouteImport.update({
+  id: '/$campaignId',
+  path: '/$campaignId',
+  getParentRoute: () => CampaignsRoute,
+} as any)
+const FormsTokenRoute = FormsTokenRouteImport.update({
+  id: '/forms/$token',
+  path: '/forms/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UseCasesIdRoute = UseCasesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -68,35 +86,43 @@ const UseCasesIdRoute = UseCasesIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRouteWithChildren
-  '/campaigns': typeof CampaignsRoute
+  '/campaigns': typeof CampaignsRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/playbook': typeof PlaybookRoute
   '/use-cases': typeof UseCasesRouteWithChildren
   '/accounts/$accountId': typeof AccountsAccountIdRoute
+  '/campaigns/$campaignId': typeof CampaignsCampaignIdRoute
+  '/forms/$token': typeof FormsTokenRoute
   '/use-cases/$id': typeof UseCasesIdRoute
   '/accounts/': typeof AccountsIndexRoute
+  '/campaigns/': typeof CampaignsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/campaigns': typeof CampaignsRoute
   '/dashboard': typeof DashboardRoute
   '/playbook': typeof PlaybookRoute
   '/use-cases': typeof UseCasesRouteWithChildren
   '/accounts/$accountId': typeof AccountsAccountIdRoute
+  '/campaigns/$campaignId': typeof CampaignsCampaignIdRoute
+  '/forms/$token': typeof FormsTokenRoute
   '/use-cases/$id': typeof UseCasesIdRoute
   '/accounts': typeof AccountsIndexRoute
+  '/campaigns': typeof CampaignsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRouteWithChildren
-  '/campaigns': typeof CampaignsRoute
+  '/campaigns': typeof CampaignsRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/playbook': typeof PlaybookRoute
   '/use-cases': typeof UseCasesRouteWithChildren
   '/accounts/$accountId': typeof AccountsAccountIdRoute
+  '/campaigns/$campaignId': typeof CampaignsCampaignIdRoute
+  '/forms/$token': typeof FormsTokenRoute
   '/use-cases/$id': typeof UseCasesIdRoute
   '/accounts/': typeof AccountsIndexRoute
+  '/campaigns/': typeof CampaignsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -108,18 +134,23 @@ export interface FileRouteTypes {
     | '/playbook'
     | '/use-cases'
     | '/accounts/$accountId'
+    | '/campaigns/$campaignId'
+    | '/forms/$token'
     | '/use-cases/$id'
     | '/accounts/'
+    | '/campaigns/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/campaigns'
     | '/dashboard'
     | '/playbook'
     | '/use-cases'
     | '/accounts/$accountId'
+    | '/campaigns/$campaignId'
+    | '/forms/$token'
     | '/use-cases/$id'
     | '/accounts'
+    | '/campaigns'
   id:
     | '__root__'
     | '/'
@@ -129,17 +160,21 @@ export interface FileRouteTypes {
     | '/playbook'
     | '/use-cases'
     | '/accounts/$accountId'
+    | '/campaigns/$campaignId'
+    | '/forms/$token'
     | '/use-cases/$id'
     | '/accounts/'
+    | '/campaigns/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountsRoute: typeof AccountsRouteWithChildren
-  CampaignsRoute: typeof CampaignsRoute
+  CampaignsRoute: typeof CampaignsRouteWithChildren
   DashboardRoute: typeof DashboardRoute
   PlaybookRoute: typeof PlaybookRoute
   UseCasesRoute: typeof UseCasesRouteWithChildren
+  FormsTokenRoute: typeof FormsTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -200,6 +235,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountsAccountIdRouteImport
       parentRoute: typeof AccountsRoute
     }
+    '/campaigns/': {
+      id: '/campaigns/'
+      path: '/'
+      fullPath: '/campaigns/'
+      preLoaderRoute: typeof CampaignsIndexRouteImport
+      parentRoute: typeof CampaignsRoute
+    }
+    '/campaigns/$campaignId': {
+      id: '/campaigns/$campaignId'
+      path: '/$campaignId'
+      fullPath: '/campaigns/$campaignId'
+      preLoaderRoute: typeof CampaignsCampaignIdRouteImport
+      parentRoute: typeof CampaignsRoute
+    }
+    '/forms/$token': {
+      id: '/forms/$token'
+      path: '/forms/$token'
+      fullPath: '/forms/$token'
+      preLoaderRoute: typeof FormsTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/use-cases/$id': {
       id: '/use-cases/$id'
       path: '/$id'
@@ -224,6 +280,20 @@ const AccountsRouteWithChildren = AccountsRoute._addFileChildren(
   AccountsRouteChildren,
 )
 
+interface CampaignsRouteChildren {
+  CampaignsCampaignIdRoute: typeof CampaignsCampaignIdRoute
+  CampaignsIndexRoute: typeof CampaignsIndexRoute
+}
+
+const CampaignsRouteChildren: CampaignsRouteChildren = {
+  CampaignsCampaignIdRoute: CampaignsCampaignIdRoute,
+  CampaignsIndexRoute: CampaignsIndexRoute,
+}
+
+const CampaignsRouteWithChildren = CampaignsRoute._addFileChildren(
+  CampaignsRouteChildren,
+)
+
 interface UseCasesRouteChildren {
   UseCasesIdRoute: typeof UseCasesIdRoute
 }
@@ -239,10 +309,11 @@ const UseCasesRouteWithChildren = UseCasesRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountsRoute: AccountsRouteWithChildren,
-  CampaignsRoute: CampaignsRoute,
+  CampaignsRoute: CampaignsRouteWithChildren,
   DashboardRoute: DashboardRoute,
   PlaybookRoute: PlaybookRoute,
   UseCasesRoute: UseCasesRouteWithChildren,
+  FormsTokenRoute: FormsTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

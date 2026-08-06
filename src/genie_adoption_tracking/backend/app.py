@@ -5,7 +5,10 @@ from .core import create_app
 # lakebase dependency is imported/registered earlier via .core.
 from . import migrations  # noqa: F401
 from .campaigns import router as campaigns_router
+from .campaign_audience import router as campaign_audience_router
 from .genie import router as genie_router
 from .router import router
 
-app = create_app(routers=[router, genie_router, campaigns_router])
+app = create_app(
+    routers=[router, genie_router, campaigns_router, campaign_audience_router]
+)

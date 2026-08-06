@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Search, ArrowRight, Loader2, Megaphone, X } from "lucide-react";
+import { Search, ArrowRight, Loader2, X } from "lucide-react";
 
 interface AccountsSearch {
   tier?: string;
@@ -60,18 +60,7 @@ function AccountsPage() {
       {label ? (
         <FilteredList search={search} label={label} />
       ) : (
-        <>
-          {/* Leadership push */}
-          <div className="mb-6 flex items-start gap-2 max-w-3xl text-sm text-muted-foreground">
-            <Megaphone className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-            <p>
-              As we drive Genie adoption across FINS this quarter, keep your accounts
-              moving through the Genie Playbook.
-            </p>
-          </div>
-
-          <AccountLookup />
-        </>
+        <AccountLookup />
       )}
     </AppShell>
   );
