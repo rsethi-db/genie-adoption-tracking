@@ -61,6 +61,7 @@ Schema (include a key ONLY if the text implies it; omit otherwise):
   arr_min: number            # minimum annual recurring revenue in USD
   arr_max: number            # maximum ARR in USD
   pp_status: "on" | "off"    # Partner-Powered AI enabled(on)/disabled(off)
+  pp_enforce: "on" | "off"   # for PP-off accounts: enforce on (hard-blocked) / off (workspaces can consume)
   genie_spend_min: number    # minimum trailing-30d Genie spend in USD
   genie_spend_max: number    # maximum trailing-30d Genie spend in USD
   sub_vertical: string       # a business sub-vertical/segment substring
@@ -78,6 +79,8 @@ Mappings:
   "whitespace"/"ready but idle"/"ready to activate"/"can consume but not using" -> whitespace:true
   "has a use case"/"has genie use cases" -> has_use_case:true ; "no use case" -> has_use_case:false
   "partner powered enabled/on" -> pp_status:"on" ; "PP off"/"partner powered off" -> pp_status:"off"
+  "PP off but enforce off"/"off, not enforced"/"off but workspaces can consume" -> pp_status:"off",pp_enforce:"off"
+  "PP off and enforced"/"hard blocked" -> pp_status:"off",pp_enforce:"on"
   "provisioned"/"has AIM"/"has SCIM" -> provisioning:"on" ; "not provisioned"/"no provisioning" -> provisioning:"off"
   "green/yellow/red tier"/"genie-ready green" -> readiness_tier:"green"/etc.
   "open issues"/"has blockers"/"brickroad issues" -> open_issues:true
@@ -87,7 +90,8 @@ Examples:
     -> {"arr_min":250000,"pp_status":"on","genie_spend_max":200}
   "accounts with no genie usage" -> {"genie_active":false}
   "whitespace accounts in banking over $1M ARR" -> {"whitespace":true,"sub_vertical":"Banking","arr_min":1000000}
-  "green tier accounts not using genie" -> {"readiness_tier":"green","genie_active":false}"""
+  "green tier accounts not using genie" -> {"readiness_tier":"green","genie_active":false}
+  "PP off but enforce off in insurance over $1M ARR" -> {"pp_status":"off","pp_enforce":"off","sub_vertical":"Insurance","arr_min":1000000}"""
 
 
 def _extract_json(text: str) -> dict:
@@ -141,6 +145,8 @@ def _describe(f: AudienceFilters) -> str:
         bits.append(f"ARR ≤ ${f.arr_max:,.0f}")
     if f.pp_status:
         bits.append(f"Partner-Powered AI {f.pp_status}")
+    if f.pp_enforce:
+        bits.append(f"enforce {f.pp_enforce}")
     if f.genie_spend_min is not None:
         bits.append(f"Genie spend ≥ ${f.genie_spend_min:,.0f}")
     if f.genie_spend_max is not None:
@@ -174,6 +180,68 @@ def _acct_is_whitespace(a: Account) -> bool:
     return pp_can_consume and provisioned and idle
 
 
+def _to_sql(f: AudienceFilters) -> str:
+    """Render the filters as an equivalent SELECT over gat_account (+ derived signals),
+    for display. Read-only echo — not executed; the app filters in Python via _matches."""
+    w: list[str] = []
+    if f.arr_min is not None:
+        w.append(f"arr >= {f.arr_min:.0f}")
+    if f.arr_max is not None:
+        w.append(f"arr <= {f.arr_max:.0f}")
+    if f.pp_status == "on":
+        w.append("pp_status IN ('on','on_default')")
+    elif f.pp_status == "off":
+        w.append("pp_status = 'off'")
+    if f.pp_enforce == "on":
+        w.append("pp_enforce = 'on'")
+    elif f.pp_enforce == "off":
+        w.append("pp_enforce <> 'on'")
+    if f.genie_spend_min is not None:
+        w.append(f"genie_dollars_t30d >= {f.genie_spend_min:.0f}")
+    if f.genie_spend_max is not None:
+        w.append(f"genie_dollars_t30d <= {f.genie_spend_max:.0f}")
+    if f.sub_vertical:
+        w.append(f"lower(sub_vertical) LIKE '%{f.sub_vertical.lower()}%'")
+    if f.genie_active is True:
+        w.append("active_genie_spaces > 0")
+    elif f.genie_active is False:
+        w.append("active_genie_spaces = 0")
+    if f.provisioning == "off":
+        w.append("provisioning_status NOT IN ('on','partial')")
+    elif f.provisioning in ("on", "partial"):
+        w.append(f"provisioning_status = '{f.provisioning}'")
+    if f.readiness_tier:
+        w.append(f"readiness_tier = '{f.readiness_tier}'")
+    if f.whitespace is True:
+        w.append(
+            "(pp_status IN ('on','on_default') OR (pp_status='off' AND pp_enforce<>'on')) "
+            "AND provisioning_status IN ('on','partial') AND active_genie_spaces = 0"
+        )
+    elif f.whitespace is False:
+        w.append(
+            "NOT ((pp_status IN ('on','on_default') OR (pp_status='off' AND pp_enforce<>'on')) "
+            "AND provisioning_status IN ('on','partial') AND active_genie_spaces = 0)"
+        )
+    if f.has_use_case is True:
+        w.append("EXISTS (SELECT 1 FROM gat_use_case u WHERE u.account_id = a.id)")
+    elif f.has_use_case is False:
+        w.append("NOT EXISTS (SELECT 1 FROM gat_use_case u WHERE u.account_id = a.id)")
+    if f.open_issues is True:
+        w.append(
+            "EXISTS (SELECT 1 FROM gat_account_issue i WHERE i.account_id = a.id "
+            "AND lower(i.status) NOT IN ('resolved','will_not_solve'))"
+        )
+    elif f.open_issues is False:
+        w.append(
+            "NOT EXISTS (SELECT 1 FROM gat_account_issue i WHERE i.account_id = a.id "
+            "AND lower(i.status) NOT IN ('resolved','will_not_solve'))"
+        )
+    if not w:
+        return ""
+    where = "\n  AND ".join(w)
+    return f"SELECT name, ae_owner, arr\nFROM gat_account a\nWHERE {where}\nORDER BY arr DESC"
+
+
 def _matches(a: Account, f: AudienceFilters) -> bool:
     if f.arr_min is not None and a.arr < f.arr_min:
         return False
@@ -182,6 +250,11 @@ def _matches(a: Account, f: AudienceFilters) -> bool:
     if f.pp_status == "on" and a.pp_status not in ("on", "on_default"):
         return False
     if f.pp_status == "off" and a.pp_status != "off":
+        return False
+    # PP-off enforce state: "on" = hard-blocked, "off" = enforce not on (workspaces can consume).
+    if f.pp_enforce == "on" and a.pp_enforce != "on":
+        return False
+    if f.pp_enforce == "off" and a.pp_enforce == "on":
         return False
     if f.genie_spend_min is not None and a.genie_spend_90d < f.genie_spend_min:
         return False
@@ -310,4 +383,6 @@ def query_audience(
 
     matched = [_account_out(a) for a in accounts if _passes(a)]
     matched.sort(key=lambda a: a.arr, reverse=True)
-    return AudienceQueryOut(filters=filters, interpreted=interpreted, accounts=matched)
+    return AudienceQueryOut(
+        filters=filters, interpreted=interpreted, sql=_to_sql(filters), accounts=matched
+    )

@@ -493,6 +493,7 @@ class AudienceFilters(BaseModel):
     arr_min: float | None = None
     arr_max: float | None = None
     pp_status: str | None = None  # "on" | "off"
+    pp_enforce: str | None = None  # "on" | "off" — PP-off enforce state
     genie_spend_min: float | None = None
     genie_spend_max: float | None = None
     sub_vertical: str | None = None
@@ -521,6 +522,9 @@ class AudienceQueryOut(BaseModel):
     filters: AudienceFilters
     # Human-readable echo of what the filters mean, so the user can sanity-check.
     interpreted: str
+    # The equivalent SQL the filters translate to (over gat_account + derived signals),
+    # shown collapsed so a user can see exactly how the audience was resolved.
+    sql: str = ""
     accounts: list[AudienceAccountOut]
 
 
