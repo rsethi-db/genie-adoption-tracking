@@ -49,6 +49,7 @@ import {
   GENIE_READY_DOC_URL,
   GENIE_READY_DASHBOARD_URL,
   enforceImplication,
+  enforceLabel,
   isPpEnabled,
   isPpEffectivelyEnabled,
 } from "@/lib/partner-powered";
@@ -1575,6 +1576,10 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
             />
           </EligibilityRow>
 
+          {pp === "off" && (
+            <EnforceFlag enforce={data.pp_enforce ?? "unknown"} />
+          )}
+
           <EligibilityRow
             tone={provTone}
             label="User provisioning (AIM or SCIM)"
@@ -1648,6 +1653,19 @@ function EligibilityRow({
         <span className="text-sm font-medium ml-auto">{value}</span>
       </button>
       {open && <div className="pb-3">{children}</div>}
+    </div>
+  );
+}
+
+// Enforce flag — a plain status line (no expand), shown under the Partner-Powered AI
+// row for PP-off accounts. "Enforce On" (red) / "Enforce Off" (amber) / Unknown (grey).
+function EnforceFlag({ enforce }: { enforce: string }) {
+  const tone: RowTone =
+    enforce === "on" ? "bad" : enforce === "off" ? "warn" : "muted";
+  return (
+    <div className="flex items-center gap-2.5 py-2.5">
+      <span className={cn("h-2 w-2 rounded-full shrink-0", ROW_DOT[tone])} />
+      <span className="text-sm">{enforceLabel(enforce)}</span>
     </div>
   );
 }

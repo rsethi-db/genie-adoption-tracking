@@ -164,8 +164,12 @@ class AdoptionTaskState(SQLModel, table=True):
 
     id: str = Field(primary_key=True)
     account_id: str = Field(index=True, foreign_key="gat_account.id")
+    account_name: str = Field(default="")
     task_key: str = Field(index=True)
-    # not_initiated | na | in_progress | completed
+    task_name: str = Field(default="")
+    # position in the questionnaire — ORDER BY task_order == questionnaire order
+    task_order: int = Field(default=0, index=True)
+    # not_initiated | na | in_progress | completed | blocked
     status: str = Field(default="not_initiated")
     note: str = Field(default="")
     updated_at: datetime = Field(default_factory=_utcnow)
@@ -182,7 +186,11 @@ class AdoptionTaskHistory(SQLModel, table=True):
 
     id: str = Field(primary_key=True)
     account_id: str = Field(index=True, foreign_key="gat_account.id")
+    account_name: str = Field(default="")
     task_key: str = Field(index=True)
+    task_name: str = Field(default="")
+    # position in the questionnaire — ORDER BY task_order == questionnaire order
+    task_order: int = Field(default=0, index=True)
     status: str = Field(default="")
     note: str = Field(default="")
     changed_at: datetime = Field(default_factory=_utcnow, index=True)
