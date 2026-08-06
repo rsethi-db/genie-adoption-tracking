@@ -497,6 +497,12 @@ class AudienceFilters(BaseModel):
     genie_spend_max: float | None = None
     sub_vertical: str | None = None
     genie_active: bool | None = None
+    # Richer Signals concepts (same definitions as the Signals dashboard):
+    provisioning: str | None = None  # "on" | "partial" | "off" (off = incl. blank/unknown)
+    readiness_tier: str | None = None  # "green" | "yellow" | "red" | "unknown"
+    whitespace: bool | None = None  # can-consume + provisioned + no active agent
+    has_use_case: bool | None = None  # has ≥1 Genie use case
+    open_issues: bool | None = None  # has ≥1 open Brickroad issue
 
 
 class AudienceAccountOut(BaseModel):

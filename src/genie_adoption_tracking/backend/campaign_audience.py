@@ -19,7 +19,7 @@ from sqlmodel import Session, select
 
 from .core import Dependencies, create_router
 from .core._config import logger
-from .db import Account
+from .db import Account, AccountIssue, UseCase
 from .models import (
     AudienceAccountOut,
     AudienceFilters,
@@ -57,20 +57,37 @@ def derive_email(name: str) -> str:
 _SYSTEM_PROMPT = """You convert a natural-language description of a set of customer \
 accounts into a compact JSON filter object. Output ONLY minified JSON, no prose.
 
-Schema (include a key only if the text implies it; omit otherwise):
+Schema (include a key ONLY if the text implies it; omit otherwise):
   arr_min: number            # minimum annual recurring revenue in USD
   arr_max: number            # maximum ARR in USD
   pp_status: "on" | "off"    # Partner-Powered AI enabled(on)/disabled(off)
-  genie_spend_min: number    # minimum trailing-90d Genie spend in USD
-  genie_spend_max: number    # maximum trailing-90d Genie spend in USD
+  genie_spend_min: number    # minimum trailing-30d Genie spend in USD
+  genie_spend_max: number    # maximum trailing-30d Genie spend in USD
   sub_vertical: string       # a business sub-vertical/segment substring
-  genie_active: boolean      # whether the account has consumed Genie recently
+  genie_active: boolean      # has an active Genie agent (used Genie in last 30d)
+  provisioning: "on"|"partial"|"off"  # user provisioning (AIM/SCIM); off = none/blank
+  readiness_tier: "green"|"yellow"|"red"|"unknown"  # GTM Genie-Ready tier
+  whitespace: boolean        # can consume Genie + provisioned but NO active agent
+  has_use_case: boolean      # has at least one Genie use case
+  open_issues: boolean       # has at least one open Brickroad issue
 
 Interpret money shorthands: $250K = 250000, $1.2M = 1200000, $200 = 200.
-"enabled"/"turned on"/"has partner powered" -> pp_status:"on".
-"usage < $200"/"genie spend under 200" -> genie_spend_max:200.
-Example input: "FINS accounts where ARR > $250K, partner powered enabled and genie usage < $200"
-Example output: {"arr_min":250000,"pp_status":"on","genie_spend_max":200}"""
+Mappings:
+  "no genie usage"/"not using genie"/"no genie activity"/"no agents" -> genie_active:false
+  "using genie"/"genie active"/"has agents" -> genie_active:true
+  "whitespace"/"ready but idle"/"ready to activate"/"can consume but not using" -> whitespace:true
+  "has a use case"/"has genie use cases" -> has_use_case:true ; "no use case" -> has_use_case:false
+  "partner powered enabled/on" -> pp_status:"on" ; "PP off"/"partner powered off" -> pp_status:"off"
+  "provisioned"/"has AIM"/"has SCIM" -> provisioning:"on" ; "not provisioned"/"no provisioning" -> provisioning:"off"
+  "green/yellow/red tier"/"genie-ready green" -> readiness_tier:"green"/etc.
+  "open issues"/"has blockers"/"brickroad issues" -> open_issues:true
+  "usage < $200"/"genie spend under 200" -> genie_spend_max:200
+Examples:
+  "FINS accounts where ARR > $250K, partner powered enabled and genie usage < $200"
+    -> {"arr_min":250000,"pp_status":"on","genie_spend_max":200}
+  "accounts with no genie usage" -> {"genie_active":false}
+  "whitespace accounts in banking over $1M ARR" -> {"whitespace":true,"sub_vertical":"Banking","arr_min":1000000}
+  "green tier accounts not using genie" -> {"readiness_tier":"green","genie_active":false}"""
 
 
 def _extract_json(text: str) -> dict:
@@ -131,8 +148,30 @@ def _describe(f: AudienceFilters) -> str:
     if f.sub_vertical:
         bits.append(f"sub-vertical contains “{f.sub_vertical}”")
     if f.genie_active is not None:
-        bits.append("Genie-active" if f.genie_active else "not Genie-active")
+        bits.append("has active Genie agent" if f.genie_active else "no active Genie agent")
+    if f.provisioning:
+        bits.append(f"provisioning {f.provisioning}")
+    if f.readiness_tier:
+        bits.append(f"Genie-Ready tier {f.readiness_tier}")
+    if f.whitespace is not None:
+        bits.append("whitespace (ready but idle)" if f.whitespace else "not whitespace")
+    if f.has_use_case is not None:
+        bits.append("has a Genie use case" if f.has_use_case else "no Genie use case")
+    if f.open_issues is not None:
+        bits.append("has open issues" if f.open_issues else "no open issues")
     return " · ".join(bits) if bits else "No filters recognized — showing no accounts."
+
+
+def _acct_is_whitespace(a: Account) -> bool:
+    """Same definition as the Signals dashboard: the account can consume Genie
+    (PP on/on_default, or off but not enforced), is provisioned (on/partial), and has
+    no active Genie agent in the last 30 days."""
+    pp_can_consume = a.pp_status in ("on", "on_default") or (
+        a.pp_status == "off" and a.pp_enforce != "on"
+    )
+    provisioned = a.provisioning_status in ("on", "partial")
+    idle = (a.active_genie_spaces or 0) == 0
+    return pp_can_consume and provisioned and idle
 
 
 def _matches(a: Account, f: AudienceFilters) -> bool:
@@ -140,7 +179,9 @@ def _matches(a: Account, f: AudienceFilters) -> bool:
         return False
     if f.arr_max is not None and a.arr > f.arr_max:
         return False
-    if f.pp_status is not None and a.pp_status != f.pp_status:
+    if f.pp_status == "on" and a.pp_status not in ("on", "on_default"):
+        return False
+    if f.pp_status == "off" and a.pp_status != "off":
         return False
     if f.genie_spend_min is not None and a.genie_spend_90d < f.genie_spend_min:
         return False
@@ -148,8 +189,20 @@ def _matches(a: Account, f: AudienceFilters) -> bool:
         return False
     if f.sub_vertical and f.sub_vertical.lower() not in (a.sub_vertical or "").lower():
         return False
-    if f.genie_active is not None and a.genie_active != f.genie_active:
+    # genie_active = has an active Genie agent in the last 30d (matches Signals).
+    if f.genie_active is not None:
+        active = (a.active_genie_spaces or 0) > 0
+        if active != f.genie_active:
+            return False
+    if f.provisioning == "off" and a.provisioning_status in ("on", "partial"):
         return False
+    if f.provisioning in ("on", "partial") and a.provisioning_status != f.provisioning:
+        return False
+    if f.readiness_tier and a.readiness_tier != f.readiness_tier:
+        return False
+    if f.whitespace is not None and _acct_is_whitespace(a) != f.whitespace:
+        return False
+    # has_use_case / open_issues are checked at the query level (need joins), not here.
     return True
 
 
@@ -231,6 +284,30 @@ def query_audience(
     if not _has_any_filter(filters):
         return AudienceQueryOut(filters=filters, interpreted=interpreted, accounts=[])
     accounts = session.exec(select(Account)).all()
-    matched = [_account_out(a) for a in accounts if _matches(a, filters)]
+    # Precompute use-case / open-issue account sets once (needed for has_use_case /
+    # open_issues, which can't be read off the Account row alone).
+    acct_ids_with_uc: set[str] = set()
+    acct_ids_with_open_issue: set[str] = set()
+    if filters.has_use_case is not None:
+        acct_ids_with_uc = {uc.account_id for uc in session.exec(select(UseCase)).all()}
+    if filters.open_issues is not None:
+        acct_ids_with_open_issue = {
+            i.account_id
+            for i in session.exec(select(AccountIssue)).all()
+            if i.status.lower() not in ("resolved", "will_not_solve")
+        }
+
+    def _passes(a: Account) -> bool:
+        if not _matches(a, filters):
+            return False
+        if filters.has_use_case is not None:
+            if (a.id in acct_ids_with_uc) != filters.has_use_case:
+                return False
+        if filters.open_issues is not None:
+            if (a.id in acct_ids_with_open_issue) != filters.open_issues:
+                return False
+        return True
+
+    matched = [_account_out(a) for a in accounts if _passes(a)]
     matched.sort(key=lambda a: a.arr, reverse=True)
     return AudienceQueryOut(filters=filters, interpreted=interpreted, accounts=matched)
