@@ -1393,22 +1393,24 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
         <div className="divide-y border-t">
           <EligibilityRow
             tone={ppTone}
-            label="Partner-Powered AI"
-            value={
-              (ppConsumeViaWs
-                ? "On (select workspaces)"
-                : isPpEnabled(pp)
-                  ? "On"
-                  : pp === "off"
-                    ? "Off"
-                    : "Unknown") +
-              // Fold the enforce state into the same row (e.g. "Off · Enforce On"),
-              // rather than a separate line below.
+            label={
+              "Partner-Powered AI" +
+              // Show the enforce state right next to the label (e.g.
+              // "Partner-Powered AI · Enforce On").
               (data.pp_enforce === "on"
                 ? " · Enforce On"
                 : data.pp_enforce === "off"
                   ? " · Enforce Off"
                   : "")
+            }
+            value={
+              ppConsumeViaWs
+                ? "On (select workspaces)"
+                : isPpEnabled(pp)
+                  ? "On"
+                  : pp === "off"
+                    ? "Off"
+                    : "Unknown"
             }
             open={expanded === "pp"}
             onToggle={() => toggle("pp")}

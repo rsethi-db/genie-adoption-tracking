@@ -19,6 +19,8 @@ import {
   Search,
   Loader2,
   Sparkles,
+  ChevronDown,
+  Code2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -333,6 +335,8 @@ function NewCampaignForm({
   // Natural-language audience builder state.
   const [nlText, setNlText] = useState("");
   const [interpreted, setInterpreted] = useState("");
+  const [sql, setSql] = useState("");
+  const [showSql, setShowSql] = useState(false);
   const [querying, setQuerying] = useState(false);
   // The reviewed audience — keyed by account_id so deselect + manual-add merge cleanly.
   const [audience, setAudience] = useState<AudienceAccount[]>([]);
@@ -354,6 +358,7 @@ function NewCampaignForm({
       if (!res.ok) throw new Error();
       const d = await res.json();
       setInterpreted(d.interpreted ?? "");
+      setSql(d.sql ?? "");
       // Merge results into the audience, keeping any manually-added accounts.
       const byId = new Map(audience.map((a) => [a.account_id, a]));
       for (const a of (d.accounts ?? []) as AudienceAccount[]) {
@@ -501,6 +506,27 @@ function NewCampaignForm({
                 {querying ? "Resolving…" : "Find accounts"}
               </Button>
             </div>
+
+            {sql && (
+              <div className="rounded-md border">
+                <button
+                  type="button"
+                  onClick={() => setShowSql((s) => !s)}
+                  className="flex w-full items-center gap-1.5 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
+                  <Code2 className="h-3.5 w-3.5" />
+                  Show SQL
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${showSql ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {showSql && (
+                  <pre className="overflow-x-auto border-t bg-muted/40 px-3 py-2 text-xs font-mono whitespace-pre">
+                    {sql}
+                  </pre>
+                )}
+              </div>
+            )}
 
             {audience.length > 0 && (
               <div className="overflow-x-auto rounded-md border">
