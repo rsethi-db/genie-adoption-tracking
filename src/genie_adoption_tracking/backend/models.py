@@ -511,8 +511,10 @@ class AudienceAccountOut(BaseModel):
     account_name: str
     ae_owner: str = ""
     sa_owner: str = ""
+    dsa_owner: str = ""
     ae_email: str = ""
     sa_email: str = ""
+    dsa_email: str = ""
     arr: float = 0.0
     pp_status: str = "unknown"
     genie_spend_90d: float = 0.0

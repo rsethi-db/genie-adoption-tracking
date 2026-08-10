@@ -153,6 +153,8 @@ export interface AudienceAccountOut {
     ae_email?: string;
     ae_owner?: string;
     arr?: number;
+    dsa_email?: string;
+    dsa_owner?: string;
     genie_spend_90d?: number;
     pp_status?: string;
     sa_email?: string;
@@ -164,8 +166,14 @@ export interface AudienceFilters {
     genie_active?: boolean | null;
     genie_spend_max?: number | null;
     genie_spend_min?: number | null;
+    has_use_case?: boolean | null;
+    open_issues?: boolean | null;
+    pp_enforce?: string | null;
     pp_status?: string | null;
+    provisioning?: string | null;
+    readiness_tier?: string | null;
     sub_vertical?: string | null;
+    whitespace?: boolean | null;
 }
 export interface AudienceQueryIn {
     text: string;
@@ -174,6 +182,7 @@ export interface AudienceQueryOut {
     accounts: AudienceAccountOut[];
     filters: AudienceFilters;
     interpreted: string;
+    sql?: string;
 }
 export interface BlockerAggOut {
     category_key: string;
