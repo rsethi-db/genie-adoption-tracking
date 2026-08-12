@@ -90,12 +90,15 @@ STAGE_MAP = {
 }
 # Everything else (Lost, Disqualified) is skipped — not actionable for the playbook.
 
-# LIVE FINS customer accounts, keyed by SFDC account_id (the stable identity — two
-# accounts can share a display name, so we never dedupe by name). Universe = active
-# customers: on the latest account_dim snapshot, status Customer%, FINS, with paid
-# usage (> $0) in the LAST 6 MONTHS (fin_live_gold.paid_usage_metering). Lapsed/dormant
-# accounts (no recent usage, often no running workspace) are excluded so they don't
-# inflate whitespace or drag ratios.
+# LIVE AMER customer accounts across both AMER business units — AMER Industries
+# (FINS / MFG / PS / HLS) and AMER Enterprise & Emerging (EE & Startup / LATAM / CAN /
+# DNB / CMEG / RCT) — keyed by SFDC account_id (the stable identity — two accounts can
+# share a display name, so we never dedupe by name). Universe = active customers: on the
+# latest account_dim snapshot, status Customer%, sales_business_unit in the two AMER BUs,
+# with paid usage (> $0) in the LAST 6 MONTHS (fin_live_gold.paid_usage_metering).
+# Lapsed/dormant accounts (no recent usage, often no running workspace) are excluded so
+# they don't inflate whitespace or drag ratios. The vertical (sales_subregion_level_1) is
+# stored per account for filtering.
 # Accounts with no Genie use case are still "whitespace" — shown as the untapped list.
 ACCOUNTS_QUERY = """
 WITH latest_accounts AS (
@@ -115,11 +118,11 @@ SELECT a.account_id,
            a.last_solution_architect_engaged, '') AS sa,
   COALESCE(a.dsa, '') AS dsa,
   COALESCE(a.sales_subregion_level_2, '') AS sub_vertical,
+  COALESCE(a.sales_subregion_level_1, '') AS vertical,
   COALESCE(a.t3m_annualized, a.arr, 0) AS arr
 FROM latest_accounts a
 JOIN active_usage u ON a.account_id = u.sfdc_account_id
-WHERE a.sales_business_unit = 'AMER Industries'
-  AND a.sales_subregion_level_1 = 'FINS'
+WHERE a.sales_business_unit IN ('AMER Industries', 'AMER Enterprise & Emerging')
   AND a.account_status LIKE 'Customer%'
   AND a.account_name IS NOT NULL
 ORDER BY a.account_name
@@ -154,7 +157,7 @@ account_mapping AS (
 fins AS (
   SELECT DISTINCT account_id AS sfdc_account_id, account_name
   FROM main.gtm_silver.account_dim
-  WHERE sales_business_unit='AMER Industries' AND sales_subregion_level_1='FINS'
+  WHERE sales_business_unit IN ('AMER Industries', 'AMER Enterprise & Emerging')
     AND account_status LIKE '%Customer%' AND account_name IS NOT NULL
 ),
 -- Accounts that consumed Genie in the trailing 2 years (active footprint, not T30D).
@@ -237,7 +240,7 @@ account_mapping AS (
 fins AS (
   SELECT DISTINCT account_id AS sfdc_account_id, account_name
   FROM main.gtm_silver.account_dim
-  WHERE sales_business_unit='AMER Industries' AND sales_subregion_level_1='FINS'
+  WHERE sales_business_unit IN ('AMER Industries', 'AMER Enterprise & Emerging')
     AND account_status LIKE '%Customer%' AND account_name IS NOT NULL
 )
 SELECT f.sfdc_account_id,
@@ -269,7 +272,7 @@ SELECT g.salesforce_account_id AS sfdc_account_id,
 FROM main.gtm_gold.rpt_account_genie_ready g
 JOIN (
   SELECT DISTINCT account_id AS sfdc_account_id FROM main.gtm_silver.account_dim
-  WHERE sales_business_unit='AMER Industries' AND sales_subregion_level_1='FINS'
+  WHERE sales_business_unit IN ('AMER Industries', 'AMER Enterprise & Emerging')
     AND account_status LIKE '%Customer%' AND account_name IS NOT NULL
 ) f ON g.salesforce_account_id = f.sfdc_account_id
 """
@@ -348,7 +351,7 @@ FROM ids i
 ISSUES_QUERY = """
 WITH fins AS (
   SELECT DISTINCT account_id AS sfdc_id, account_name FROM main.gtm_silver.account_dim
-  WHERE sales_business_unit='AMER Industries' AND sales_subregion_level_1='FINS'
+  WHERE sales_business_unit IN ('AMER Industries', 'AMER Enterprise & Emerging')
     AND account_status LIKE '%Customer%' AND account_name IS NOT NULL
 ),
 genie_issue_ids AS (
@@ -378,8 +381,7 @@ USE_CASES_QUERY = """
 WITH filtered_accounts AS (
   SELECT DISTINCT account_id, account_name
   FROM main.gtm_silver.account_dim
-  WHERE sales_business_unit = 'AMER Industries'
-    AND sales_subregion_level_1 = 'FINS'
+  WHERE sales_business_unit IN ('AMER Industries', 'AMER Enterprise & Emerging')
     AND account_status LIKE '%Customer%'
     AND account_name IS NOT NULL
 )
@@ -457,7 +459,8 @@ def fetch_accounts(ws) -> list[dict]:
                 "sa": r[3] or "",
                 "dsa": r[4] or "",
                 "sub_vertical": r[5] or "",
-                "arr": float(r[6] or 0),
+                "vertical": r[6] or "",
+                "arr": float(r[7] or 0),
             }
         )
     return rows
@@ -694,22 +697,28 @@ def main() -> None:
     engine = build_engine()
     SQLModel.metadata.create_all(engine)
 
-    # The estimated_monthly_dbus column is added by the app's startup migration
-    # (backend/migrations.py), which runs as the table-owning service principal.
-    # Verify it exists before seeding so we fail fast with a clear message.
+    # New columns (e.g. gat_use_case.estimated_monthly_dbus, gat_account.vertical) are
+    # added by the app's startup migration (backend/migrations.py), which runs as the
+    # table-owning service principal — the seed connects as a user and cannot ALTER.
+    # Verify each exists before seeding so we fail fast with a clear message.
     with engine.connect() as conn:
-        has_col = conn.execute(
-            text(
-                "SELECT 1 FROM information_schema.columns "
-                "WHERE table_name = 'gat_use_case' "
-                "AND column_name = 'estimated_monthly_dbus'"
-            )
-        ).first()
-    if not has_col:
-        raise SystemExit(
-            "gat_use_case.estimated_monthly_dbus is missing — redeploy the app first "
-            "so its startup migration adds the column, then re-run this seed."
-        )
+        required_cols = [
+            ("gat_use_case", "estimated_monthly_dbus"),
+            ("gat_account", "vertical"),
+        ]
+        for table, col in required_cols:
+            has_col = conn.execute(
+                text(
+                    "SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name = :t AND column_name = :c"
+                ),
+                {"t": table, "c": col},
+            ).first()
+            if not has_col:
+                raise SystemExit(
+                    f"{table}.{col} is missing — redeploy the app first so its startup "
+                    "migration adds the column, then re-run this seed."
+                )
 
     # UPSERT-BY-SFDC-ACCOUNT-ID + TRANSACTIONAL refresh.
     #   * Accounts are matched by SFDC account_id (the stable identity — distinct
@@ -747,6 +756,7 @@ def main() -> None:
                 fields = dict(
                     name=name,
                     sub_vertical=a["sub_vertical"],
+                    vertical=a["vertical"],
                     ae_owner=a["ae"],
                     sa_owner=a["sa"],
                     dsa_owner=a["dsa"],

@@ -30,10 +30,28 @@ interface AccountResult {
   id: string;
   name: string;
   sub_vertical?: string;
+  vertical?: string;
   ae_owner?: string;
   sa_owner?: string;
   dsa_owner?: string;
 }
+
+// AMER verticals (sales_subregion_level_1) across both AMER business units —
+// AMER Industries (FINS/MFG/PS/HLS) + AMER Enterprise & Emerging (EE & Startup/LATAM/
+// CAN/DNB/CMEG/RCT). "All" clears the filter.
+const VERTICALS = [
+  "All",
+  "FINS",
+  "MFG",
+  "PS",
+  "HLS",
+  "EE & Startup",
+  "LATAM",
+  "CAN",
+  "DNB",
+  "CMEG",
+  "RCT",
+] as const;
 
 // Human label for an active drill-down filter (from Signals).
 function filterLabel(s: AccountsSearch): string | null {
@@ -72,7 +90,14 @@ function AccountRow({ a }: { a: AccountResult }) {
       <Card className="hover:border-primary/50 transition-colors">
         <CardContent className="py-3 flex items-center gap-4">
           <div className="flex-1 min-w-0">
-            <div className="font-medium truncate">{a.name}</div>
+            <div className="font-medium truncate">
+              {a.name}
+              {a.vertical && (
+                <span className="ml-2 rounded bg-accent px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground align-middle">
+                  {a.vertical}
+                </span>
+              )}
+            </div>
             <div className="text-xs text-muted-foreground truncate">
               {a.sub_vertical || "—"}
               {a.ae_owner && <> · AE {a.ae_owner}</>}
@@ -137,67 +162,102 @@ function FilteredList({ search, label }: { search: AccountsSearch; label: string
   );
 }
 
-// Server-side search: nothing loads until you type, so the page opens instantly and
-// only the matches (not all ~500 accounts) come over the wire. Queries are debounced.
+// Shows all accounts, filterable by AMER Industries vertical and by a text search.
+// The full set is fetched once per vertical (server returns every match); the text
+// box narrows it client-side so typing stays instant.
 function AccountLookup() {
   const [q, setQ] = useState("");
-  const [results, setResults] = useState<AccountResult[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [vertical, setVertical] = useState<string>("All");
+  const [all, setAll] = useState<AccountResult[]>([]);
+  const [loading, setLoading] = useState(true);
   const seq = useRef(0);
 
+  // (Re)fetch the full account set whenever the vertical filter changes.
   useEffect(() => {
-    const needle = q.trim();
-    if (!needle) {
-      setResults([]);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     const mine = ++seq.current;
-    const t = setTimeout(() => {
-      fetch(`/api/accounts?q=${encodeURIComponent(needle)}`)
-        .then((r) => (r.ok ? r.json() : []))
-        .then((d) => {
-          if (mine === seq.current) {
-            setResults(Array.isArray(d) ? d : []);
-            setLoading(false);
-          }
-        })
-        .catch(() => {
-          if (mine === seq.current) {
-            setResults([]);
-            setLoading(false);
-          }
-        });
-    }, 250);
-    return () => clearTimeout(t);
-  }, [q]);
+    const params = new URLSearchParams({ all: "true" });
+    if (vertical !== "All") params.set("vertical", vertical);
+    fetch(`/api/accounts?${params}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => {
+        if (mine === seq.current) {
+          setAll(Array.isArray(d) ? d : []);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (mine === seq.current) {
+          setAll([]);
+          setLoading(false);
+        }
+      });
+  }, [vertical]);
+
+  const needle = q.trim().toLowerCase();
+  const results = needle
+    ? all.filter(
+        (a) =>
+          a.name.toLowerCase().includes(needle) ||
+          (a.ae_owner || "").toLowerCase().includes(needle) ||
+          (a.sa_owner || "").toLowerCase().includes(needle) ||
+          (a.dsa_owner || "").toLowerCase().includes(needle) ||
+          (a.sub_vertical || "").toLowerCase().includes(needle),
+      )
+    : all;
 
   return (
     <div className="space-y-5">
-      <div className="relative max-w-2xl">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          autoFocus
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Type an account name, AE, SA, or DSA…"
-          className="pl-9 h-11"
-        />
-        {loading && (
-          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-        )}
+      <div className="flex items-center gap-3 flex-wrap max-w-3xl">
+        <div className="relative flex-1 min-w-[16rem]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Filter by account name, AE, SA, or DSA…"
+            className="pl-9 h-11"
+          />
+          {loading && (
+            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1 rounded-md border p-0.5">
+          {VERTICALS.map((v) => (
+            <button
+              key={v}
+              onClick={() => setVertical(v)}
+              className={
+                "px-3 h-9 rounded text-sm font-medium transition-colors whitespace-nowrap " +
+                (vertical === v
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground")
+              }
+            >
+              {v}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {q.trim() === "" ? null : !loading && results.length === 0 ? (
+      <div className="text-sm text-muted-foreground px-1">
+        {loading
+          ? "Loading accounts…"
+          : `${results.length.toLocaleString()} account${results.length === 1 ? "" : "s"}` +
+            (vertical !== "All" ? ` in ${vertical}` : "")}
+      </div>
+
+      {!loading && results.length === 0 ? (
         <p className="text-sm text-muted-foreground px-1">
-          No account matches “{q}”.
+          {needle ? `No account matches “${q}”.` : "No accounts."}
         </p>
       ) : (
-        <div className="grid gap-2 max-w-2xl">
-          {results.map((a) => (
-            <AccountRow key={a.id} a={a} />
-          ))}
+        <div className="max-w-2xl max-h-[calc(100vh-16rem)] overflow-y-auto rounded-md border p-2">
+          <div className="grid gap-2">
+            {results.map((a) => (
+              <AccountRow key={a.id} a={a} />
+            ))}
+          </div>
         </div>
       )}
     </div>

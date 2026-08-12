@@ -39,6 +39,8 @@ class Account(SQLModel, table=True):
     # PK stays the internal uuid so existing FK'd user data (task states, plan, history)
     # is never re-parented.
     sfdc_account_id: str = Field(default="", index=True)
+    # AMER Industries vertical (sales_subregion_level_1): FINS / MFG / PS / HLS.
+    vertical: str = Field(default="FINS", index=True)
     name: str = Field(index=True)
     sub_vertical: str = Field(default="")
     ae_owner: str = Field(default="")

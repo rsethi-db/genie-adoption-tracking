@@ -44,6 +44,22 @@ const TIER_DOT: Record<string, string> = {
   unknown: "bg-muted-foreground/50",
 };
 
+// AMER verticals (sales_subregion_level_1) across both AMER business units. "All"
+// clears the scope so every metric aggregates over all accounts.
+const VERTICALS = [
+  "All",
+  "FINS",
+  "MFG",
+  "PS",
+  "HLS",
+  "EE & Startup",
+  "LATAM",
+  "CAN",
+  "DNB",
+  "CMEG",
+  "RCT",
+] as const;
+
 export const Route = createFileRoute("/dashboard")({
   component: () => <DashboardPage />,
 });
@@ -86,31 +102,58 @@ interface TileSpec {
 }
 
 function DashboardPage() {
+  // Vertical scope for every Signals metric + drill-down. "All" = no scope.
+  const [vertical, setVertical] = useState<string>("All");
+  const scope = vertical === "All" ? "" : vertical;
+
   return (
     <AppShell>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Signals</h1>
-        <p className="text-sm text-muted-foreground">
-          FINS Genie adoption at a glance
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold">Signals</h1>
+          <p className="text-sm text-muted-foreground">
+            AMER Genie adoption at a glance
+            {scope ? ` · ${scope}` : ""}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1 rounded-md border p-0.5">
+          {VERTICALS.map((v) => (
+            <button
+              key={v}
+              onClick={() => setVertical(v)}
+              className={cn(
+                "px-3 h-9 rounded text-sm font-medium transition-colors whitespace-nowrap",
+                vertical === v
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
       </div>
       <Suspense fallback={<DashboardSkeleton />}>
-        <DashboardBody />
+        <DashboardBody scope={scope} />
       </Suspense>
     </AppShell>
   );
 }
 
-function DashboardBody() {
-  const { data } = useGetDashboardSuspense(selector());
+function DashboardBody({ scope }: { scope: string }) {
+  const { data } = useGetDashboardSuspense({
+    ...selector<DashboardOut>(),
+    params: scope ? { vertical: scope } : undefined,
+  });
 
   return (
     <div className="space-y-6">
       {/* Headline row (start big) — click a tile to expand the accounts beneath it */}
       <TileGrid
+        scope={scope}
         cols="lg:grid-cols-5"
         tiles={[
-          { key: "total", icon: <Users className="h-4 w-4" />, label: "FINS accounts", value: data.total_accounts },
+          { key: "total", icon: <Users className="h-4 w-4" />, label: "Accounts", value: data.total_accounts },
           {
             key: "genie_active",
             icon: <Sparkles className="h-4 w-4" />,
@@ -142,13 +185,13 @@ function DashboardBody() {
         </TabsList>
 
         <TabsContent value="pp" className="mt-4">
-          <PartnerPoweredTab data={data} />
+          <PartnerPoweredTab data={data} scope={scope} />
         </TabsContent>
         <TabsContent value="accounts" className="mt-4">
-          <GenieAccountsTab data={data} />
+          <GenieAccountsTab data={data} scope={scope} />
         </TabsContent>
         <TabsContent value="subvertical" className="mt-4">
-          <SubVerticalTab data={data} />
+          <SubVerticalTab data={data} scope={scope} />
         </TabsContent>
         <TabsContent value="brickroad" className="mt-4">
           <BrickroadTab data={data} />
@@ -161,7 +204,15 @@ function DashboardBody() {
 // A grid of stat tiles that expands the matching accounts INLINE, directly beneath
 // the row, when a clickable tile is selected. The active tile is ringed and points a
 // caret at the panel so the link between "the number" and "the accounts" is obvious.
-function TileGrid({ tiles, cols = "lg:grid-cols-4" }: { tiles: TileSpec[]; cols?: string }) {
+function TileGrid({
+  tiles,
+  cols = "lg:grid-cols-4",
+  scope = "",
+}: {
+  tiles: TileSpec[];
+  cols?: string;
+  scope?: string;
+}) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const open = tiles.find((t) => t.key === openKey && t.filter);
   // Column count at the widest breakpoint (last "grid-cols-N" wins), for caret placement.
@@ -206,7 +257,7 @@ function TileGrid({ tiles, cols = "lg:grid-cols-4" }: { tiles: TileSpec[]; cols?
               }}
             />
           </div>
-          <InlineAccounts filter={open.filter} onClose={() => setOpenKey(null)} />
+          <InlineAccounts filter={open.filter} scope={scope} onClose={() => setOpenKey(null)} />
         </div>
       )}
     </div>
@@ -241,9 +292,11 @@ function toneDot(status: string, good: string[], bad: string[]): string {
 // sortable by any numeric column. Rendered right on the Signals page.
 function InlineAccounts({
   filter,
+  scope = "",
   onClose,
 }: {
   filter: AcctFilter;
+  scope?: string;
   onClose: () => void;
 }) {
   const [rows, setRows] = useState<AcctRow[] | null>(null);
@@ -255,7 +308,12 @@ function InlineAccounts({
 
   // Serialize params so the effect re-runs on value change (not object identity),
   // and debounce so typing in the search box doesn't fire a request per keystroke.
-  const qs = new URLSearchParams(filter.params).toString();
+  // The active vertical scope is applied to the drill-down too, so it stays in sync
+  // with the (scoped) tile the user clicked.
+  const qs = new URLSearchParams({
+    ...filter.params,
+    ...(scope ? { vertical: scope } : {}),
+  }).toString();
   useEffect(() => {
     const mine = ++seq.current;
     setRows(null);
@@ -550,7 +608,7 @@ function SoWhat({ children }: { children: ReactNode }) {
 }
 
 // ------------------------------------------------------------------ Tab 1: PP AI
-function PartnerPoweredTab({ data }: { data: DashboardOut }) {
+function PartnerPoweredTab({ data, scope = "" }: { data: DashboardOut; scope?: string }) {
   return (
     <div className="space-y-6">
       <SoWhat>
@@ -558,6 +616,7 @@ function PartnerPoweredTab({ data }: { data: DashboardOut }) {
       </SoWhat>
 
       <TileGrid
+        scope={scope}
         tiles={[
           {
             key: "pp_on",
@@ -592,12 +651,12 @@ function PartnerPoweredTab({ data }: { data: DashboardOut }) {
         ]}
       />
 
-      <SpendDistribution data={data} />
+      <SpendDistribution data={data} scope={scope} />
     </div>
   );
 }
 
-function SpendDistribution({ data }: { data: DashboardOut }) {
+function SpendDistribution({ data, scope = "" }: { data: DashboardOut; scope?: string }) {
   const buckets = data.spend_buckets ?? [];
   const max = Math.max(1, ...buckets.map((b) => b.account_count));
   const [filter, setFilter] = useState<AcctFilter | null>(null);
@@ -651,7 +710,7 @@ function SpendDistribution({ data }: { data: DashboardOut }) {
         })}
         {filter && (
           <div className="pt-2">
-            <InlineAccounts filter={filter} onClose={() => setFilter(null)} />
+            <InlineAccounts filter={filter} scope={scope} onClose={() => setFilter(null)} />
           </div>
         )}
       </CardContent>
@@ -660,7 +719,7 @@ function SpendDistribution({ data }: { data: DashboardOut }) {
 }
 
 // ------------------------------------------------------- Tab 2: Genie Accounts
-function GenieAccountsTab({ data }: { data: DashboardOut }) {
+function GenieAccountsTab({ data, scope = "" }: { data: DashboardOut; scope?: string }) {
   const [stageFilter, setStageFilter] = useState<AcctFilter | null>(null);
 
   return (
@@ -673,6 +732,7 @@ function GenieAccountsTab({ data }: { data: DashboardOut }) {
 
       {/* Summary tiles — the per-stage breakdown lives in the funnel below. */}
       <TileGrid
+        scope={scope}
         cols="lg:grid-cols-3"
         tiles={[
           {
@@ -703,14 +763,14 @@ function GenieAccountsTab({ data }: { data: DashboardOut }) {
 
       <Funnel data={data} active={stageFilter} onPick={setStageFilter} />
       {stageFilter && (
-        <InlineAccounts filter={stageFilter} onClose={() => setStageFilter(null)} />
+        <InlineAccounts filter={stageFilter} scope={scope} onClose={() => setStageFilter(null)} />
       )}
     </div>
   );
 }
 
 // ---------------------------------------------------- Tab 5: By Sub-Vertical
-function SubVerticalTab({ data }: { data: DashboardOut }) {
+function SubVerticalTab({ data, scope = "" }: { data: DashboardOut; scope?: string }) {
   const rows = data.sub_verticals ?? [];
   const [open, setOpen] = useState<string | null>(null);
   const maxAcct = Math.max(1, ...rows.map((r) => r.accounts));
@@ -799,6 +859,7 @@ function SubVerticalTab({ data }: { data: DashboardOut }) {
                                     label: `Sub-vertical: ${r.sub_vertical}`,
                                     params: { sub_vertical: r.sub_vertical },
                                   }}
+                                  scope={scope}
                                   onClose={() => setOpen(null)}
                                 />
                               </div>

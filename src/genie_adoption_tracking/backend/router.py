@@ -399,6 +399,8 @@ def list_accounts(
     sub_vertical: str = "",
     spend_bucket: int = -1,
     has_usecase: bool = False,
+    vertical: str = "",
+    all: bool = False,
 ):
     """Account lookup. Pass `q` for text search (name/owner/sub-vertical), or one/more
     filters (tier, pp, provisioning, stage, whitespace, open_issues, genie_active,
@@ -410,7 +412,7 @@ def list_accounts(
     has_filter = bool(
         tier or pp or provisioning or stage or whitespace or open_issues
         or genie_active or has_spend or sub_vertical or spend_bucket >= 0
-        or has_usecase
+        or has_usecase or vertical or all
     )
     if not needle and not has_filter:
         return []
@@ -471,12 +473,14 @@ def list_accounts(
             return False
         if sub_vertical and (a.sub_vertical or "Unspecified") != sub_vertical:
             return False
+        if vertical and (a.vertical or "") != vertical:
+            return False
         if spend_bucket >= 0 and _spend_bucket_index(a.genie_dollars_t30d or 0) != spend_bucket:
             return False
         return True
 
     accounts = [a for a in all_accounts if _match(a)]
-    cap = 500 if has_filter else limit
+    cap = 20000 if all else (500 if has_filter else limit)
     accounts = sorted(accounts, key=lambda x: x.name.lower())[:cap]
     matched_ids = {a.id for a in accounts}
     use_cases = [
@@ -508,6 +512,7 @@ def list_accounts(
             id=a.id,
             name=a.name,
             sub_vertical=a.sub_vertical,
+            vertical=a.vertical,
             ae_owner=a.ae_owner,
             sa_owner=a.sa_owner,
             dsa_owner=a.dsa_owner,
@@ -1170,10 +1175,20 @@ def log_resource_click(
 
 
 @router.get("/dashboard", response_model=DashboardOut, operation_id="getDashboard")
-def get_dashboard(session: Dependencies.Session):
+def get_dashboard(session: Dependencies.Session, vertical: str = ""):
+    """Aggregate Signals. Pass `vertical` (FINS/MFG/PS/HLS/CMEG/…) to scope every
+    metric to accounts in that AMER vertical; empty = all accounts."""
     accounts = session.exec(select(Account)).all()
+    if vertical:
+        accounts = [a for a in accounts if (a.vertical or "") == vertical]
+    acct_ids = {a.id for a in accounts}
     use_cases = session.exec(select(UseCase)).all()
+    if vertical:
+        use_cases = [uc for uc in use_cases if uc.account_id in acct_ids]
+    uc_ids = {uc.id for uc in use_cases}
     blockers = session.exec(select(Blocker)).all()
+    if vertical:
+        blockers = [b for b in blockers if b.use_case_id in uc_ids]
     clicks = session.exec(select(ResourceClick)).all()
     account_names = {a.id: a.name for a in accounts}
 
@@ -1263,6 +1278,8 @@ def get_dashboard(session: Dependencies.Session):
         1 for a in accounts if a.provisioning_status not in ("on", "partial")
     )
     all_issues = session.exec(select(AccountIssue)).all()
+    if vertical:
+        all_issues = [i for i in all_issues if i.account_id in acct_ids]
     open_issue_total = sum(1 for i in all_issues if _issue_is_open(i.status))
     accounts_with_issues = len(
         {i.account_id for i in all_issues if _issue_is_open(i.status)}

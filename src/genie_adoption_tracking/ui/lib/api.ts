@@ -85,6 +85,7 @@ export interface AccountOut {
     sa_owner: string;
     sub_vertical: string;
     use_case_count?: number;
+    vertical?: string;
     ws_pp_off?: number;
     ws_pp_on?: number;
     ws_total?: number;
@@ -557,6 +558,8 @@ export interface ListAccountsParams {
     sub_vertical?: string;
     spend_bucket?: number;
     has_usecase?: boolean;
+    vertical?: string;
+    all?: boolean;
 }
 export const listAccounts = async (params?: ListAccountsParams, options?: RequestInit): Promise<{
     data: AccountOut[];
@@ -575,6 +578,8 @@ export const listAccounts = async (params?: ListAccountsParams, options?: Reques
     if (params?.sub_vertical != null) searchParams.set("sub_vertical", String(params?.sub_vertical));
     if (params?.spend_bucket != null) searchParams.set("spend_bucket", String(params?.spend_bucket));
     if (params?.has_usecase != null) searchParams.set("has_usecase", String(params?.has_usecase));
+    if (params?.vertical != null) searchParams.set("vertical", String(params?.vertical));
+    if (params?.all != null) searchParams.set("all", String(params?.all));
     const queryString = searchParams.toString();
     const url = queryString ? `/api/accounts?${queryString}` : "/api/accounts";
     const res = await fetch(url, {
@@ -1642,10 +1647,17 @@ export function useCurrentUserSuspense<TData = {
         ...options?.query
     });
 }
-export const getDashboard = async (options?: RequestInit): Promise<{
+export interface GetDashboardParams {
+    vertical?: string;
+}
+export const getDashboard = async (params?: GetDashboardParams, options?: RequestInit): Promise<{
     data: DashboardOut;
 }> =>{
-    const res = await fetch("/api/dashboard", {
+    const searchParams = new URLSearchParams();
+    if (params?.vertical != null) searchParams.set("vertical", String(params?.vertical));
+    const queryString = searchParams.toString();
+    const url = queryString ? `/api/dashboard?${queryString}` : "/api/dashboard";
+    const res = await fetch(url, {
         ...options,
         method: "GET"
     });
@@ -1663,34 +1675,37 @@ export const getDashboard = async (options?: RequestInit): Promise<{
         data: await res.json()
     };
 };
-export const getDashboardKey = ()=>{
+export const getDashboardKey = (params?: GetDashboardParams)=>{
     return [
-        "/api/dashboard"
+        "/api/dashboard",
+        params
     ] as const;
 };
 export function useGetDashboard<TData = {
     data: DashboardOut;
 }>(options?: {
+    params?: GetDashboardParams;
     query?: Omit<UseQueryOptions<{
         data: DashboardOut;
     }, ApiError, TData>, "queryKey" | "queryFn">;
 }) {
     return useQuery({
-        queryKey: getDashboardKey(),
-        queryFn: ()=>getDashboard(),
+        queryKey: getDashboardKey(options?.params),
+        queryFn: ()=>getDashboard(options?.params),
         ...options?.query
     });
 }
 export function useGetDashboardSuspense<TData = {
     data: DashboardOut;
 }>(options?: {
+    params?: GetDashboardParams;
     query?: Omit<UseSuspenseQueryOptions<{
         data: DashboardOut;
     }, ApiError, TData>, "queryKey" | "queryFn">;
 }) {
     return useSuspenseQuery({
-        queryKey: getDashboardKey(),
-        queryFn: ()=>getDashboard(),
+        queryKey: getDashboardKey(options?.params),
+        queryFn: ()=>getDashboard(options?.params),
         ...options?.query
     });
 }

@@ -77,6 +77,7 @@ class AccountOut(BaseModel):
     id: str
     name: str
     sub_vertical: str
+    vertical: str = "FINS"
     ae_owner: str
     sa_owner: str
     dsa_owner: str = ""
