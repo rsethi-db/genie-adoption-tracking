@@ -125,6 +125,8 @@ JOIN active_usage u ON a.account_id = u.sfdc_account_id
 WHERE a.sales_business_unit IN ('AMER Industries', 'AMER Enterprise & Emerging')
   AND a.account_status LIKE 'Customer%'
   AND a.account_name IS NOT NULL
+  -- Drop territory/placeholder rows whose name is only punctuation (e.g. "-", "...").
+  AND a.account_name RLIKE '[A-Za-z0-9]'
 ORDER BY a.account_name
 """
 
