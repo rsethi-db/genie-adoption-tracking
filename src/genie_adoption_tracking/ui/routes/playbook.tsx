@@ -17,8 +17,8 @@ import {
   BookOpen,
   MessageSquare,
   Users,
-  Wrench,
   LifeBuoy,
+  Calculator,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -98,14 +98,6 @@ const CONTACTS: {
     url2: "https://docs.google.com/document/d/15VSQ95Kejw0bPzz24g7OKoAFmM6vYkYpkNJT4pXV52E/edit?tab=t.0#heading=h.g8pdpmh1xa4i",
     icon: MessageSquare,
     accent: "text-sky-600 bg-sky-500/10 ring-sky-500/20",
-  },
-  {
-    title: "FINS Genie SME",
-    desc: "Deep technical help on a specific Genie engagement — accuracy, modeling, evaluation, tricky setups.",
-    action: "Post in #sme-genie-fins-amer",
-    url: "https://databricks.enterprise.slack.com/archives/C0B1ZRYEUGM",
-    icon: Wrench,
-    accent: "text-violet-600 bg-violet-500/10 ring-violet-500/20",
   },
   {
     title: "SSA — Specialist Solutions Architects (raise an ASQ)",
@@ -248,6 +240,23 @@ function ResourcesView() {
           </Card>
         );
       })}
+
+      {/* Upcoming asset — not yet live, shown as a disabled "coming soon" tile. */}
+      <Card className="flex flex-col overflow-hidden border-dashed opacity-90">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg flex items-center justify-center ring-1 shrink-0 text-amber-600 bg-amber-500/10 ring-amber-500/20">
+              <Calculator className="h-4 w-4" />
+            </div>
+            <CardTitle className="text-sm">Genie Calculator</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="flex-1 flex items-center justify-center py-6">
+          <span className="text-lg font-semibold text-amber-700 dark:text-amber-400">
+            Coming soon
+          </span>
+        </CardContent>
+      </Card>
     </div>
   );
 }

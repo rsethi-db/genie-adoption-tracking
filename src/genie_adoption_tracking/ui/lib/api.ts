@@ -13,6 +13,7 @@ export class ApiError extends Error {
     }
 }
 export interface AccountDetailOut {
+    active_genie_spaces?: number;
     adoption?: AdoptionWorkflowOut | null;
     ae_owner: string;
     aim_status?: string;
@@ -68,6 +69,7 @@ export interface AccountOut {
     arr?: number;
     created_at: string;
     dsa_owner?: string;
+    genie_activated?: boolean;
     genie_active?: boolean;
     genie_spend_90d?: number;
     id: string;
@@ -301,6 +303,7 @@ export interface DashboardOut {
     brickroad_issues?: BrickroadIssueOut[];
     est_pipeline_per_month?: number;
     funnel: FunnelBucketOut[];
+    genie_activated_accounts?: number;
     genie_active_accounts?: number;
     genie_ready_accounts?: GenieReadyAccountOut[];
     genie_revenue_t30d?: number;
@@ -560,6 +563,7 @@ export interface ListAccountsParams {
     has_usecase?: boolean;
     vertical?: string;
     all?: boolean;
+    genie_activated?: boolean;
 }
 export const listAccounts = async (params?: ListAccountsParams, options?: RequestInit): Promise<{
     data: AccountOut[];
@@ -580,6 +584,7 @@ export const listAccounts = async (params?: ListAccountsParams, options?: Reques
     if (params?.has_usecase != null) searchParams.set("has_usecase", String(params?.has_usecase));
     if (params?.vertical != null) searchParams.set("vertical", String(params?.vertical));
     if (params?.all != null) searchParams.set("all", String(params?.all));
+    if (params?.genie_activated != null) searchParams.set("genie_activated", String(params?.genie_activated));
     const queryString = searchParams.toString();
     const url = queryString ? `/api/accounts?${queryString}` : "/api/accounts";
     const res = await fetch(url, {

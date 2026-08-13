@@ -96,6 +96,7 @@ class AccountOut(BaseModel):
     genie_spend_90d: float = 0.0
     active_genie_spaces: int = 0
     genie_active: bool = False
+    genie_activated: bool = False
     readiness_pct: int = 0
     open_issues: int = 0
     created_at: datetime
@@ -198,6 +199,7 @@ class AccountDetailOut(BaseModel):
     provisioning_ws_total: int = 0
     readiness_tier: str = "unknown"
     genie_spend_90d: float = 0.0
+    active_genie_spaces: int = 0
     genie_active: bool = False
     readiness_pct: int = 0
     created_at: datetime
@@ -431,6 +433,7 @@ class DashboardOut(BaseModel):
     open_issues: int = 0
     accounts_with_issues: int = 0
     genie_active_accounts: int = 0
+    genie_activated_accounts: int = 0  # GTM "Activated Account" (200+ BMAU 2mo + AIM/SCIM)
     workspaces_with_genie: int = 0
     genie_spend_90d: float = 0.0
     # --- logfood parity: headline / Partner-Powered AI page ---

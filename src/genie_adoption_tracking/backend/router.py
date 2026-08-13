@@ -401,6 +401,7 @@ def list_accounts(
     has_usecase: bool = False,
     vertical: str = "",
     all: bool = False,
+    genie_activated: bool = False,
 ):
     """Account lookup. Pass `q` for text search (name/owner/sub-vertical), or one/more
     filters (tier, pp, provisioning, stage, whitespace, open_issues, genie_active,
@@ -412,7 +413,7 @@ def list_accounts(
     has_filter = bool(
         tier or pp or provisioning or stage or whitespace or open_issues
         or genie_active or has_spend or sub_vertical or spend_bucket >= 0
-        or has_usecase or vertical or all
+        or has_usecase or vertical or all or genie_activated
     )
     if not needle and not has_filter:
         return []
@@ -468,6 +469,8 @@ def list_accounts(
         if open_issues and a.id not in issue_accts:
             return False
         if genie_active and not a.genie_active:
+            return False
+        if genie_activated and not a.genie_activated:
             return False
         if has_spend and (a.genie_dollars_t30d or 0) <= 0:
             return False
@@ -531,6 +534,7 @@ def list_accounts(
             genie_spend_90d=a.genie_spend_90d,
             active_genie_spaces=a.active_genie_spaces,
             genie_active=a.genie_active,
+            genie_activated=a.genie_activated,
             # Not shown on the account lookup; skip the per-account plan resolve
             # (it was an N+1 that ran several Lakebase queries per account).
             readiness_pct=0,
@@ -653,6 +657,7 @@ def get_account(account_id: str, session: Dependencies.Session):
         provisioning_ws_total=acct.provisioning_ws_total,
         readiness_tier=acct.readiness_tier,
         genie_spend_90d=acct.genie_spend_90d,
+        active_genie_spaces=acct.active_genie_spaces,
         genie_active=acct.genie_active,
         readiness_pct=plan_pct,
         created_at=acct.created_at,
@@ -1286,6 +1291,7 @@ def get_dashboard(session: Dependencies.Session, vertical: str = ""):
     )
     avg_readiness = _avg_readiness(session, accounts)
     genie_active_total = sum(1 for a in accounts if a.genie_active)
+    genie_activated_total = sum(1 for a in accounts if a.genie_activated)
     ws_with_genie = sum(a.ws_pp_on for a in accounts)  # active PP workspaces proxy
     genie_spend_total = round(sum(a.genie_spend_90d for a in accounts), 2)
     tier_counts = {"green": 0, "yellow": 0, "red": 0, "unknown": 0}
@@ -1389,6 +1395,7 @@ def get_dashboard(session: Dependencies.Session, vertical: str = ""):
         open_issues=open_issue_total,
         accounts_with_issues=accounts_with_issues,
         genie_active_accounts=genie_active_total,
+        genie_activated_accounts=genie_activated_total,
         workspaces_with_genie=ws_with_genie,
         genie_spend_90d=genie_spend_total,
         genie_revenue_t30d=genie_revenue_t30d,

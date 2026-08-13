@@ -100,6 +100,13 @@ function AccountDetail({ accountId }: { accountId: string }) {
               {data.dsa_owner && <span>DSA · {data.dsa_owner}</span>}
             </div>
             <div className="flex items-center gap-3 mt-3 text-sm">
+              <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                {fmtDbus(data.genie_spend_90d ?? 0)} Genie Agent (DBSQL $) (30d)
+              </span>
+              <span className="text-muted-foreground">
+                {(data.active_genie_spaces ?? 0).toLocaleString()} active Genie agent
+                {(data.active_genie_spaces ?? 0) === 1 ? "" : "s"} (30d)
+              </span>
               {data.monthly_dbus > 0 && (
                 <span className="text-emerald-700 dark:text-emerald-400 font-medium">
                   {fmtDbus(data.monthly_dbus)}/mo est. DBU
@@ -404,6 +411,20 @@ const TASK_RESOURCES: Record<string, { label: string; url: string }[]> = {
   ],
 };
 
+// A prominent call-to-action link shown ABOVE the Resources toggle for specific tasks
+// (keyed by task key), so teams can act directly. The Security Authority Review question
+// links to the PPAI tracking app where teams complete that review.
+const TASK_ACTION_LINK: Record<string, { label: string; url: string }> = {
+  sec_authority_review: {
+    label: "Complete your Security Authority Review",
+    url: "http://genie-ppai-tracking-6583047541360945.5.azure.databricksapps.com/",
+  },
+};
+
+// Leading "ACTION REQUIRED" pill on the CTA (shared style).
+const ACTION_REQUIRED_BADGE =
+  "rounded-sm bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide";
+
 // Collapsed-by-default section with a click-to-expand label + chevron
 // (same pattern as the Genie use cases box).
 function Collapsible({ label, children }: { label: string; children: ReactNode }) {
@@ -576,6 +597,18 @@ function AdoptionTaskCard({
           <Sparkles className="h-3 w-3 shrink-0" />
           Ask Genie how to get unstuck
         </button>
+      )}
+      {TASK_ACTION_LINK[task.key] && (
+        <a
+          href={TASK_ACTION_LINK[task.key].url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+        >
+          <span className={ACTION_REQUIRED_BADGE}>Action required</span>
+          <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+          {TASK_ACTION_LINK[task.key].label}
+        </a>
       )}
       {(() => {
         // Backend-resolved resources (task.resources, from playbook.RESOURCES) +

@@ -36,6 +36,22 @@ interface AccountResult {
   dsa_owner?: string;
 }
 
+// AMER verticals (sales_subregion_level_1) across both AMER business units —
+// AMER Industries (FINS/MFG/PS/HLS) + AMER Enterprise & Emerging (EE & Startup/LATAM/
+// CAN/DNB/CMEG/RCT). The search is always scoped to one vertical; FINS is the default.
+const VERTICALS = [
+  "FINS",
+  "MFG",
+  "HLS",
+  "CMEG",
+  "RCT",
+  "DNB",
+  "PS",
+  "EE & Startup",
+  "CAN",
+  "LATAM",
+] as const;
+
 // Human label for an active drill-down filter (from Signals).
 function filterLabel(s: AccountsSearch): string | null {
   if (s.tier) return `Genie-Ready tier: ${s.tier}`;
@@ -145,18 +161,20 @@ function FilteredList({ search, label }: { search: AccountsSearch; label: string
   );
 }
 
-// Type-to-search, exactly like before verticals existed: just a search box, nothing
-// shows until the user TYPES a query. Server-side search keeps only the matches over
-// the wire, not all ~10k accounts. The vertical badge on each row shows which vertical
-// a matched account belongs to.
+// Type-to-search: nothing shows until the user TYPES a query. The vertical toggle only
+// SCOPES the search (e.g. search within FINS) — picking a vertical alone never dumps the
+// whole list. Server-side search keeps only the matches over the wire, not all ~10k
+// accounts. Each matched row also shows a vertical badge.
 function AccountLookup() {
   const [q, setQ] = useState("");
+  const [vertical, setVertical] = useState<string>("FINS");
   const [results, setResults] = useState<AccountResult[]>([]);
   const [loading, setLoading] = useState(false);
   const seq = useRef(0);
 
   useEffect(() => {
     const needle = q.trim();
+    // Only a text query triggers a list — a vertical on its own shows nothing.
     if (!needle) {
       setResults([]);
       setLoading(false);
@@ -164,8 +182,9 @@ function AccountLookup() {
     }
     setLoading(true);
     const mine = ++seq.current;
+    const params = new URLSearchParams({ q: needle, vertical });
     const t = setTimeout(() => {
-      fetch(`/api/accounts?q=${encodeURIComponent(needle)}`)
+      fetch(`/api/accounts?${params}`)
         .then((r) => (r.ok ? r.json() : []))
         .then((d) => {
           if (mine === seq.current) {
@@ -181,7 +200,7 @@ function AccountLookup() {
         });
     }, 250);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, vertical]);
 
   return (
     <div className="space-y-5">
@@ -199,9 +218,27 @@ function AccountLookup() {
         )}
       </div>
 
+      {/* Scope the search to a vertical (badge names shown here too). */}
+      <div className="flex flex-wrap gap-1 rounded-md border p-0.5 max-w-2xl">
+        {VERTICALS.map((v) => (
+          <button
+            key={v}
+            onClick={() => setVertical(v)}
+            className={
+              "px-3 h-9 rounded text-sm font-medium transition-colors whitespace-nowrap " +
+              (vertical === v
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground")
+            }
+          >
+            {v}
+          </button>
+        ))}
+      </div>
+
       {q.trim() === "" ? null : !loading && results.length === 0 ? (
         <p className="text-sm text-muted-foreground px-1">
-          No account matches “{q}”.
+          No account matches “{q}” in {vertical}.
         </p>
       ) : (
         <div className="max-w-2xl max-h-[calc(100vh-16rem)] overflow-y-auto rounded-md border p-2">

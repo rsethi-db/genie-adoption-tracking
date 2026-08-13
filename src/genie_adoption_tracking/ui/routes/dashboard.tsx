@@ -44,20 +44,19 @@ const TIER_DOT: Record<string, string> = {
   unknown: "bg-muted-foreground/50",
 };
 
-// AMER verticals (sales_subregion_level_1) across both AMER business units. "All"
-// clears the scope so every metric aggregates over all accounts.
+// AMER verticals (sales_subregion_level_1) across both AMER business units. Signals
+// is always scoped to one vertical; FINS is the default.
 const VERTICALS = [
-  "All",
   "FINS",
   "MFG",
-  "PS",
   "HLS",
-  "EE & Startup",
-  "LATAM",
-  "CAN",
-  "DNB",
   "CMEG",
   "RCT",
+  "DNB",
+  "PS",
+  "EE & Startup",
+  "CAN",
+  "LATAM",
 ] as const;
 
 export const Route = createFileRoute("/dashboard")({
@@ -86,6 +85,7 @@ interface AcctRow {
   use_case_count?: number;
   genie_spend_90d?: number;
   active_genie_spaces?: number;
+  genie_activated?: boolean;
   open_issues?: number;
   open_blockers?: number;
 }
@@ -102,9 +102,9 @@ interface TileSpec {
 }
 
 function DashboardPage() {
-  // Vertical scope for every Signals metric + drill-down. "All" = no scope.
-  const [vertical, setVertical] = useState<string>("All");
-  const scope = vertical === "All" ? "" : vertical;
+  // Vertical scope for every Signals metric + drill-down. Always one vertical; FINS default.
+  const [vertical, setVertical] = useState<string>("FINS");
+  const scope = vertical;
 
   return (
     <AppShell>
@@ -112,8 +112,7 @@ function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold">Signals</h1>
           <p className="text-sm text-muted-foreground">
-            AMER Genie adoption at a glance
-            {scope ? ` · ${scope}` : ""}
+            AMER Genie adoption at a glance · {scope}
           </p>
         </div>
         <div className="flex flex-wrap gap-1 rounded-md border p-0.5">
@@ -148,10 +147,14 @@ function DashboardBody({ scope }: { scope: string }) {
 
   return (
     <div className="space-y-6">
+      {/* Global account search — find any account by name/AE/SA/DSA, scoped to the
+          selected vertical. Nothing renders until the user types. */}
+      <GlobalAccountSearch scope={scope} />
+
       {/* Headline row (start big) — click a tile to expand the accounts beneath it */}
       <TileGrid
         scope={scope}
-        cols="lg:grid-cols-5"
+        cols="lg:grid-cols-6"
         tiles={[
           { key: "total", icon: <Users className="h-4 w-4" />, label: "Accounts", value: data.total_accounts },
           {
@@ -161,6 +164,17 @@ function DashboardBody({ scope }: { scope: string }) {
             value: data.genie_active_accounts ?? 0,
             tone: "good",
             filter: { label: "Genie-active accounts (last 30d)", params: { genie_active: "true" } },
+          },
+          {
+            key: "genie_activated",
+            icon: <ShieldCheck className="h-4 w-4" />,
+            label: "Activated accounts",
+            value: data.genie_activated_accounts ?? 0,
+            tone: "good",
+            filter: {
+              label: "Activated accounts (200+ Genie BMAU 2 mo + AIM/SCIM)",
+              params: { genie_activated: "true" },
+            },
           },
           {
             key: "revenue",
@@ -197,6 +211,48 @@ function DashboardBody({ scope }: { scope: string }) {
           <BrickroadTab data={data} />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// Global account search on the Signals page — type a name/AE/SA/DSA and the full
+// account table (same columns as tile drill-downs) renders below. Scoped to the
+// selected vertical. Nothing shows until the user types.
+function GlobalAccountSearch({ scope }: { scope: string }) {
+  const [q, setQ] = useState("");
+  const needle = q.trim();
+  return (
+    <div>
+      <div className="relative max-w-xl">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={`Search accounts${scope ? ` in ${scope}` : ""} by name, AE, SA, or DSA…`}
+          className="pl-9 h-11"
+        />
+        {needle && (
+          <button
+            type="button"
+            onClick={() => setQ("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label="Clear search"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      {needle && (
+        <div className="mt-2">
+          <InlineAccounts
+            key={needle}
+            filter={{ label: `Search: “${needle}”`, params: { q: needle } }}
+            scope={scope}
+            onClose={() => setQ("")}
+            showFilter={false}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -294,10 +350,12 @@ function InlineAccounts({
   filter,
   scope = "",
   onClose,
+  showFilter = true,
 }: {
   filter: AcctFilter;
   scope?: string;
   onClose: () => void;
+  showFilter?: boolean;
 }) {
   const [rows, setRows] = useState<AcctRow[] | null>(null);
   const [sort, setSort] = useState<SortKey>("arr");
@@ -395,7 +453,7 @@ function InlineAccounts({
         </div>
       </CardHeader>
       <CardContent>
-        {rows !== null && rows.length > 0 && (
+        {showFilter && rows !== null && rows.length > 0 && (
           <div className="relative mb-2 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -428,11 +486,12 @@ function InlineAccounts({
               <thead className="sticky top-0 bg-card z-10 text-xs text-muted-foreground border-b">
                 <tr className="text-left">
                   <Th k="name" label="Account" />
-                  <th className="py-2 px-2 font-medium">Tier</th>
                   <th className="py-2 px-2 font-medium">PP AI</th>
                   <th className="py-2 px-2 font-medium">Provisioning</th>
+                  <th className="py-2 px-2 font-medium">Tier</th>
+                  <th className="py-2 px-2 font-medium">Activated</th>
                   <Th k="use_case_count" label="Use cases" align="right" />
-                  <Th k="genie_spend_90d" label="Genie $ (30d)" align="right" />
+                  <Th k="genie_spend_90d" label="Genie Agent (DBSQL $) (30d)" align="right" />
                   <Th k="active_genie_spaces" label="Agents (30d)" align="right" />
                   <Th k="open_issues" label="Issues" align="right" />
                   <Th k="arr" label="ARR" align="right" />
@@ -457,12 +516,6 @@ function InlineAccounts({
                     </td>
                     <td className="py-1.5 px-2">
                       <span className="inline-flex items-center gap-1.5">
-                        <span className={`h-2 w-2 rounded-full ${TIER_DOT[a.readiness_tier ?? "unknown"] ?? TIER_DOT.unknown}`} />
-                        <span className="capitalize">{a.readiness_tier ?? "—"}</span>
-                      </span>
-                    </td>
-                    <td className="py-1.5 px-2">
-                      <span className="inline-flex items-center gap-1.5">
                         <span className={`h-2 w-2 rounded-full ${toneDot(a.pp_status ?? "unknown", ["on", "on_default"], ["off"])}`} />
                         {PP_LABEL[a.pp_status ?? "unknown"] ?? a.pp_status}
                         {a.pp_status === "off" && (
@@ -478,6 +531,20 @@ function InlineAccounts({
                       <span className="inline-flex items-center gap-1.5">
                         <span className={`h-2 w-2 rounded-full ${toneDot(a.provisioning_status ?? "unknown", ["on"], ["off"])}`} />
                         {PROV_LABEL[a.provisioning_status ?? "unknown"] ?? a.provisioning_status}
+                      </span>
+                    </td>
+                    <td className="py-1.5 px-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className={`h-2 w-2 rounded-full ${TIER_DOT[a.readiness_tier ?? "unknown"] ?? TIER_DOT.unknown}`} />
+                        <span className="capitalize">{a.readiness_tier ?? "—"}</span>
+                      </span>
+                    </td>
+                    <td className="py-1.5 px-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          className={`h-2 w-2 rounded-full ${a.genie_activated ? "bg-emerald-500" : "bg-destructive"}`}
+                        />
+                        {a.genie_activated ? "Yes" : "No"}
                       </span>
                     </td>
                     <td className="py-1.5 px-2 text-right tabular-nums">{fmtNum(a.use_case_count ?? 0)}</td>
@@ -505,7 +572,7 @@ function InlineAccounts({
                   </tr>
                   {openIssues === a.id && (
                     <tr>
-                      <td colSpan={9} className="p-0">
+                      <td colSpan={10} className="p-0">
                         <AccountIssues accountId={a.id} />
                       </td>
                     </tr>
@@ -516,7 +583,7 @@ function InlineAccounts({
               <tfoot className="sticky bottom-0 bg-card border-t-2 text-xs font-medium shadow-[0_-1px_0_0_hsl(var(--border))]">
                 <tr>
                   <td className="py-1.5 px-2 text-muted-foreground">Totals</td>
-                  <td colSpan={3}></td>
+                  <td colSpan={4}></td>
                   <td className="py-1.5 px-2 text-right tabular-nums">{fmtNum(totalUc)}</td>
                   <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalSpend)}</td>
                   <td className="py-1.5 px-2 text-right tabular-nums">{fmtNum(totalSpaces)}</td>
@@ -528,18 +595,31 @@ function InlineAccounts({
           </div>
         )}
         {sorted !== null && sorted.length > 0 && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Tier = GTM Genie-Ready (user provisioning + eligibility): 🟢 ready · 🟡 partial ·
-            🔴 gaps · ⚪ unknown ·{" "}
-            <a
-              href="https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f10313a17e11d6b0b11abfa2736836/published?o=2548836972759138"
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary underline hover:no-underline"
-            >
-              full dashboard
-            </a>
-          </p>
+          <>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Tier - Account Readiness &gt;{" "}
+              <a
+                href="https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f10313a17e11d6b0b11abfa2736836/published?o=2548836972759138"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary underline hover:no-underline"
+              >
+                Genie Ready
+              </a>
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Activated = an account with 200+ Genie BMAU for 2 consecutive months and
+              AIM/SCIM enabled, measured at the deployable level ·{" "}
+              <a
+                href="https://gtm-analytics-2548836972759138.18.azure.databricksapps.com/community/dashboard/product-deep-dives-genie"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary underline hover:no-underline"
+              >
+                Product Deep Dives — Genie
+              </a>
+            </p>
+          </>
         )}
       </CardContent>
     </Card>
@@ -798,7 +878,7 @@ function SubVerticalTab({ data, scope = "" }: { data: DashboardOut; scope?: stri
                     <th className="py-2 px-2 font-medium">Accounts</th>
                     <th className="py-2 px-2 font-medium text-right">Genie-active</th>
                     <th className="py-2 px-2 font-medium text-right">Whitespace</th>
-                    <th className="py-2 px-2 font-medium text-right">Genie $ (30d)</th>
+                    <th className="py-2 px-2 font-medium text-right">Genie Agent (DBSQL $) (30d)</th>
                     <th className="py-2 px-2 font-medium text-right">Avg readiness</th>
                     <th className="py-2 px-2 font-medium text-right">ARR</th>
                   </tr>
@@ -884,7 +964,7 @@ function BrickroadTab({ data }: { data: DashboardOut }) {
   return (
     <div className="space-y-6">
       <SoWhat>
-        Genie-related Brickroad issues on FINS accounts — what's blocking or at risk,
+        Genie-related Brickroad issues on AMER accounts — what's blocking or at risk,
         ranked by revenue impact.
       </SoWhat>
 

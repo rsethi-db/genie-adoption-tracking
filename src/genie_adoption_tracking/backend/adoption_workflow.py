@@ -146,7 +146,7 @@ TASK_LABEL = {t["key"]: t["label"] for t in TASKS}
 # read time — playbook.py stays the single source of truth (no duplicated URLs).
 TASK_RESOURCE_KEYS: dict[str, list[str]] = {
     # --- Happy Path ---
-    "hp_u1_demo": ["demo-industry", "demo-gtm-rooms", "demo-fevm", "demo-solution-builder"],
+    "hp_u1_demo": ["demo-industry", "demo-solution-builder"],
     "hp_u1_champions": ["plays-win-business-user", "plays-enablement"],
     "hp_u1_aim": ["plays-aim-migration", "ref-go-genie"],
     "hp_u2_workshop": [
@@ -161,7 +161,7 @@ TASK_RESOURCE_KEYS: dict[str, list[str]] = {
     "hp_u4_signoff": [],
     "hp_u4_uco_sizing": [],
     "hp_u5_aim_ready": [],
-    "hp_u5_pricing": ["workshops-pricing", "ref-pricing-faq", "proof-genie-cost-dashboard"],
+    "hp_u5_pricing": ["ref-pricing-faq", "ref-genie-budgets", "proof-genie-cost-dashboard"],
     "hp_u6_monitor": ["proof-genie-cost-dashboard", "demo-workbench", "proof-blockers-dashboard"],
     "hp_u6_followup": ["proof-customer-stories"],
     # --- Recommended ---

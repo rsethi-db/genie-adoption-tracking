@@ -39,7 +39,7 @@ function Index() {
         <FeatureCard
           icon={<LineChart className="h-5 w-5" />}
           title="Signals"
-          desc="The U1→U6 adoption funnel across all of FINS at a glance."
+          desc="The U1→U6 adoption funnel across all of AMER at a glance."
           to="/dashboard"
           cta="Open Signals"
         />

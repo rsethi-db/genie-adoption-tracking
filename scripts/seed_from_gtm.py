@@ -299,10 +299,16 @@ WITH genie_space_counts AS (
   WHERE ds >= '2025-04-13'
   GROUP BY workspace_id
 ),
+-- Map workspace -> SFDC account via certified.workspaces_latest (the SFDC identity,
+-- same key as the revenue CTE and the Lakebase account). Previously this went through
+-- fins_data.accountId, which only covers accounts with tracked paid platform usage —
+-- so accounts absent from fins_data (e.g. DXC HQ) had their Genie spaces silently
+-- dropped to 0 while still showing Genie revenue. workspaces_latest covers all mapped
+-- workspaces, so spaces now attribute to the right account.
 acct_ws AS (
-  SELECT DISTINCT accountId, workspaceId
-  FROM main.field_usage_dashboard.fins_data
-  WHERE date BETWEEN date_sub(max_date, 29) AND max_date
+  SELECT DISTINCT salesforce_account_id AS accountId, workspace_id AS workspaceId
+  FROM main.certified.workspaces_latest
+  WHERE salesforce_account_id IS NOT NULL AND workspace_id IS NOT NULL
 ),
 spaces AS (
   SELECT aw.accountId AS account_id,
@@ -324,6 +330,17 @@ revenue AS (
   WHERE usage_date >= current_date() - INTERVAL 30 DAYS
   GROUP BY account_id
 ),
+-- Genie "Activated Account" flag from the GTM product-deep-dives definition:
+-- an account with 200+ Genie BMAU for 2 consecutive months AND AIM/SCIM enabled,
+-- measured at the deployable level. Precomputed as `genie_activated` in the table;
+-- we take the value on the latest snapshot date per account.
+activated AS (
+  SELECT account_id,
+    MAX(CASE WHEN genie_activated = 'true' THEN 1 ELSE 0 END) AS genie_activated
+  FROM main.gtm_gold.account_consumption_daily
+  WHERE usage_date = (SELECT MAX(usage_date) FROM main.gtm_gold.account_consumption_daily)
+  GROUP BY account_id
+),
 pipeline AS (
   SELECT account_id,
     ROUND(SUM(COALESCE(booking_arr, 0)) / 12, 2) AS est_pipeline_per_month
@@ -340,12 +357,14 @@ SELECT i.account_id,
   COALESCE(r.genie_revenue_30d, 0) AS genie_revenue_30d,
   COALESCE(p.est_pipeline_per_month, 0) AS est_pipeline_per_month,
   CASE WHEN ac.account_id IS NOT NULL THEN 1 ELSE 0 END AS genie_active,
-  COALESCE(s.active_genie_spaces, 0) AS active_genie_spaces
+  COALESCE(s.active_genie_spaces, 0) AS active_genie_spaces,
+  COALESCE(a.genie_activated, 0) AS genie_activated
 FROM ids i
   LEFT JOIN spaces s ON i.account_id = s.account_id
   LEFT JOIN revenue r ON i.account_id = r.account_id
   LEFT JOIN pipeline p ON i.account_id = p.account_id
   LEFT JOIN agent_consuming ac ON i.account_id = ac.account_id
+  LEFT JOIN activated a ON i.account_id = a.account_id
 """
 
 # Genie-related Brickroad issues (ALL severities) per FINS account. customer_id on
@@ -618,7 +637,7 @@ def fetch_aim(ws) -> dict[str, dict]:
 def fetch_genie_30d(ws) -> dict[str, dict]:
     """Map SFDC account_id -> trailing-30d Genie/pipeline signals.
     Columns: account_id, genie_revenue_30d, est_pipeline_per_month, genie_active,
-    active_genie_spaces."""
+    active_genie_spaces, genie_activated."""
     out: dict[str, dict] = {}
     for r in _run_query(ws, GENIE_30D_QUERY):
         aid = r[0]
@@ -629,6 +648,7 @@ def fetch_genie_30d(ws) -> dict[str, dict]:
             "est_pipeline_per_month": float(r[2] or 0),
             "genie_active": bool(int(r[3] or 0)),
             "active_genie_spaces": int(r[4] or 0),
+            "genie_activated": bool(int(r[5] or 0)),
         }
     return out
 
@@ -787,6 +807,7 @@ def main() -> None:
                     active_genie_spaces=g30.get("active_genie_spaces", 0),
                     est_pipeline_per_month=g30.get("est_pipeline_per_month", 0.0),
                     genie_active=g30.get("genie_active", False),
+                    genie_activated=g30.get("genie_activated", False),
                 )
                 # Match by sfdc id; else adopt an existing name-keyed row (first run);
                 # else it's genuinely new. by_name is only used when NOT already claimed

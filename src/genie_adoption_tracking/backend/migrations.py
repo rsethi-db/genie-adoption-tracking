@@ -53,6 +53,7 @@ _MIGRATIONS = [
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS sfdc_account_id VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS est_pipeline_per_month DOUBLE PRECISION NOT NULL DEFAULT 0",
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS vertical VARCHAR NOT NULL DEFAULT 'FINS'",
+    "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS genie_activated BOOLEAN NOT NULL DEFAULT false",
     # Adoption task state/history: human-readable account/task + questionnaire ordering.
     "ALTER TABLE gat_adoption_task_state ADD COLUMN IF NOT EXISTS account_name VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_adoption_task_state ADD COLUMN IF NOT EXISTS task_name VARCHAR NOT NULL DEFAULT ''",

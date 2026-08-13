@@ -67,6 +67,10 @@ class Account(SQLModel, table=True):
     provisioning_ws_total: int = Field(default=0)
     # True if the account consumed Genie in the trailing 2 years (active footprint).
     genie_active: bool = Field(default=False)
+    # Genie "Activated Account" (GTM product-deep-dives definition): 200+ Genie BMAU for
+    # 2 consecutive months AND AIM/SCIM enabled, measured at deployable level. A much
+    # stricter bar than genie_active — from account_consumption_daily.genie_activated.
+    genie_activated: bool = Field(default=False, index=True)
     # Genie-Ready tier from GTM (rpt_account_genie_ready): green | yellow | red | unknown.
     # A GTM signal, distinct from the team-filled workflow readiness %.
     readiness_tier: str = Field(default="unknown", index=True)
