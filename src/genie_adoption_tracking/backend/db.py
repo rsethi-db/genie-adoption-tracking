@@ -79,6 +79,15 @@ class Account(SQLModel, table=True):
     # Genie-specific spend, trailing 30 days (USD) — the T30D figure the logfood
     # dashboard's PP-off page reports (fins_data.genie_dbu_dollars, last 30 days).
     genie_dollars_t30d: float = Field(default=0.0)
+    # Standalone-Genie $DBU rolling-window sums (precomputed in account_consumption_daily):
+    # trailing 7 / 28 / ~90 (t91d) days, as of the latest snapshot.
+    genie_dbu_t7d: float = Field(default=0.0)
+    genie_dbu_t28d: float = Field(default=0.0)
+    genie_dbu_t90d: float = Field(default=0.0)
+    # Daily standalone-Genie $DBU series over the last ~90 days, as [["YYYY-MM-DD", $], …]
+    # (oldest→newest, only days with usage). Powers the account-page trend chart + the
+    # Signals sparkline.
+    genie_dbu_series: list = Field(default_factory=list, sa_column=Column(JSON))
     # Active Genie spaces (data rooms with usage in the trailing 30 days), summed
     # across the account's workspaces (metric_store.fct_data_room_messages_daily).
     active_genie_spaces: int = Field(default=0)

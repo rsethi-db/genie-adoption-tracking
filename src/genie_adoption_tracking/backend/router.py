@@ -535,6 +535,10 @@ def list_accounts(
             active_genie_spaces=a.active_genie_spaces,
             genie_active=a.genie_active,
             genie_activated=a.genie_activated,
+            genie_dbu_t7d=a.genie_dbu_t7d,
+            genie_dbu_t28d=a.genie_dbu_t28d,
+            genie_dbu_t90d=a.genie_dbu_t90d,
+            genie_dbu_series=a.genie_dbu_series or [],
             # Not shown on the account lookup; skip the per-account plan resolve
             # (it was an N+1 that ran several Lakebase queries per account).
             readiness_pct=0,
@@ -659,6 +663,7 @@ def get_account(account_id: str, session: Dependencies.Session):
         genie_spend_90d=acct.genie_spend_90d,
         active_genie_spaces=acct.active_genie_spaces,
         genie_active=acct.genie_active,
+        genie_dbu_series=acct.genie_dbu_series or [],
         readiness_pct=plan_pct,
         created_at=acct.created_at,
         open_blockers=open_total,

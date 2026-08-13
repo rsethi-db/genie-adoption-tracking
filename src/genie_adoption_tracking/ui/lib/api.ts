@@ -22,6 +22,7 @@ export interface AccountDetailOut {
     created_at: string;
     dsa_owner: string;
     genie_active?: boolean;
+    genie_dbu_series?: unknown[];
     genie_spend_90d?: number;
     id: string;
     issues?: AccountIssueOut[];
@@ -71,6 +72,10 @@ export interface AccountOut {
     dsa_owner?: string;
     genie_activated?: boolean;
     genie_active?: boolean;
+    genie_dbu_series?: unknown[];
+    genie_dbu_t28d?: number;
+    genie_dbu_t7d?: number;
+    genie_dbu_t90d?: number;
     genie_spend_90d?: number;
     id: string;
     monthly_dbus?: number;

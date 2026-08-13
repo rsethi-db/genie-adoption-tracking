@@ -84,6 +84,10 @@ interface AcctRow {
   provisioning_status?: string;
   use_case_count?: number;
   genie_spend_90d?: number;
+  genie_dbu_t7d?: number;
+  genie_dbu_t28d?: number;
+  genie_dbu_t90d?: number;
+  genie_dbu_series?: [string, number][];
   active_genie_spaces?: number;
   genie_activated?: boolean;
   open_issues?: number;
@@ -321,8 +325,8 @@ function TileGrid({
 }
 
 // Sortable columns for the inline account table.
-type SortKey = "name" | "arr" | "genie_spend_90d" | "use_case_count" | "open_issues" | "active_genie_spaces";
-const NUMERIC_SORTS: SortKey[] = ["arr", "genie_spend_90d", "use_case_count", "open_issues", "active_genie_spaces"];
+type SortKey = "name" | "arr" | "genie_spend_90d" | "genie_dbu_t7d" | "genie_dbu_t90d" | "use_case_count" | "open_issues" | "active_genie_spaces";
+const NUMERIC_SORTS: SortKey[] = ["arr", "genie_spend_90d", "genie_dbu_t7d", "genie_dbu_t90d", "use_case_count", "open_issues", "active_genie_spaces"];
 
 const PP_LABEL: Record<string, string> = {
   on: "On",
@@ -432,7 +436,9 @@ function InlineAccounts({
 
   // Totals footer — quick roll-up of the segment.
   const totalArr = sorted?.reduce((s, a) => s + (a.arr ?? 0), 0) ?? 0;
-  const totalSpend = sorted?.reduce((s, a) => s + (a.genie_spend_90d ?? 0), 0) ?? 0;
+  const totalT7 = sorted?.reduce((s, a) => s + (a.genie_dbu_t7d ?? 0), 0) ?? 0;
+  const totalT30 = sorted?.reduce((s, a) => s + (a.genie_spend_90d ?? 0), 0) ?? 0;
+  const totalT90 = sorted?.reduce((s, a) => s + (a.genie_dbu_t90d ?? 0), 0) ?? 0;
   const totalUc = sorted?.reduce((s, a) => s + (a.use_case_count ?? 0), 0) ?? 0;
   const totalSpaces = sorted?.reduce((s, a) => s + (a.active_genie_spaces ?? 0), 0) ?? 0;
 
@@ -482,7 +488,7 @@ function InlineAccounts({
           </p>
         ) : (
           <div className="max-h-[28rem] overflow-auto rounded-md border bg-card">
-            <table className="w-full min-w-[860px] text-sm">
+            <table className="w-full min-w-[1100px] text-sm">
               <thead className="sticky top-0 bg-card z-10 text-xs text-muted-foreground border-b">
                 <tr className="text-left">
                   <Th k="name" label="Account" />
@@ -491,7 +497,9 @@ function InlineAccounts({
                   <th className="py-2 px-2 font-medium">Tier</th>
                   <th className="py-2 px-2 font-medium">Activated</th>
                   <Th k="use_case_count" label="Use cases" align="right" />
-                  <Th k="genie_spend_90d" label="Genie Agent (DBSQL $) (30d)" align="right" />
+                  <Th k="genie_dbu_t7d" label="Genie $ 7d" align="right" />
+                  <Th k="genie_spend_90d" label="Genie $ 30d" align="right" />
+                  <Th k="genie_dbu_t90d" label="Genie $ 90d" align="right" />
                   <Th k="active_genie_spaces" label="Agents (30d)" align="right" />
                   <Th k="open_issues" label="Issues" align="right" />
                   <Th k="arr" label="ARR" align="right" />
@@ -549,7 +557,13 @@ function InlineAccounts({
                     </td>
                     <td className="py-1.5 px-2 text-right tabular-nums">{fmtNum(a.use_case_count ?? 0)}</td>
                     <td className="py-1.5 px-2 text-right tabular-nums">
+                      {(a.genie_dbu_t7d ?? 0) > 0 ? fmtDbus(a.genie_dbu_t7d ?? 0) : "—"}
+                    </td>
+                    <td className="py-1.5 px-2 text-right tabular-nums">
                       {(a.genie_spend_90d ?? 0) > 0 ? fmtDbus(a.genie_spend_90d ?? 0) : "—"}
+                    </td>
+                    <td className="py-1.5 px-2 text-right tabular-nums">
+                      {(a.genie_dbu_t90d ?? 0) > 0 ? fmtDbus(a.genie_dbu_t90d ?? 0) : "—"}
                     </td>
                     <td className="py-1.5 px-2 text-right tabular-nums">
                       {(a.active_genie_spaces ?? 0) > 0 ? fmtNum(a.active_genie_spaces ?? 0) : "—"}
@@ -572,7 +586,7 @@ function InlineAccounts({
                   </tr>
                   {openIssues === a.id && (
                     <tr>
-                      <td colSpan={10} className="p-0">
+                      <td colSpan={12} className="p-0">
                         <AccountIssues accountId={a.id} />
                       </td>
                     </tr>
@@ -585,7 +599,9 @@ function InlineAccounts({
                   <td className="py-1.5 px-2 text-muted-foreground">Totals</td>
                   <td colSpan={4}></td>
                   <td className="py-1.5 px-2 text-right tabular-nums">{fmtNum(totalUc)}</td>
-                  <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalSpend)}</td>
+                  <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalT7)}</td>
+                  <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalT30)}</td>
+                  <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalT90)}</td>
                   <td className="py-1.5 px-2 text-right tabular-nums">{fmtNum(totalSpaces)}</td>
                   <td></td>
                   <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalArr)}</td>
@@ -597,7 +613,7 @@ function InlineAccounts({
         {sorted !== null && sorted.length > 0 && (
           <>
             <p className="mt-2 text-xs text-muted-foreground">
-              Tier - Account Readiness &gt;{" "}
+              Tier = Account Readiness ·{" "}
               <a
                 href="https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f10313a17e11d6b0b11abfa2736836/published?o=2548836972759138"
                 target="_blank"
@@ -618,6 +634,10 @@ function InlineAccounts({
               >
                 Product Deep Dives — Genie
               </a>
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Genie $ (7d / 30d / 90d) includes DBSQL consumption only — LLM usage will
+              be added soon.
             </p>
           </>
         )}
@@ -692,7 +712,7 @@ function PartnerPoweredTab({ data, scope = "" }: { data: DashboardOut; scope?: s
   return (
     <div className="space-y-6">
       <SoWhat>
-        Partner-Powered AI must be on for Genie to consume.
+        Partner-Powered AI must be on or enforce must be off for Genie to consume.
       </SoWhat>
 
       <TileGrid

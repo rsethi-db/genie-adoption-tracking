@@ -330,13 +330,17 @@ revenue AS (
   WHERE usage_date >= current_date() - INTERVAL 30 DAYS
   GROUP BY account_id
 ),
--- Genie "Activated Account" flag from the GTM product-deep-dives definition:
--- an account with 200+ Genie BMAU for 2 consecutive months AND AIM/SCIM enabled,
--- measured at the deployable level. Precomputed as `genie_activated` in the table;
--- we take the value on the latest snapshot date per account.
-activated AS (
+-- Latest-snapshot per-account signals from account_consumption_daily:
+--   * genie_activated — GTM product-deep-dives "Activated Account" flag (200+ Genie
+--     BMAU for 2 consecutive months AND AIM/SCIM enabled, at deployable level)
+--   * standalone-Genie $DBU rolling-window sums (precomputed in the source):
+--     t7d / t28d / t91d (~90d). Read as-of the latest snapshot per account.
+latest_snap AS (
   SELECT account_id,
-    MAX(CASE WHEN genie_activated = 'true' THEN 1 ELSE 0 END) AS genie_activated
+    MAX(CASE WHEN genie_activated = 'true' THEN 1 ELSE 0 END) AS genie_activated,
+    ROUND(MAX(COALESCE(genie_standalone_dbu_dollars_t7d_sum, 0)), 2) AS genie_dbu_t7d,
+    ROUND(MAX(COALESCE(genie_standalone_dbu_dollars_t28d_sum, 0)), 2) AS genie_dbu_t28d,
+    ROUND(MAX(COALESCE(genie_standalone_dbu_dollars_t91d_sum, 0)), 2) AS genie_dbu_t90d
   FROM main.gtm_gold.account_consumption_daily
   WHERE usage_date = (SELECT MAX(usage_date) FROM main.gtm_gold.account_consumption_daily)
   GROUP BY account_id
@@ -358,13 +362,30 @@ SELECT i.account_id,
   COALESCE(p.est_pipeline_per_month, 0) AS est_pipeline_per_month,
   CASE WHEN ac.account_id IS NOT NULL THEN 1 ELSE 0 END AS genie_active,
   COALESCE(s.active_genie_spaces, 0) AS active_genie_spaces,
-  COALESCE(a.genie_activated, 0) AS genie_activated
+  COALESCE(a.genie_activated, 0) AS genie_activated,
+  COALESCE(a.genie_dbu_t7d, 0) AS genie_dbu_t7d,
+  COALESCE(a.genie_dbu_t28d, 0) AS genie_dbu_t28d,
+  COALESCE(a.genie_dbu_t90d, 0) AS genie_dbu_t90d
 FROM ids i
   LEFT JOIN spaces s ON i.account_id = s.account_id
   LEFT JOIN revenue r ON i.account_id = r.account_id
   LEFT JOIN pipeline p ON i.account_id = p.account_id
   LEFT JOIN agent_consuming ac ON i.account_id = ac.account_id
-  LEFT JOIN activated a ON i.account_id = a.account_id
+  LEFT JOIN latest_snap a ON i.account_id = a.account_id
+"""
+
+# Daily standalone-Genie $DBU series per account (last 90 days) — powers the trend
+# chart on the account page and the sparkline in the Signals table. Only accounts with
+# some usage in the window are returned (keeps the payload small); missing days are
+# treated as 0 by the frontend. Ordered oldest->newest.
+GENIE_SERIES_QUERY = """
+SELECT account_id,
+  usage_date,
+  ROUND(COALESCE(genie_standalone_dbu_dollars, 0), 2) AS dbu
+FROM main.gtm_gold.account_consumption_daily
+WHERE usage_date >= current_date() - INTERVAL 90 DAYS
+  AND genie_standalone_dbu_dollars > 0
+ORDER BY account_id, usage_date
 """
 
 # Genie-related Brickroad issues (ALL severities) per FINS account. customer_id on
@@ -649,7 +670,24 @@ def fetch_genie_30d(ws) -> dict[str, dict]:
             "genie_active": bool(int(r[3] or 0)),
             "active_genie_spaces": int(r[4] or 0),
             "genie_activated": bool(int(r[5] or 0)),
+            "genie_dbu_t7d": float(r[6] or 0),
+            "genie_dbu_t28d": float(r[7] or 0),
+            "genie_dbu_t90d": float(r[8] or 0),
         }
+    return out
+
+
+def fetch_genie_series(ws) -> dict[str, list]:
+    """Map SFDC account_id -> daily [date, dbu] series over the last 90 days (only
+    accounts with usage). Stored as compact JSON: [["2026-05-01", 12.3], ...]."""
+    out: dict[str, list] = {}
+    for r in _run_query(ws, GENIE_SERIES_QUERY):
+        aid = r[0]
+        if not aid:
+            continue
+        # r[1] is a date; render ISO string. r[2] is the day's $DBU.
+        day = str(r[1])[:10]
+        out.setdefault(aid, []).append([day, round(float(r[2] or 0), 2)])
     return out
 
 
@@ -683,6 +721,7 @@ def main() -> None:
     wsc = fetch_ws(ws)
     aim = fetch_aim(ws)
     genie30 = fetch_genie_30d(ws)  # keyed by SFDC account_id
+    genie_series = fetch_genie_series(ws)  # keyed by SFDC account_id -> daily [date,$]
     issues = fetch_issues(ws)
     pp_off = sum(1 for v in pp.values() if v["pp_status"] == "off")
     aim_off = sum(1 for v in aim.values() if v["aim_status"] == "off")
@@ -808,7 +847,13 @@ def main() -> None:
                     est_pipeline_per_month=g30.get("est_pipeline_per_month", 0.0),
                     genie_active=g30.get("genie_active", False),
                     genie_activated=g30.get("genie_activated", False),
+                    genie_dbu_t7d=g30.get("genie_dbu_t7d", 0.0),
+                    genie_dbu_t28d=g30.get("genie_dbu_t28d", 0.0),
+                    genie_dbu_t90d=g30.get("genie_dbu_t90d", 0.0),
                 )
+                # Set separately (a JSON list, not a scalar) so the scalar `fields`
+                # dict stays str/number-typed for the **fields unpack below.
+                series_val = genie_series.get(sfdc, [])
                 # Match by sfdc id; else adopt an existing name-keyed row (first run);
                 # else it's genuinely new. by_name is only used when NOT already claimed
                 # by another sfdc id this run (guards duplicate names on first run).
@@ -819,12 +864,14 @@ def main() -> None:
                         acct = cand  # first-run adoption: keep its uuid, stamp the id
                 if acct is None:
                     acct = Account(id=_uid(), sfdc_account_id=sfdc, created_by=SEED_MARKER, **fields)
+                    acct.genie_dbu_series = series_val
                     session.add(acct)
                     n_new += 1
                 else:
                     acct.sfdc_account_id = sfdc
                     for k, v in fields.items():
                         setattr(acct, k, v)
+                    acct.genie_dbu_series = series_val
                     session.add(acct)
                 account_ids[sfdc] = acct.id
                 n_accounts += 1

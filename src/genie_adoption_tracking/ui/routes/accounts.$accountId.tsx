@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
+import { GenieDbuTrend } from "@/components/genie-dbu-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -135,6 +136,18 @@ function AccountDetail({ accountId }: { accountId: string }) {
 
       {/* Readiness & eligibility — one compact card replacing the 3 stacked banners */}
       <ReadinessEligibility data={data} />
+
+      {/* Daily Genie Agent (DBSQL $) trend over the last 90 days */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">
+            Genie Agent (DBSQL $) — daily, last 90 days
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <GenieDbuTrend series={data.genie_dbu_series as [string, number][]} />
+        </CardContent>
+      </Card>
 
       {data.adoption && (
         <AdoptionWorkflow
