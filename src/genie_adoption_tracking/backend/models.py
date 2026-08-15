@@ -516,6 +516,23 @@ class AudienceQueryOut(BaseModel):
     # Human-readable echo of what the filters mean, so the user can sanity-check.
     interpreted: str
     accounts: list[AudienceAccountOut]
+    # The equivalent SQL for the parsed filters, so the UI can show it in an editable
+    # box the user can tweak and re-run to override the NL parse.
+    sql: str = ""
+
+
+class AudienceSqlIn(BaseModel):
+    """A (possibly hand-edited) read-only SELECT over gat_account to run directly,
+    overriding the natural-language parse."""
+
+    sql: str
+
+
+class AudienceSqlOut(BaseModel):
+    accounts: list[AudienceAccountOut]
+    # Populated instead of accounts when the SQL is rejected or errors, so the UI can
+    # surface a precise message rather than a generic failure.
+    error: str = ""
 
 
 class CampaignAccountOut(BaseModel):

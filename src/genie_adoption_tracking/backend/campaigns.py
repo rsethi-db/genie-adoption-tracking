@@ -130,14 +130,14 @@ def list_campaigns(session: Dependencies.Session):
 def create_campaign(
     body: CampaignIn,
     session: Dependencies.Session,
-    user_ws: Dependencies.UserClient,
+    headers: Dependencies.Headers,
 ):
     if not body.title.strip():
         raise HTTPException(status_code=400, detail="Title is required")
-    try:
-        actor = user_ws.current_user.me().user_name or ""
-    except Exception:
-        actor = ""
+    # Author stamp is best-effort: take it from the Databricks Apps identity headers
+    # (no OBO token / API round-trip needed). Creating a campaign must not fail just
+    # because the actor can't be resolved, so this never raises.
+    actor = headers.user_name or headers.user_email or ""
     c = Campaign(
         id=_uid(),
         title=body.title.strip(),

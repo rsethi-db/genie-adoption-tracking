@@ -19,6 +19,8 @@ import {
   Search,
   Loader2,
   Sparkles,
+  Code2,
+  Play,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -334,26 +336,39 @@ function NewCampaignForm({
   const [nlText, setNlText] = useState("");
   const [interpreted, setInterpreted] = useState("");
   const [querying, setQuerying] = useState(false);
+  // The equivalent SQL for the last NL parse — editable, so the user can tweak it and
+  // re-run to override the parse.
+  const [sql, setSql] = useState("");
+  const [showSql, setShowSql] = useState(false);
+  const [runningSql, setRunningSql] = useState(false);
   // The reviewed audience — keyed by account_id so deselect + manual-add merge cleanly.
   const [audience, setAudience] = useState<AudienceAccount[]>([]);
   const [dropped, setDropped] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
 
   async function runQuery() {
+    // Ignore overlapping clicks — one in-flight resolve at a time.
+    if (querying) return;
     if (!nlText.trim()) {
       toast.error("Describe the audience first");
       return;
     }
     setQuerying(true);
+    // Client-side timeout so the spinner can never hang forever if the backend
+    // (or the LLM behind it) stalls. Aborts the request after 20s.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20_000);
     try {
       const res = await fetch("/api/campaigns/audience/query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: nlText }),
+        signal: controller.signal,
       });
       if (!res.ok) throw new Error();
       const d = await res.json();
       setInterpreted(d.interpreted ?? "");
+      setSql(d.sql ?? "");
       // Merge results into the audience, keeping any manually-added accounts.
       const byId = new Map(audience.map((a) => [a.account_id, a]));
       for (const a of (d.accounts ?? []) as AudienceAccount[]) {
@@ -364,10 +379,60 @@ function NewCampaignForm({
       if ((d.accounts ?? []).length === 0) {
         toast.message("No accounts matched", { description: d.interpreted });
       }
-    } catch {
-      toast.error("Could not resolve audience");
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        toast.error("Timed out resolving the audience — please try again");
+      } else {
+        toast.error("Could not resolve audience");
+      }
     } finally {
+      clearTimeout(timer);
       setQuerying(false);
+    }
+  }
+
+  // Run the (possibly hand-edited) SQL, replacing the resolved audience with its rows.
+  // Unlike runQuery this overrides rather than merges — the SQL is the source of truth.
+  async function runSql() {
+    if (runningSql) return;
+    if (!sql.trim()) {
+      toast.error("Enter a SQL query");
+      return;
+    }
+    setRunningSql(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const res = await fetch("/api/campaigns/audience/run-sql", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sql }),
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error();
+      const d = await res.json();
+      if (d.error) {
+        toast.error("SQL error", { description: d.error });
+        return;
+      }
+      const rows = (d.accounts ?? []) as AudienceAccount[];
+      setAudience(rows);
+      setDropped(new Set());
+      setInterpreted("Custom SQL");
+      if (rows.length === 0) {
+        toast.message("No accounts matched the SQL");
+      } else {
+        toast.success(`${rows.length} account(s) from SQL`);
+      }
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        toast.error("Timed out running the SQL — please try again");
+      } else {
+        toast.error("Could not run the SQL");
+      }
+    } finally {
+      clearTimeout(timer);
+      setRunningSql(false);
     }
   }
 
@@ -478,7 +543,7 @@ function NewCampaignForm({
             <Textarea
               value={nlText}
               onChange={(e) => setNlText(e.target.value)}
-              placeholder="Describe the target accounts…"
+              placeholder="e.g. banking accounts where genie usage is less than 200 dollars per month"
               className="min-h-[60px]"
             />
             <div className="flex items-center justify-between gap-2">
@@ -501,6 +566,54 @@ function NewCampaignForm({
                 {querying ? "Resolving…" : "Find accounts"}
               </Button>
             </div>
+
+            {/* Editable SQL — the equivalent query for the parse, which the user can
+                tweak and re-run to override it. Read-only SELECT over gat_account. */}
+            {sql && (
+              <div className="rounded-md border">
+                <button
+                  type="button"
+                  onClick={() => setShowSql((s) => !s)}
+                  className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
+                  <Code2 className="h-3.5 w-3.5" />
+                  {showSql ? "Hide SQL" : "Edit SQL"}
+                  <span className="ml-auto text-[10px] uppercase tracking-wide opacity-60">
+                    override
+                  </span>
+                </button>
+                {showSql && (
+                  <div className="border-t p-2.5 space-y-2">
+                    <Textarea
+                      value={sql}
+                      onChange={(e) => setSql(e.target.value)}
+                      spellCheck={false}
+                      className="min-h-[120px] font-mono text-xs leading-relaxed"
+                    />
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-muted-foreground">
+                        Read-only SELECT over <code>gat_account</code>. Editing overrides
+                        the parsed audience.
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={runSql}
+                        disabled={runningSql}
+                        className="gap-1.5 shrink-0"
+                      >
+                        {runningSql ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Play className="h-3.5 w-3.5" />
+                        )}
+                        {runningSql ? "Running…" : "Run SQL"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {audience.length > 0 && (
               <div className="overflow-x-auto rounded-md border">
