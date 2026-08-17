@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from databricks.sdk.service.iam import User as UserOut
 from fastapi import HTTPException
@@ -31,6 +31,7 @@ from .db import (
     ResourceClick,
     StageTransition,
     UseCase,
+    VerticalBook,
 )
 from .models import (
     AccountDetailOut,
@@ -57,6 +58,7 @@ from .models import (
     DashboardOut,
     FunnelBucketOut,
     GenieReadyAccountOut,
+    InsightOut,
     OkOut,
     PlaybookOut,
     ResourceClickIn,
@@ -402,6 +404,8 @@ def list_accounts(
     vertical: str = "",
     all: bool = False,
     genie_activated: bool = False,
+    tier_moved_in: str = "",
+    tier_moved_out: str = "",
 ):
     """Account lookup. Pass `q` for text search (name/owner/sub-vertical), or one/more
     filters (tier, pp, provisioning, stage, whitespace, open_issues, genie_active,
@@ -414,6 +418,7 @@ def list_accounts(
         tier or pp or provisioning or stage or whitespace or open_issues
         or genie_active or has_spend or sub_vertical or spend_bucket >= 0
         or has_usecase or vertical or all or genie_activated
+        or tier_moved_in or tier_moved_out
     )
     if not needle and not has_filter:
         return []
@@ -471,6 +476,16 @@ def list_accounts(
         if genie_active and not a.genie_active:
             return False
         if genie_activated and not a.genie_activated:
+            return False
+        # Moved INTO a tier over 30d: now == tier, 28d-ago != tier.
+        if tier_moved_in and not (
+            a.readiness_tier == tier_moved_in and a.readiness_tier_prev != tier_moved_in
+        ):
+            return False
+        # Moved OUT of a tier over 30d: 28d-ago == tier, now != tier.
+        if tier_moved_out and not (
+            a.readiness_tier_prev == tier_moved_out and a.readiness_tier != tier_moved_out
+        ):
             return False
         if has_spend and (a.genie_dollars_t30d or 0) <= 0:
             return False
@@ -664,6 +679,8 @@ def get_account(account_id: str, session: Dependencies.Session):
         active_genie_spaces=acct.active_genie_spaces,
         genie_active=acct.genie_active,
         genie_dbu_series=acct.genie_dbu_series or [],
+        security_blocker=acct.security_blocker,
+        security_status=acct.security_status,
         readiness_pct=plan_pct,
         created_at=acct.created_at,
         open_blockers=open_total,
@@ -1203,12 +1220,27 @@ def get_dashboard(session: Dependencies.Session, vertical: str = ""):
     account_names = {a.id: a.name for a in accounts}
 
     # Funnel: count distinct ACCOUNTS with a use case at each stage (matches the
-    # drill-down, which lists accounts) + sum the DBU value at that stage.
+    # drill-down, which lists accounts) + sum the DBU value at that stage. Also count
+    # accounts with a use case that MOVED INTO the stage in the last 7 / 30 days
+    # (stage_move_in_date) — the WoW / MoM flow.
+    now = _utcnow()
+    cutoff_7d = now - timedelta(days=7)
+    cutoff_30d = now - timedelta(days=30)
     stage_accts: dict[str, set[str]] = {}
     stage_dbus: dict[str, float] = {}
+    stage_in7: dict[str, set[str]] = {}
+    stage_in30: dict[str, set[str]] = {}
     for uc in use_cases:
         stage_accts.setdefault(uc.stage, set()).add(uc.account_id)
         stage_dbus[uc.stage] = stage_dbus.get(uc.stage, 0.0) + uc.estimated_monthly_dbus
+        mv = uc.stage_move_in_date
+        if mv is not None:
+            if mv.tzinfo is None:
+                mv = mv.replace(tzinfo=timezone.utc)
+            if mv >= cutoff_30d:
+                stage_in30.setdefault(uc.stage, set()).add(uc.account_id)
+                if mv >= cutoff_7d:
+                    stage_in7.setdefault(uc.stage, set()).add(uc.account_id)
     stage_counts = {k: len(v) for k, v in stage_accts.items()}
     funnel = [
         FunnelBucketOut(
@@ -1217,6 +1249,8 @@ def get_dashboard(session: Dependencies.Session, vertical: str = ""):
             name=s["name"],
             count=stage_counts.get(s["key"], 0),
             monthly_dbus=round(stage_dbus.get(s["key"], 0.0), 2),
+            moved_in_7d=len(stage_in7.get(s["key"], set())),
+            moved_in_30d=len(stage_in30.get(s["key"], set())),
         )
         for s in playbook.STAGES
     ]
@@ -1297,11 +1331,36 @@ def get_dashboard(session: Dependencies.Session, vertical: str = ""):
     avg_readiness = _avg_readiness(session, accounts)
     genie_active_total = sum(1 for a in accounts if a.genie_active)
     genie_activated_total = sum(1 for a in accounts if a.genie_activated)
+    # Activation-book parity total: for a selected vertical, that vertical's full book
+    # (e.g. FINS = 811); with no vertical scope, the sum across all verticals.
+    book_rows = session.exec(select(VerticalBook)).all()
+    if vertical:
+        vertical_book_total = next(
+            (b.book_total for b in book_rows if b.vertical == vertical), 0
+        )
+    else:
+        vertical_book_total = sum(b.book_total for b in book_rows)
     ws_with_genie = sum(a.ws_pp_on for a in accounts)  # active PP workspaces proxy
     genie_spend_total = round(sum(a.genie_spend_90d for a in accounts), 2)
-    tier_counts = {"green": 0, "yellow": 0, "red": 0, "unknown": 0}
-    for a in accounts:
-        tier_counts[a.readiness_tier if a.readiness_tier in tier_counts else "unknown"] += 1
+    # Genie-Ready tier counts come from the FULL activation book (gat_vertical_book), so
+    # they match the Product Deep Dives dashboard's stacked bar — NOT the app's active
+    # universe (which would undercount Yellow/Red). Scoped to the selected vertical, or
+    # summed across verticals when unscoped. `unknown` isn't tracked on the book.
+    scoped_books = [b for b in book_rows if (not vertical or b.vertical == vertical)]
+    tier_counts = {
+        "green": sum(b.book_green for b in scoped_books),
+        "yellow": sum(b.book_yellow for b in scoped_books),
+        "red": sum(b.book_red for b in scoped_books),
+        "unknown": 0,
+    }
+    prev_counts = {
+        "green": sum(b.book_green_prev for b in scoped_books),
+        "yellow": sum(b.book_yellow_prev for b in scoped_books),
+        "red": sum(b.book_red_prev for b in scoped_books),
+        "unknown": 0,
+    }
+    # Net 30-day change per tier = now − 28 days ago.
+    tier_change_30d = {t: tier_counts[t] - prev_counts[t] for t in tier_counts}
 
     # --- logfood parity aggregates ------------------------------------------------
     # Headline / Partner-Powered AI page.
@@ -1386,6 +1445,68 @@ def get_dashboard(session: Dependencies.Session, vertical: str = ""):
     ]
     sub_verticals.sort(key=lambda x: x.accounts, reverse=True)
 
+    # --- Auto-generated UCO insight bullets (Genie use-case funnel only) -----------
+    # Each carries filter_params so the UI can expand it to the accounts behind it.
+    scope_label = vertical or "AMER"
+
+    def _money(n: float) -> str:
+        if n >= 1_000_000:
+            return f"${n / 1_000_000:.1f}M"
+        if n >= 1_000:
+            return f"${n / 1_000:.1f}k"
+        return f"${n:.0f}"
+
+    insights: list[InsightOut] = []
+    # Total accounts with any Genie UCO.
+    accts_with_uco = len({uc.account_id for uc in use_cases})
+    if accts_with_uco > 0:
+        insights.append(InsightOut(
+            text=f"{accts_with_uco} {scope_label} accounts have a Genie use case, "
+                 f"{len(use_cases)} use cases in total.",
+            tone="neutral",
+            filter_label="Accounts with a Genie use case",
+            filter_params={"has_usecase": "true"},
+        ))
+    # Biggest UCO stage inflow over 30d (expand → accounts currently in that stage).
+    top_flow = max(funnel, key=lambda f: f.moved_in_30d, default=None)
+    if top_flow and top_flow.moved_in_30d > 0:
+        insights.append(InsightOut(
+            text=f"Most UCO movement into {top_flow.code} ({top_flow.name}) — "
+                 f"{top_flow.moved_in_30d} accounts in the last 30 days "
+                 f"({top_flow.moved_in_7d} in the last 7).",
+            tone="good",
+            filter_label=f"Accounts with a use case at {top_flow.code}",
+            filter_params={"stage": top_flow.stage},
+        ))
+    # Live (U6) reach.
+    u6 = next((f for f in funnel if f.stage == "u6"), None)
+    if u6 and u6.count > 0:
+        insights.append(InsightOut(
+            text=f"{u6.count} accounts have a Live (U6) Genie use case — "
+                 f"{_money(u6.monthly_dbus)}/mo in estimated DBUs.",
+            tone="good",
+            filter_label="Accounts with a Live (U6) use case",
+            filter_params={"stage": "u6"},
+        ))
+    # Early-funnel concentration (U1–U2).
+    early_u1 = next((f for f in funnel if f.stage == "u1"), None)
+    early = sum(f.count for f in funnel if f.stage in ("u1", "u2"))
+    if early > 0:
+        insights.append(InsightOut(
+            text=f"{early} accounts are early in the funnel (U1–U2) — prioritize workshops "
+                 "and use-case discovery to move them forward.",
+            tone="warn",
+            filter_label="Accounts with a use case at U1",
+            filter_params={"stage": early_u1.stage} if early_u1 else {},
+        ))
+    # Stalled UCOs (no update in 14+ days, not yet Live).
+    if stalled:
+        insights.append(InsightOut(
+            text=f"{len(stalled)} Genie use cases are stalled (no update in 14+ days, "
+                 "not yet Live) — review for blockers.",
+            tone="warn",
+        ))
+
     return DashboardOut(
         total_accounts=len(accounts),
         total_use_cases=len(use_cases),
@@ -1401,6 +1522,7 @@ def get_dashboard(session: Dependencies.Session, vertical: str = ""):
         accounts_with_issues=accounts_with_issues,
         genie_active_accounts=genie_active_total,
         genie_activated_accounts=genie_activated_total,
+        vertical_book_total=vertical_book_total,
         workspaces_with_genie=ws_with_genie,
         genie_spend_90d=genie_spend_total,
         genie_revenue_t30d=genie_revenue_t30d,
@@ -1414,6 +1536,9 @@ def get_dashboard(session: Dependencies.Session, vertical: str = ""):
         tier_yellow=tier_counts["yellow"],
         tier_red=tier_counts["red"],
         tier_unknown=tier_counts["unknown"],
+        tier_green_change_30d=tier_change_30d["green"],
+        tier_yellow_change_30d=tier_change_30d["yellow"],
+        tier_red_change_30d=tier_change_30d["red"],
         funnel=funnel,
         blockers_by_category=blockers_by_category,
         stalled=stalled[:10],
@@ -1423,4 +1548,5 @@ def get_dashboard(session: Dependencies.Session, vertical: str = ""):
         brickroad_issues=brickroad_issues,
         genie_ready_accounts=genie_ready_accounts,
         sub_verticals=sub_verticals,
+        insights=insights,
     )

@@ -15,7 +15,6 @@ import {
 } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
-import { GenieDbuTrend } from "@/components/genie-dbu-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -137,24 +136,13 @@ function AccountDetail({ accountId }: { accountId: string }) {
       {/* Readiness & eligibility — one compact card replacing the 3 stacked banners */}
       <ReadinessEligibility data={data} />
 
-      {/* Daily Genie Agent (DBSQL $) trend over the last 90 days */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">
-            Genie Agent (DBSQL $) — daily, last 90 days
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <GenieDbuTrend series={data.genie_dbu_series as [string, number][]} />
-        </CardContent>
-      </Card>
-
       {data.adoption && (
         <AdoptionWorkflow
           accountId={data.id}
           accountName={data.name}
           workflow={data.adoption}
           ppStatus={data.pp_status ?? "unknown"}
+          securityBlocker={data.security_blocker ?? false}
         />
       )}
       <AdoptionHistory accountId={data.id} />
@@ -528,12 +516,14 @@ function AdoptionTaskCard({
   value,
   onChange,
   accountName,
+  securityBlocker = false,
 }: {
   task: AdoptionTaskOut;
   tone: string;
   value: { status: string; note: string };
   onChange: (patch: { status?: string; note?: string }) => void;
   accountName: string;
+  securityBlocker?: boolean;
 }) {
   const blocked = value.status === "blocked";
   // All five statuses (incl. Blocked) are available on every task.
@@ -594,7 +584,7 @@ function AdoptionTaskCard({
         placeholder={blocked ? "Add detail…" : "Add a note…"}
         className="mt-2 min-h-[38px] text-xs"
       />
-      {blocked && (
+      {blocked && task.key !== "sec_authority_review" && (
         <button
           type="button"
           onClick={() => {
@@ -611,7 +601,10 @@ function AdoptionTaskCard({
           Ask Genie how to get unstuck
         </button>
       )}
-      {TASK_ACTION_LINK[task.key] && (
+      {/* The Security Authority Review action only shows for accounts flagged with an
+          open security blocker (from the Genie Security Blockers sheet). */}
+      {TASK_ACTION_LINK[task.key] &&
+        (task.key !== "sec_authority_review" || securityBlocker) && (
         <a
           href={TASK_ACTION_LINK[task.key].url}
           target="_blank"
@@ -826,11 +819,13 @@ function AdoptionWorkflow({
   accountName,
   workflow,
   ppStatus,
+  securityBlocker = false,
 }: {
   accountId: string;
   accountName: string;
   workflow: AdoptionWorkflowOut;
   ppStatus: string;
+  securityBlocker?: boolean;
 }) {
   const qc = useQueryClient();
 
@@ -960,6 +955,7 @@ function AdoptionWorkflow({
                   value={edits[t.key] ?? { status: "not_initiated", note: "" }}
                   onChange={(patch) => setField(t.key, patch)}
                   accountName={accountName}
+                  securityBlocker={securityBlocker}
                 />
               ))}
             </div>

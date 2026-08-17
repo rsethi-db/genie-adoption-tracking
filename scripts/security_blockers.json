@@ -1,0 +1,222 @@
+[
+  {
+    "name": "Deloitte Consulting (HQ)",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Brian Flynn"
+  },
+  {
+    "name": "Toyota Motor Corporation",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Brian Flynn"
+  },
+  {
+    "name": "Capital One Financial",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "AT&T",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "TD Bank Financial Group",
+    "security_status": "1. Review Not Yet Scheduled",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Cisco Systems, Inc.",
+    "security_status": "1. Review Not Yet Scheduled",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Goldman Sachs",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Ahold Delhaize",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Amazon.com",
+    "security_status": "2. Review Scheduled",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Procter & Gamble",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "PWC (HQ)",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Kaiser Permanente",
+    "security_status": "6. Not Blocked on Security",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Instacart",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Starbucks",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "AXA Group (Global and WW)",
+    "security_status": "2. Review Scheduled",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Humana",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "United Airlines Holdings, Inc.",
+    "security_status": "1. Review Not Yet Scheduled",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "HSBC",
+    "security_status": "1. Review Not Yet Scheduled",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "S&P Global",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Tencent Group",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Banco do Brasil",
+    "security_status": "0. Initiated Account Team Outreach",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Munich Re Group",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Abbott Laboratories",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "McKinsey & Company (HQ)",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "McDonald's",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Telstra",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "American Express",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Novartis",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Societe Generale",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Morgan Stanley",
+    "security_status": "Not inspected",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Mitsubishi Corporation",
+    "security_status": "Not inspected",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Travelers",
+    "security_status": "Not inspected",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Philip Morris International",
+    "security_status": "Not inspected",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "KRAFTON",
+    "security_status": "Not inspected",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Southern Company Services, Inc.",
+    "security_status": "Not inspected",
+    "swat_owner": "Yong Huang"
+  },
+  {
+    "name": "Rabobank",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Ken Wong"
+  },
+  {
+    "name": "ManuLife Financial",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Ken Wong"
+  },
+  {
+    "name": "RBC",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Ken Wong"
+  },
+  {
+    "name": "Australian Energy Market Operator",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Ken Wong"
+  },
+  {
+    "name": "NHS England",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Ken Wong"
+  },
+  {
+    "name": "Rolls-Royce",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Ken Wong"
+  },
+  {
+    "name": "UBS Group",
+    "security_status": "1. Review Not Yet Scheduled",
+    "swat_owner": "Ken Wong"
+  },
+  {
+    "name": "ExxonMobil Global Services Company",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Ken Wong"
+  },
+  {
+    "name": "Prudential PLC",
+    "security_status": "3. Review Actively Engaged",
+    "swat_owner": "Ken Wong"
+  }
+]

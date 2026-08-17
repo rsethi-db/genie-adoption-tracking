@@ -10,15 +10,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
-  Users,
+  Building2,
   Layers,
   DollarSign,
   ShieldAlert,
   ShieldCheck,
-  Gauge,
   Bug,
   Sparkles,
-  MessageSquare,
   ArrowUpDown,
   ArrowRight,
   X,
@@ -35,6 +33,20 @@ function fmtDbus(n: number): string {
 // Integer counts with thousands separators (7587 → 7,587).
 function fmtNum(n: number): string {
   return (n ?? 0).toLocaleString("en-US");
+}
+
+// Percentage of a whole, e.g. pct(158, 499) → "32%". Guards divide-by-zero.
+function pct(n?: number, total?: number): string {
+  if (!total) return "0%";
+  return `${Math.round(((n ?? 0) / total) * 100)}%`;
+}
+
+// Signed change, e.g. chg(22) → "+22", chg(-3) → "−3", chg(0) → "±0".
+function chg(n?: number): string {
+  const v = n ?? 0;
+  if (v > 0) return `+${v}`;
+  if (v < 0) return `−${Math.abs(v)}`;
+  return "±0";
 }
 
 const TIER_DOT: Record<string, string> = {
@@ -101,6 +113,7 @@ interface TileSpec {
   label: string;
   value?: number;
   display?: string;
+  sublabel?: string; // small caption under the value (e.g. tier definition)
   tone?: "good" | "warn" | "bad";
   filter?: AcctFilter;
 }
@@ -155,49 +168,112 @@ function DashboardBody({ scope }: { scope: string }) {
           selected vertical. Nothing renders until the user types. */}
       <GlobalAccountSearch scope={scope} />
 
-      {/* Headline row (start big) — click a tile to expand the accounts beneath it */}
-      <TileGrid
-        scope={scope}
-        cols="lg:grid-cols-6"
-        tiles={[
-          { key: "total", icon: <Users className="h-4 w-4" />, label: "Accounts", value: data.total_accounts },
-          {
-            key: "genie_active",
-            icon: <Sparkles className="h-4 w-4" />,
-            label: "Genie-active (30d)",
-            value: data.genie_active_accounts ?? 0,
-            tone: "good",
-            filter: { label: "Genie-active accounts (last 30d)", params: { genie_active: "true" } },
-          },
-          {
-            key: "genie_activated",
-            icon: <ShieldCheck className="h-4 w-4" />,
-            label: "Activated accounts",
-            value: data.genie_activated_accounts ?? 0,
-            tone: "good",
-            filter: {
-              label: "Activated accounts (200+ Genie BMAU 2 mo + AIM/SCIM)",
-              params: { genie_activated: "true" },
+      {/* Headline — account book + active subset. */}
+      <Card>
+        <CardContent className="py-4 flex items-baseline gap-3 flex-wrap">
+          <Building2 className="h-4 w-4 text-muted-foreground self-center" />
+          <span className="text-3xl font-bold">{fmtNum(data.vertical_book_total ?? 0)}</span>
+          <span className="text-sm text-muted-foreground">accounts{scope ? ` in ${scope}` : ""}</span>
+          <span className="text-sm text-muted-foreground">
+            · {fmtNum(data.total_accounts)} active (paid usage, last 6 mo)
+          </span>
+        </CardContent>
+      </Card>
+
+      {/* Genie-Ready tiers (Account Readiness). Click a tier to see its accounts. */}
+      <div>
+        <div className="text-sm font-medium mb-2">Genie Ready — Account Readiness</div>
+        <TileGrid
+          scope={scope}
+          cols="lg:grid-cols-3"
+          tiles={[
+            {
+              key: "tier_green",
+              icon: <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" />,
+              label: "Green",
+              value: data.tier_green ?? 0,
+              tone: "good",
+              sublabel: `${chg(data.tier_green_change_30d)} vs ${(data.tier_green ?? 0) - (data.tier_green_change_30d ?? 0)} a month ago · Consumer / SQL entitlements in place`,
+              filter: { label: "Genie-Ready tier: Green", params: { tier: "green" } },
             },
-          },
-          {
-            key: "revenue",
-            icon: <DollarSign className="h-4 w-4" />,
-            label: "Genie revenue (30d)",
-            display: fmtDbus(data.genie_revenue_t30d ?? 0),
-            tone: "good",
-            filter: { label: "Accounts with Genie spend (30d)", params: { has_spend: "true" } },
-          },
-          { key: "readiness", icon: <Gauge className="h-4 w-4" />, label: "Avg readiness", display: `${data.avg_readiness_pct ?? 0}%` },
-          { key: "pipeline", icon: <DollarSign className="h-4 w-4" />, label: "Est. pipeline $/mo", display: fmtDbus(data.est_pipeline_per_month ?? 0) },
-        ]}
-      />
+            {
+              key: "tier_yellow",
+              icon: <span className="h-2.5 w-2.5 rounded-full bg-amber-500 inline-block" />,
+              label: "Yellow",
+              value: data.tier_yellow ?? 0,
+              tone: "warn",
+              sublabel: `${chg(data.tier_yellow_change_30d)} vs ${(data.tier_yellow ?? 0) - (data.tier_yellow_change_30d ?? 0)} a month ago · AIM / SCIM / Unified Login present`,
+              filter: { label: "Genie-Ready tier: Yellow", params: { tier: "yellow" } },
+            },
+            {
+              key: "tier_red",
+              icon: <span className="h-2.5 w-2.5 rounded-full bg-destructive inline-block" />,
+              label: "Red",
+              value: data.tier_red ?? 0,
+              tone: "bad",
+              sublabel: `${chg(data.tier_red_change_30d)} vs ${(data.tier_red ?? 0) - (data.tier_red_change_30d ?? 0)} a month ago · No UC pre-reqs nor identity mgmt, and Genie active`,
+              filter: { label: "Genie-Ready tier: Red", params: { tier: "red" } },
+            },
+          ]}
+        />
+        <TierMovedRow scope={scope} />
+      </div>
+
+      {/* High-level Genie activity. Click a tile to drill into the accounts. */}
+      <div>
+        <div className="text-sm font-medium mb-2">Genie activity</div>
+        <TileGrid
+          scope={scope}
+          cols="lg:grid-cols-4"
+          tiles={[
+            {
+              key: "ga_active",
+              icon: <Sparkles className="h-4 w-4" />,
+              label: "Genie-active (30d)",
+              value: data.genie_active_accounts ?? 0,
+              tone: "good",
+              sublabel: `${pct(data.genie_active_accounts, data.total_accounts)} of active accounts · ≥1 Genie space with message usage in last 30d`,
+              filter: { label: "Genie-active accounts (last 30d)", params: { genie_active: "true" } },
+            },
+            {
+              key: "ga_activated",
+              icon: <ShieldCheck className="h-4 w-4" />,
+              label: "Activated",
+              value: data.genie_activated_accounts ?? 0,
+              tone: "good",
+              sublabel: "200+ Genie BMAU 2 mo + AIM/SCIM",
+              filter: {
+                label: "Activated accounts (200+ Genie BMAU 2 mo + AIM/SCIM)",
+                params: { genie_activated: "true" },
+              },
+            },
+            {
+              key: "ga_revenue",
+              icon: <DollarSign className="h-4 w-4" />,
+              label: "Genie Agent $ (30d)",
+              display: fmtDbus(data.genie_revenue_t30d ?? 0),
+              tone: "good",
+              sublabel: "DBSQL consumption",
+              filter: { label: "Accounts with Genie spend (30d)", params: { has_spend: "true" } },
+            },
+            {
+              key: "ga_whitespace",
+              icon: <Layers className="h-4 w-4" />,
+              label: "Whitespace",
+              value: data.whitespace_accounts ?? 0,
+              tone: (data.whitespace_accounts ?? 0) > 0 ? "warn" : undefined,
+              sublabel: "Can consume + provisioned, no agent",
+              filter: { label: "Whitespace — can consume + provisioned, no active agent", params: { whitespace: "true" } },
+            },
+          ]}
+        />
+      </div>
 
       {/* Four lenses, mirroring the logfood dashboard's pages */}
       <Tabs defaultValue="pp">
         <TabsList>
           <TabsTrigger value="pp">Partner-Powered AI</TabsTrigger>
-          <TabsTrigger value="accounts">Genie Accounts</TabsTrigger>
+          <TabsTrigger value="accounts">Genie UCOs</TabsTrigger>
           <TabsTrigger value="subvertical">By Sub-Vertical</TabsTrigger>
           <TabsTrigger value="brickroad">Brickroad</TabsTrigger>
         </TabsList>
@@ -215,7 +291,75 @@ function DashboardBody({ scope }: { scope: string }) {
           <BrickroadTab data={data} />
         </TabsContent>
       </Tabs>
+
+      <InsightsPanel data={data} scope={scope} />
     </div>
+  );
+}
+
+// Auto-generated highlight bullets at the bottom of Signals.
+const INSIGHT_DOT: Record<string, string> = {
+  good: "bg-emerald-500",
+  warn: "bg-amber-500",
+  bad: "bg-destructive",
+  neutral: "bg-muted-foreground/50",
+};
+function InsightsPanel({ data, scope }: { data: DashboardOut; scope: string }) {
+  const insights = data.insights ?? [];
+  const [openIdx, setOpenIdx] = useState<number | null>(null);
+  if (insights.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Key insights — Genie UCOs</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-2">
+          {insights.map((ins, i) => {
+            const params = ins.filter_params ?? {};
+            const canExpand = Object.keys(params).length > 0;
+            const isOpen = openIdx === i;
+            return (
+              <li key={i}>
+                <div className="flex items-start gap-2 text-sm">
+                  <span
+                    className={cn(
+                      "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                      INSIGHT_DOT[ins.tone ?? "neutral"] ?? INSIGHT_DOT.neutral,
+                    )}
+                  />
+                  <span className="flex-1">{ins.text}</span>
+                  {canExpand && (
+                    <button
+                      type="button"
+                      onClick={() => setOpenIdx(isOpen ? null : i)}
+                      className="shrink-0 inline-flex items-center gap-0.5 text-xs font-medium text-primary hover:underline"
+                    >
+                      {isOpen ? "Hide" : "View accounts"}
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                {canExpand && isOpen && (
+                  <div className="mt-2">
+                    <InlineAccounts
+                      key={i}
+                      filter={{
+                        label: ins.filter_label || "Accounts",
+                        params: params as Record<string, string>,
+                      }}
+                      scope={scope}
+                      onClose={() => setOpenIdx(null)}
+                      showFilter={false}
+                    />
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -261,6 +405,52 @@ function GlobalAccountSearch({ scope }: { scope: string }) {
   );
 }
 
+// "Moved into tier (last 30d)" — click a tier to expand the accounts that entered it
+// in the trailing 30 days (from → to visible in the table's tier column vs. the change).
+function TierMovedRow({ scope }: { scope: string }) {
+  const [openTier, setOpenTier] = useState<string | null>(null);
+  const TIERS: { label: string; tier: string; dot: string }[] = [
+    { label: "Green", tier: "green", dot: "bg-emerald-500" },
+    { label: "Yellow", tier: "yellow", dot: "bg-amber-500" },
+    { label: "Red", tier: "red", dot: "bg-destructive" },
+  ];
+  return (
+    <div className="mt-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs px-1">
+        <span className="text-muted-foreground">Moved into tier (last 30d):</span>
+        {TIERS.map((t) => (
+          <button
+            key={t.tier}
+            type="button"
+            onClick={() => setOpenTier((o) => (o === t.tier ? null : t.tier))}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 transition-colors",
+              openTier === t.tier ? "bg-accent" : "hover:bg-accent",
+            )}
+          >
+            <span className={`h-2 w-2 rounded-full ${t.dot}`} />
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {openTier && (
+        <div className="mt-2">
+          <InlineAccounts
+            key={openTier}
+            filter={{
+              label: `Moved into ${openTier} (last 30d)`,
+              params: { tier_moved_in: openTier },
+            }}
+            scope={scope}
+            onClose={() => setOpenTier(null)}
+            showFilter={false}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // A grid of stat tiles that expands the matching accounts INLINE, directly beneath
 // the row, when a clickable tile is selected. The active tile is ringed and points a
 // caret at the panel so the link between "the number" and "the accounts" is obvious.
@@ -292,6 +482,7 @@ function TileGrid({
             label={t.label}
             value={t.value}
             display={t.display}
+            sublabel={t.sublabel}
             tone={t.tone}
             active={openKey === t.key}
             onClick={
@@ -523,16 +714,18 @@ function InlineAccounts({
                       </div>
                     </td>
                     <td className="py-1.5 px-2">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className={`h-2 w-2 rounded-full ${toneDot(a.pp_status ?? "unknown", ["on", "on_default"], ["off"])}`} />
-                        {PP_LABEL[a.pp_status ?? "unknown"] ?? a.pp_status}
-                        {a.pp_status === "off" && (
-                          <span className="text-xs text-muted-foreground">
-                            {a.pp_enforce === "on"
-                              ? "· enforce on (hard-blocked)"
-                              : "· enforce off (workspaces can consume)"}
-                          </span>
-                        )}
+                      <span className="inline-flex items-start gap-1.5">
+                        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${toneDot(a.pp_status ?? "unknown", ["on", "on_default"], ["off"])}`} />
+                        <span>
+                          {PP_LABEL[a.pp_status ?? "unknown"] ?? a.pp_status}
+                          {a.pp_status === "off" && (
+                            <span className="text-xs text-muted-foreground">
+                              {a.pp_enforce === "on"
+                                ? " · enforce on (hard-blocked)"
+                                : " · enforce off (workspaces can consume)"}
+                            </span>
+                          )}
+                        </span>
                       </span>
                     </td>
                     <td className="py-1.5 px-2">
@@ -717,6 +910,7 @@ function PartnerPoweredTab({ data, scope = "" }: { data: DashboardOut; scope?: s
 
       <TileGrid
         scope={scope}
+        cols="lg:grid-cols-3"
         tiles={[
           {
             key: "pp_on",
@@ -741,12 +935,6 @@ function PartnerPoweredTab({ data, scope = "" }: { data: DashboardOut; scope?: s
             value: data.pp_off_enforce_off ?? 0,
             tone: (data.pp_off_enforce_off ?? 0) > 0 ? "warn" : undefined,
             filter: { label: "PP AI off · enforce off", params: { pp: "off_enforce_off" } },
-          },
-          {
-            key: "spaces",
-            icon: <MessageSquare className="h-4 w-4" />,
-            label: "Active Genie Agents (30d)",
-            value: data.active_genie_spaces ?? 0,
           },
         ]}
       />
@@ -825,38 +1013,30 @@ function GenieAccountsTab({ data, scope = "" }: { data: DashboardOut; scope?: st
   return (
     <div className="space-y-6">
       <SoWhat>
-        The UCO funnel and whitespace. Whitespace = accounts that can consume Genie
-        (PP on, or off but not enforced) and are provisioned, but have no active Genie
-        agent yet — ready to activate.
+        The Genie use-case (UCO) funnel — U1 through U6 — across the selected vertical.
       </SoWhat>
 
       {/* Summary tiles — the per-stage breakdown lives in the funnel below. */}
       <TileGrid
         scope={scope}
-        cols="lg:grid-cols-3"
+        cols="lg:grid-cols-2"
         tiles={[
           {
             key: "total",
             icon: <Layers className="h-4 w-4" />,
             label: "Total Genie use cases",
             value: data.total_use_cases,
+            sublabel: "Use-case count (funnel below = accounts per stage)",
             filter: { label: "Accounts with a Genie use case", params: { has_usecase: "true" } },
           },
           {
             key: "live",
             icon: <Sparkles className="h-4 w-4" />,
-            label: "Live (U6)",
+            label: "Live (U6) use cases",
             value: data.live_use_cases,
             tone: "good",
+            sublabel: "Use-case count (funnel Live = accounts)",
             filter: { label: "Accounts with a Live (U6) use case", params: { stage: "u6" } },
-          },
-          {
-            key: "whitespace",
-            icon: <Layers className="h-4 w-4" />,
-            label: "Whitespace",
-            value: data.whitespace_accounts ?? 0,
-            tone: (data.whitespace_accounts ?? 0) > 0 ? "warn" : undefined,
-            filter: { label: "Whitespace — can consume + provisioned, no active agent", params: { whitespace: "true" } },
           },
         ]}
       />
@@ -1006,7 +1186,7 @@ function BrickroadTab({ data }: { data: DashboardOut }) {
           },
           {
             key: "accts",
-            icon: <Users className="h-4 w-4" />,
+            icon: <Building2 className="h-4 w-4" />,
             label: "Accounts w/ issues",
             value: data.accounts_with_issues ?? 0,
             filter: { label: "Accounts with open Genie issues", params: { open_issues: "true" } },
@@ -1143,6 +1323,7 @@ function StatTile({
   label,
   value,
   display,
+  sublabel,
   tone,
   onClick,
   active,
@@ -1151,6 +1332,7 @@ function StatTile({
   label: string;
   value?: number;
   display?: string;
+  sublabel?: string;
   tone?: "good" | "warn" | "bad";
   onClick?: () => void; // when set, the tile opens an inline drill-down on this page
   active?: boolean;
@@ -1172,6 +1354,11 @@ function StatTile({
       <div className={`text-2xl font-bold mt-1 ${toneClass}`}>
         {display ?? fmtNum(value ?? 0)}
       </div>
+      {sublabel && (
+        <div className="text-[11px] leading-tight text-muted-foreground mt-1">
+          {sublabel}
+        </div>
+      )}
       {clickable && (
         // Persistent affordance so it's obvious the tile drills in (not hover-only).
         <span className="absolute bottom-2 right-2 inline-flex items-center gap-0.5 text-[11px] font-medium text-primary/70">
@@ -1216,7 +1403,7 @@ function Funnel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Count &amp; $DBU by UCO Stage</CardTitle>
+        <CardTitle className="text-base">Accounts &amp; $DBU by UCO Stage</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         {stages.map((f) => {
@@ -1249,10 +1436,15 @@ function Funnel({
               <div className="flex-1">
                 <div className="flex items-center justify-between text-sm mb-0.5">
                   <span className="text-muted-foreground truncate">{f.name}</span>
-                  <span className="font-medium">
+                  <span className="font-medium flex items-center gap-2">
+                    {(f.moved_in_30d ?? 0) > 0 && (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-normal text-xs">
+                        +{f.moved_in_7d ?? 0} 7d · +{f.moved_in_30d ?? 0} 30d
+                      </span>
+                    )}
                     {f.count}
                     {(f.monthly_dbus ?? 0) > 0 && (
-                      <span className="text-muted-foreground font-normal ml-2">
+                      <span className="text-muted-foreground font-normal">
                         {fmtDbus(f.monthly_dbus ?? 0)}/mo
                       </span>
                     )}

@@ -41,6 +41,7 @@ from genie_adoption_tracking.backend.db import (  # noqa: E402
     AccountIssue,
     StageTransition,
     UseCase,
+    VerticalBook,
 )
 
 # --- Config -------------------------------------------------------------------
@@ -279,6 +280,19 @@ JOIN (
 ) f ON g.salesforce_account_id = f.sfdc_account_id
 """
 
+# Genie-Ready TIER per account, sourced to MATCH the Product Deep Dives dashboard:
+# deployable_best_genie_ready_color (not rpt_account_genie_ready.is_green, which counts
+# differently). We also grab the value 28 days ago (…_28d_ago) so the app can show the
+# 30-day tier change and which accounts moved. Latest snapshot, keyed by SFDC id.
+TIER_QUERY = """
+SELECT account_id AS sfdc_account_id,
+  LOWER(COALESCE(deployable_best_genie_ready_color, 'unknown')) AS readiness_tier,
+  LOWER(COALESCE(deployable_best_genie_ready_color_28d_ago, 'unknown')) AS readiness_tier_prev
+FROM main.gtm_gold.temp__rpt_genie_aibi_activation_chart
+WHERE is_latest_snapshot = true
+  AND business_unit IN ('AMER Industries', 'AMER Enterprise & Emerging')
+"""
+
 # Per-account Genie/pipeline signals over the trailing 30 days, keyed by SFDC
 # account_id — the EXACT definitions used by the logfood FINS Genie dashboard, so the
 # app matches it with no discrepancies:
@@ -388,6 +402,42 @@ WHERE usage_date >= current_date() - INTERVAL 90 DAYS
 ORDER BY account_id, usage_date
 """
 
+# Per-vertical account-book totals from the GTM Genie Account Activation deep-dive
+# (latest snapshot, by sales_subregion_level_1). Display-only parity figure matching the
+# dashboard's activation count (FINS = 811) — includes dormant/non-customer accounts the
+# app's active universe excludes. Stored in gat_vertical_book, not the account list.
+VERTICAL_BOOK_QUERY = """
+WITH snaps AS (
+  SELECT DISTINCT snapshot_date FROM main.gtm_gold.temp__rpt_genie_aibi_activation_chart
+),
+dates AS (
+  SELECT MAX(snapshot_date) AS latest,
+    (SELECT MAX(snapshot_date) FROM snaps
+     WHERE snapshot_date < (SELECT MAX(snapshot_date) FROM snaps)) AS prev
+  FROM snaps
+),
+book AS (
+  SELECT sales_subregion_level_1 AS vertical, account_id,
+    snapshot_date, deployable_best_genie_ready_color AS color
+  FROM main.gtm_gold.temp__rpt_genie_aibi_activation_chart
+  WHERE business_unit IN ('AMER Industries', 'AMER Enterprise & Emerging')
+    AND sales_subregion_level_1 IS NOT NULL
+    AND snapshot_date IN ((SELECT latest FROM dates), (SELECT prev FROM dates))
+)
+SELECT vertical,
+  -- Current (latest snapshot) totals + tier counts.
+  COUNT(DISTINCT CASE WHEN snapshot_date = (SELECT latest FROM dates) THEN account_id END) AS book_total,
+  COUNT(DISTINCT CASE WHEN snapshot_date = (SELECT latest FROM dates) AND color = 'Green' THEN account_id END) AS book_green,
+  COUNT(DISTINCT CASE WHEN snapshot_date = (SELECT latest FROM dates) AND color = 'Yellow' THEN account_id END) AS book_yellow,
+  COUNT(DISTINCT CASE WHEN snapshot_date = (SELECT latest FROM dates) AND color = 'Red' THEN account_id END) AS book_red,
+  -- Previous biweekly snapshot (matches the dashboard's prior bar).
+  COUNT(DISTINCT CASE WHEN snapshot_date = (SELECT prev FROM dates) AND color = 'Green' THEN account_id END) AS book_green_prev,
+  COUNT(DISTINCT CASE WHEN snapshot_date = (SELECT prev FROM dates) AND color = 'Yellow' THEN account_id END) AS book_yellow_prev,
+  COUNT(DISTINCT CASE WHEN snapshot_date = (SELECT prev FROM dates) AND color = 'Red' THEN account_id END) AS book_red_prev
+FROM book
+GROUP BY vertical
+"""
+
 # Genie-related Brickroad issues (ALL severities) per FINS account. customer_id on
 # the issue is the Salesforce account id (matches account_dim.account_id).
 ISSUES_QUERY = """
@@ -432,7 +482,8 @@ SELECT a.account_id,
   COALESCE(NULLIF(TRIM(u.usecase_name), ''), 'Genie use case') AS usecase_name,
   COALESCE(u.usecase_description, u.description, '') AS description,
   u.stage,
-  ROUND(COALESCE(u.estimated_monthly_dollar_dbus, 0), 2) AS estimated_monthly_dollar_dbus
+  ROUND(COALESCE(u.estimated_monthly_dollar_dbus, 0), 2) AS estimated_monthly_dollar_dbus,
+  u.stage_move_in_date
 FROM main.gtm_silver.use_case_detail u
   JOIN filtered_accounts a ON u.account_id = a.account_id
 WHERE LOWER(COALESCE(u.usecase_name, '')) LIKE '%genie%'
@@ -519,6 +570,7 @@ def fetch_use_cases(ws) -> list[dict]:
                 "description": r[3] or "",
                 "stage": r[4],
                 "dbus": float(r[5] or 0),
+                "stage_move_in_date": r[6],
             }
         )
     return rows
@@ -677,6 +729,60 @@ def fetch_genie_30d(ws) -> dict[str, dict]:
     return out
 
 
+def load_security_blockers() -> dict[str, dict]:
+    """Load the Security Authority Review blocker list from the JSON snapshot
+    (refreshed by scripts/fetch_security_blockers.py from the Google Sheet). Keyed by
+    normalized (lower/stripped) account name. Missing file -> empty (no blockers)."""
+    import json
+
+    path = Path(__file__).resolve().parent / "security_blockers.json"
+    if not path.exists():
+        print("No security_blockers.json — skipping security-blocker flags")
+        return {}
+    out: dict[str, dict] = {}
+    for row in json.loads(path.read_text()):
+        nm = (row.get("name") or "").strip()
+        if nm:
+            out[nm.lower()] = {"security_status": row.get("security_status", "")}
+    return out
+
+
+def fetch_tier(ws) -> dict[str, dict]:
+    """Map SFDC account_id -> {readiness_tier, readiness_tier_prev} from the activation
+    deep-dive's deployable_best_genie_ready_color (matches the dashboard). prev = 28d ago,
+    so the app can show 30-day tier change + which accounts moved."""
+    out: dict[str, dict] = {}
+    for r in _run_query(ws, TIER_QUERY):
+        sfdc = r[0]
+        if not sfdc:
+            continue
+        out[sfdc] = {
+            "readiness_tier": (r[1] or "unknown"),
+            "readiness_tier_prev": (r[2] or "unknown"),
+        }
+    return out
+
+
+def fetch_vertical_book(ws) -> dict[str, dict]:
+    """Map vertical (sales_subregion_level_1) -> activation-book totals: overall count
+    (FINS = 811) plus Genie-Ready tier counts over the FULL book (matches the dashboard's
+    stacked bar) and their values 28 days ago."""
+    out: dict[str, dict] = {}
+    for r in _run_query(ws, VERTICAL_BOOK_QUERY):
+        v = r[0]
+        if v:
+            out[v] = {
+                "book_total": int(r[1] or 0),
+                "book_green": int(r[2] or 0),
+                "book_yellow": int(r[3] or 0),
+                "book_red": int(r[4] or 0),
+                "book_green_prev": int(r[5] or 0),
+                "book_yellow_prev": int(r[6] or 0),
+                "book_red_prev": int(r[7] or 0),
+            }
+    return out
+
+
 def fetch_genie_series(ws) -> dict[str, list]:
     """Map SFDC account_id -> daily [date, dbu] series over the last 90 days (only
     accounts with usage). Stored as compact JSON: [["2026-05-01", 12.3], ...]."""
@@ -720,8 +826,11 @@ def main() -> None:
     pp = fetch_pp(ws)
     wsc = fetch_ws(ws)
     aim = fetch_aim(ws)
+    tier = fetch_tier(ws)  # dashboard-matching tier + 28d-ago, keyed by SFDC id
     genie30 = fetch_genie_30d(ws)  # keyed by SFDC account_id
     genie_series = fetch_genie_series(ws)  # keyed by SFDC account_id -> daily [date,$]
+    sec_blockers = load_security_blockers()  # keyed by normalized account name
+    vertical_book = fetch_vertical_book(ws)  # vertical -> activation-book total (parity)
     issues = fetch_issues(ws)
     pp_off = sum(1 for v in pp.values() if v["pp_status"] == "off")
     aim_off = sum(1 for v in aim.values() if v["aim_status"] == "off")
@@ -813,9 +922,12 @@ def main() -> None:
                 pp_row = pp.get(sfdc, {})
                 ws_row = wsc.get(sfdc, {})
                 aim_row = aim.get(sfdc, {})
+                tier_row = tier.get(sfdc, {})  # dashboard-matching tier + 28d-ago
                 g30 = genie30.get(sfdc, {})  # 30d Genie signals, keyed by SFDC id
+                sec = sec_blockers.get(name.strip().lower())  # matched by account name
                 fields = dict(
                     name=name,
+                    security_status=(sec or {}).get("security_status", ""),
                     sub_vertical=a["sub_vertical"],
                     vertical=a["vertical"],
                     ae_owner=a["ae"],
@@ -832,7 +944,8 @@ def main() -> None:
                     provisioning_status=aim_row.get("provisioning_status", "unknown"),
                     provisioning_ws_enabled=aim_row.get("provisioning_ws_enabled", 0),
                     provisioning_ws_total=aim_row.get("provisioning_ws_total", 0),
-                    readiness_tier=aim_row.get("readiness_tier", "unknown"),
+                    readiness_tier=tier_row.get("readiness_tier", "unknown"),
+                    readiness_tier_prev=tier_row.get("readiness_tier_prev", "unknown"),
                     # Trailing-30d Genie signals, keyed by SFDC account_id (logfood-exact):
                     #   genie_active = Genie space w/ message usage in last 30d
                     #   genie_dollars_t30d / genie_spend_90d = standalone-Genie DBU $ (30d)
@@ -851,9 +964,10 @@ def main() -> None:
                     genie_dbu_t28d=g30.get("genie_dbu_t28d", 0.0),
                     genie_dbu_t90d=g30.get("genie_dbu_t90d", 0.0),
                 )
-                # Set separately (a JSON list, not a scalar) so the scalar `fields`
-                # dict stays str/number-typed for the **fields unpack below.
+                # Set separately (a JSON list / bool, not str/number) so the scalar
+                # `fields` dict stays str/number-typed for the **fields unpack below.
                 series_val = genie_series.get(sfdc, [])
+                sec_blocker_val = sec is not None
                 # Match by sfdc id; else adopt an existing name-keyed row (first run);
                 # else it's genuinely new. by_name is only used when NOT already claimed
                 # by another sfdc id this run (guards duplicate names on first run).
@@ -865,6 +979,7 @@ def main() -> None:
                 if acct is None:
                     acct = Account(id=_uid(), sfdc_account_id=sfdc, created_by=SEED_MARKER, **fields)
                     acct.genie_dbu_series = series_val
+                    acct.security_blocker = sec_blocker_val
                     session.add(acct)
                     n_new += 1
                 else:
@@ -872,10 +987,20 @@ def main() -> None:
                     for k, v in fields.items():
                         setattr(acct, k, v)
                     acct.genie_dbu_series = series_val
+                    acct.security_blocker = sec_blocker_val
                     session.add(acct)
                 account_ids[sfdc] = acct.id
                 n_accounts += 1
             session.flush()
+
+            # --- Per-vertical activation-book totals (display-only parity numbers for
+            # Signals; NOT seeded into gat_account). Rebuild fresh each run. ---
+            if vertical_book:
+                session.exec(delete(VerticalBook))
+                session.flush()
+                for v, b in vertical_book.items():
+                    session.add(VerticalBook(vertical=v, **b))
+                session.flush()
 
             # --- GTM-mirror children: rebuild fresh (no user data on these) ---
             # Safe inside the txn — rolled back with everything else on failure.
@@ -903,6 +1028,7 @@ def main() -> None:
                         id=ucid, account_id=aid, title=row["usecase_name"],
                         description=row["description"], stage=stage,
                         estimated_monthly_dbus=row["dbus"], created_by=SEED_MARKER,
+                        stage_move_in_date=row.get("stage_move_in_date"),
                     )
                 )
                 pending_transitions.append((ucid, stage))

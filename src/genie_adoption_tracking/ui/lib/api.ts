@@ -38,6 +38,8 @@ export interface AccountDetailOut {
     readiness_pct?: number;
     readiness_tier?: string;
     sa_owner: string;
+    security_blocker?: boolean;
+    security_status?: string;
     sub_vertical: string;
     use_cases: UseCaseListOut[];
     ws_pp_off?: number;
@@ -313,6 +315,7 @@ export interface DashboardOut {
     genie_ready_accounts?: GenieReadyAccountOut[];
     genie_revenue_t30d?: number;
     genie_spend_90d?: number;
+    insights?: InsightOut[];
     issues_at_risk?: number;
     live_use_cases: number;
     open_blockers: number;
@@ -325,14 +328,18 @@ export interface DashboardOut {
     stalled: StalledUseCaseOut[];
     sub_verticals?: SubVerticalStatOut[];
     tier_green?: number;
+    tier_green_change_30d?: number;
     tier_red?: number;
+    tier_red_change_30d?: number;
     tier_unknown?: number;
     tier_yellow?: number;
+    tier_yellow_change_30d?: number;
     top_resources: TopResourceOut[];
     total_accounts: number;
     total_monthly_dbus?: number;
     total_revenue_impact?: number;
     total_use_cases: number;
+    vertical_book_total?: number;
     whitespace_accounts?: number;
     whitespace_top?: WhitespaceAccountOut[];
     workspaces_with_genie?: number;
@@ -341,6 +348,8 @@ export interface FunnelBucketOut {
     code: string;
     count: number;
     monthly_dbus?: number;
+    moved_in_30d?: number;
+    moved_in_7d?: number;
     name: string;
     stage: string;
 }
@@ -382,6 +391,12 @@ export interface GenieStatusOut {
 }
 export interface HTTPValidationError {
     detail?: ValidationError[];
+}
+export interface InsightOut {
+    filter_label?: string;
+    filter_params?: Record<string, unknown>;
+    text: string;
+    tone?: string;
 }
 export interface Name {
     family_name?: string | null;
@@ -569,6 +584,8 @@ export interface ListAccountsParams {
     vertical?: string;
     all?: boolean;
     genie_activated?: boolean;
+    tier_moved_in?: string;
+    tier_moved_out?: string;
 }
 export const listAccounts = async (params?: ListAccountsParams, options?: RequestInit): Promise<{
     data: AccountOut[];
@@ -590,6 +607,8 @@ export const listAccounts = async (params?: ListAccountsParams, options?: Reques
     if (params?.vertical != null) searchParams.set("vertical", String(params?.vertical));
     if (params?.all != null) searchParams.set("all", String(params?.all));
     if (params?.genie_activated != null) searchParams.set("genie_activated", String(params?.genie_activated));
+    if (params?.tier_moved_in != null) searchParams.set("tier_moved_in", String(params?.tier_moved_in));
+    if (params?.tier_moved_out != null) searchParams.set("tier_moved_out", String(params?.tier_moved_out));
     const queryString = searchParams.toString();
     const url = queryString ? `/api/accounts?${queryString}` : "/api/accounts";
     const res = await fetch(url, {

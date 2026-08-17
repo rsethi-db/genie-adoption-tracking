@@ -206,6 +206,8 @@ class AccountDetailOut(BaseModel):
     active_genie_spaces: int = 0
     genie_active: bool = False
     genie_dbu_series: list = []
+    security_blocker: bool = False
+    security_status: str = ""
     readiness_pct: int = 0
     created_at: datetime
     open_blockers: int
@@ -333,12 +335,27 @@ class OkOut(BaseModel):
 # --------------------------------------------------------------------------------------
 
 
+class InsightOut(BaseModel):
+    """An auto-generated highlight bullet for the Signals footer. When `filter_params`
+    is set, the UI can expand the bullet to list the accounts behind it (same params
+    the /accounts endpoint accepts)."""
+
+    text: str
+    tone: str = "neutral"  # good | warn | bad | neutral
+    filter_label: str = ""
+    filter_params: dict = {}
+
+
 class FunnelBucketOut(BaseModel):
     stage: str
     code: str
     name: str
     count: int
     monthly_dbus: float = 0.0
+    # Accounts that had a use case move INTO this stage in the trailing 7 / 30 days
+    # (from GTM stage_move_in_date) — the WoW / MoM flow.
+    moved_in_7d: int = 0
+    moved_in_30d: int = 0
 
 
 class BlockerAggOut(BaseModel):
@@ -439,6 +456,10 @@ class DashboardOut(BaseModel):
     accounts_with_issues: int = 0
     genie_active_accounts: int = 0
     genie_activated_accounts: int = 0  # GTM "Activated Account" (200+ BMAU 2mo + AIM/SCIM)
+    # Full account book for the selected vertical from the GTM activation deep-dive
+    # (the dashboard's parity figure, e.g. FINS = 811). Display-only; broader than the
+    # app's active universe (includes dormant/non-customer accounts). 0 = all verticals.
+    vertical_book_total: int = 0
     workspaces_with_genie: int = 0
     genie_spend_90d: float = 0.0
     # --- logfood parity: headline / Partner-Powered AI page ---
@@ -456,6 +477,10 @@ class DashboardOut(BaseModel):
     tier_yellow: int = 0
     tier_red: int = 0
     tier_unknown: int = 0
+    # Net 30-day (28d) change per tier = current count − count 28 days ago.
+    tier_green_change_30d: int = 0
+    tier_yellow_change_30d: int = 0
+    tier_red_change_30d: int = 0
     funnel: list[FunnelBucketOut]
     blockers_by_category: list[BlockerAggOut]
     stalled: list[StalledUseCaseOut]
@@ -466,6 +491,8 @@ class DashboardOut(BaseModel):
     brickroad_issues: list[BrickroadIssueOut] = []
     genie_ready_accounts: list[GenieReadyAccountOut] = []
     sub_verticals: list[SubVerticalStatOut] = []
+    # Auto-generated highlight bullets (tone: good | warn | bad | neutral).
+    insights: list["InsightOut"] = []
 
 
 # AccountDetailOut forward-references UseCaseListOut (defined above), resolve it.

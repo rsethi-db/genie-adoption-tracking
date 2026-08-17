@@ -28,6 +28,7 @@ _MIGRATIONS = [
     "ALTER TABLE gat_use_case "
     "ADD COLUMN IF NOT EXISTS estimated_monthly_dbus "
     "DOUBLE PRECISION NOT NULL DEFAULT 0",
+    "ALTER TABLE gat_use_case ADD COLUMN IF NOT EXISTS stage_move_in_date TIMESTAMP",
     "ALTER TABLE gat_account "
     "ADD COLUMN IF NOT EXISTS dsa_owner VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_account "
@@ -58,6 +59,15 @@ _MIGRATIONS = [
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS genie_dbu_t28d DOUBLE PRECISION NOT NULL DEFAULT 0",
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS genie_dbu_t90d DOUBLE PRECISION NOT NULL DEFAULT 0",
     "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS genie_dbu_series JSON NOT NULL DEFAULT '[]'",
+    "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS security_blocker BOOLEAN NOT NULL DEFAULT false",
+    "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS security_status VARCHAR NOT NULL DEFAULT ''",
+    "ALTER TABLE gat_account ADD COLUMN IF NOT EXISTS readiness_tier_prev VARCHAR NOT NULL DEFAULT 'unknown'",
+    "ALTER TABLE gat_vertical_book ADD COLUMN IF NOT EXISTS book_green INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE gat_vertical_book ADD COLUMN IF NOT EXISTS book_yellow INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE gat_vertical_book ADD COLUMN IF NOT EXISTS book_red INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE gat_vertical_book ADD COLUMN IF NOT EXISTS book_green_prev INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE gat_vertical_book ADD COLUMN IF NOT EXISTS book_yellow_prev INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE gat_vertical_book ADD COLUMN IF NOT EXISTS book_red_prev INTEGER NOT NULL DEFAULT 0",
     # Adoption task state/history: human-readable account/task + questionnaire ordering.
     "ALTER TABLE gat_adoption_task_state ADD COLUMN IF NOT EXISTS account_name VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_adoption_task_state ADD COLUMN IF NOT EXISTS task_name VARCHAR NOT NULL DEFAULT ''",
