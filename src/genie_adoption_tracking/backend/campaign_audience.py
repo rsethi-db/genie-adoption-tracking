@@ -25,6 +25,8 @@ from .models import (
     AudienceFilters,
     AudienceQueryIn,
     AudienceQueryOut,
+    AudienceSqlIn,
+    AudienceSqlOut,
 )
 
 router = create_router()
@@ -111,9 +113,19 @@ def _extract_json(text: str) -> dict:
         return {}
 
 
+# Hard ceiling on the LLM parse. The SDK's serving query has no per-call timeout, so
+# a slow/unreachable endpoint (or expired creds) would otherwise block the request
+# thread forever — and enough of those exhaust FastAPI's sync threadpool, hanging the
+# whole app. Bounding it here guarantees the handler is freed and degrades to "no
+# filters recognized" instead of a spinner that never resolves.
+_LLM_TIMEOUT_S = 12
+
+
 def _parse_filters(ws: WorkspaceClient, endpoint: str, text: str) -> AudienceFilters:
     """Ask the LLM to turn the description into structured filters."""
-    try:
+    import concurrent.futures
+
+    def _call() -> str:
         resp = ws.serving_endpoints.query(
             name=endpoint,
             messages=[
@@ -124,7 +136,16 @@ def _parse_filters(ws: WorkspaceClient, endpoint: str, text: str) -> AudienceFil
             temperature=0.0,
         )
         msg = resp.choices[0].message if resp.choices else None
-        raw = (msg.content if msg else "") or ""
+        return (msg.content if msg else "") or ""
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            raw = ex.submit(_call).result(timeout=_LLM_TIMEOUT_S)
+    except concurrent.futures.TimeoutError:
+        logger.warning(
+            f"Audience LLM parse timed out after {_LLM_TIMEOUT_S}s (endpoint={endpoint})"
+        )
+        raw = ""
     except Exception as e:  # endpoint unavailable / query failed
         logger.warning(f"Audience LLM parse failed: {e}")
         raw = ""
@@ -166,6 +187,11 @@ def _describe(f: AudienceFilters) -> str:
     if f.open_issues is not None:
         bits.append("has open issues" if f.open_issues else "no open issues")
     return " · ".join(bits) if bits else "No filters recognized — showing no accounts."
+
+
+def _sql_literal(v: str) -> str:
+    """Single-quote a string literal for inline SQL, escaping embedded quotes."""
+    return "'" + v.replace("'", "''") + "'"
 
 
 def _acct_is_whitespace(a: Account) -> bool:
@@ -355,9 +381,12 @@ def query_audience(
         )
     filters = _parse_filters(ws, config.llm_endpoint, text)
     interpreted = _describe(filters)
+    sql = _to_sql(filters)
     # With no recognized filter, return nothing rather than the whole table.
     if not _has_any_filter(filters):
-        return AudienceQueryOut(filters=filters, interpreted=interpreted, accounts=[])
+        return AudienceQueryOut(
+            filters=filters, interpreted=interpreted, accounts=[], sql=sql
+        )
     accounts = session.exec(select(Account)).all()
     # Precompute use-case / open-issue account sets once (needed for has_use_case /
     # open_issues, which can't be read off the Account row alone).
@@ -386,5 +415,95 @@ def query_audience(
     matched = [_account_out(a) for a in accounts if _passes(a)]
     matched.sort(key=lambda a: a.arr, reverse=True)
     return AudienceQueryOut(
-        filters=filters, interpreted=interpreted, sql=_to_sql(filters), accounts=matched
+        filters=filters, interpreted=interpreted, accounts=matched, sql=sql
     )
+
+
+# --------------------------------------------------------------------------------------
+# Run edited SQL — the user can tweak the generated query and re-run it to override the
+# NL parse. Read-only by construction: a single leading SELECT, no semicolons, executed
+# in a read-only transaction with a statement timeout so it can't mutate or hang.
+# --------------------------------------------------------------------------------------
+
+
+def _row_to_account(row) -> AudienceAccountOut:
+    """Map a result row (accessed by column name) to AudienceAccountOut. Only `id` and
+    `name` are required; everything else falls back to a sensible default if the edited
+    SELECT didn't project it."""
+    m = row._mapping
+    ae = m.get("ae_owner") or ""
+    sa = m.get("sa_owner") or ""
+    return AudienceAccountOut(
+        account_id=str(m.get("id") or m.get("account_id") or ""),
+        account_name=str(m.get("name") or m.get("account_name") or ""),
+        ae_owner=ae,
+        sa_owner=sa,
+        ae_email=derive_email(ae),
+        sa_email=derive_email(sa),
+        arr=float(m.get("arr") or 0.0),
+        pp_status=str(m.get("pp_status") or "unknown"),
+        genie_spend_90d=float(m.get("genie_spend_90d") or 0.0),
+    )
+
+
+def _validate_select(sql: str) -> tuple[str | None, str]:
+    """Validate that `sql` is a safe single read-only SELECT.
+
+    Returns (cleaned_sql, "") on success, or (None, error_message) on rejection."""
+    s = (sql or "").strip().rstrip(";").strip()
+    if not s:
+        return None, "Enter a SQL query."
+    # No statement chaining — a lone trailing ';' was already stripped above.
+    if ";" in s:
+        return None, "Only a single statement is allowed."
+    low = s.lower()
+    if not (low.startswith("select") or low.startswith("with")):
+        return None, "Only SELECT queries are allowed."
+    # Belt-and-suspenders: reject obvious write/DDL keywords as whole words. The
+    # read-only transaction below is the real guard, but this gives a clearer message.
+    banned = ("insert", "update", "delete", "drop", "alter", "truncate", "create",
+              "grant", "revoke", "merge", "copy", "call", "vacuum")
+    if re.search(r"\b(" + "|".join(banned) + r")\b", low):
+        return None, "Only read-only SELECT queries are allowed."
+    return s, ""
+
+
+@router.post(
+    "/campaigns/audience/run-sql",
+    response_model=AudienceSqlOut,
+    operation_id="runCampaignAudienceSql",
+)
+def run_audience_sql(body: AudienceSqlIn, session: Dependencies.Session):
+    """Execute a (possibly hand-edited) read-only SELECT over gat_account and return
+    the matching accounts, so the user can override the NL parse with their own SQL."""
+    from sqlalchemy import text as sa_text
+    from sqlalchemy.exc import SQLAlchemyError
+
+    safe, err = _validate_select(body.sql or "")
+    if safe is None:
+        return AudienceSqlOut(accounts=[], error=err)
+
+    try:
+        conn = session.connection()
+        # Read-only + bounded: no writes can commit, and a runaway query is killed.
+        conn.execute(sa_text("SET TRANSACTION READ ONLY"))
+        conn.execute(sa_text("SET LOCAL statement_timeout = 8000"))
+        result = conn.execute(sa_text(safe))
+        rows = result.fetchmany(500)
+    except SQLAlchemyError as e:
+        session.rollback()
+        # Surface the DB's message (e.g. bad column) so the user can fix their SQL.
+        msg = str(getattr(e, "orig", e)).strip().splitlines()[0]
+        return AudienceSqlOut(accounts=[], error=msg or "Query failed.")
+    finally:
+        # Never leave the read-only marker on the pooled connection.
+        session.rollback()
+
+    try:
+        accounts = [_row_to_account(r) for r in rows]
+    except Exception:
+        return AudienceSqlOut(
+            accounts=[],
+            error="Query ran but is missing required columns (need at least id and name).",
+        )
+    return AudienceSqlOut(accounts=accounts, error="")

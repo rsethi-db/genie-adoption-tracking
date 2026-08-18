@@ -197,6 +197,13 @@ export interface AudienceQueryOut {
     interpreted: string;
     sql?: string;
 }
+export interface AudienceSqlIn {
+    sql: string;
+}
+export interface AudienceSqlOut {
+    accounts: AudienceAccountOut[];
+    error?: string;
+}
 export interface BlockerAggOut {
     category_key: string;
     category_name: string;
@@ -1231,6 +1238,42 @@ export function useQueryCampaignAudience(options?: {
 }) {
     return useMutation({
         mutationFn: (data)=>queryCampaignAudience(data),
+        ...options?.mutation
+    });
+}
+export const runCampaignAudienceSql = async (data: AudienceSqlIn, options?: RequestInit): Promise<{
+    data: AudienceSqlOut;
+}> =>{
+    const res = await fetch("/api/campaigns/audience/run-sql", {
+        ...options,
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...options?.headers
+        },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export function useRunCampaignAudienceSql(options?: {
+    mutation?: UseMutationOptions<{
+        data: AudienceSqlOut;
+    }, ApiError, AudienceSqlIn>;
+}) {
+    return useMutation({
+        mutationFn: (data)=>runCampaignAudienceSql(data),
         ...options?.mutation
     });
 }
