@@ -77,9 +77,7 @@ _MIGRATIONS = [
     "ALTER TABLE gat_adoption_task_history ADD COLUMN IF NOT EXISTS task_name VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_adoption_task_history ADD COLUMN IF NOT EXISTS task_order INTEGER NOT NULL DEFAULT 0",
     # Campaign redesign: time-boxed outreach to a chosen set of accounts + a Form.
-    # New columns are added to any pre-existing gat_campaign; the dropped legacy
-    # columns (ask/cta/segment/sub_vertical/deadline/priority/active) are simply left
-    # in place if present — harmless and avoids destructive DDL.
+    # New columns are added to any pre-existing gat_campaign.
     "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS start_date VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS end_date VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS audience_text VARCHAR NOT NULL DEFAULT ''",
@@ -88,6 +86,18 @@ _MIGRATIONS = [
     # In-app questionnaire + activation.
     "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS form_token VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS status VARCHAR NOT NULL DEFAULT 'draft'",
+    # The redesign dropped these columns from the model, but a pre-existing table
+    # created under the old schema still has them as NOT NULL with no default. The
+    # new code never sets them, so every INSERT violated their NOT NULL constraint
+    # ("null value in column ask ..."). We keep the columns (non-destructive) but drop
+    # NOT NULL so the current insert succeeds. IF EXISTS guards a table already migrated.
+    "ALTER TABLE gat_campaign ALTER COLUMN ask DROP NOT NULL",
+    "ALTER TABLE gat_campaign ALTER COLUMN cta DROP NOT NULL",
+    "ALTER TABLE gat_campaign ALTER COLUMN segment DROP NOT NULL",
+    "ALTER TABLE gat_campaign ALTER COLUMN sub_vertical DROP NOT NULL",
+    "ALTER TABLE gat_campaign ALTER COLUMN deadline DROP NOT NULL",
+    "ALTER TABLE gat_campaign ALTER COLUMN priority DROP NOT NULL",
+    "ALTER TABLE gat_campaign ALTER COLUMN active DROP NOT NULL",
 ]
 
 
@@ -96,13 +106,21 @@ class _MigrationDependency(LifespanDependency):
     async def lifespan(self, app: FastAPI) -> AsyncGenerator[None, None]:
         engine = getattr(app.state, "engine", None)
         if engine is not None:
-            try:
-                with engine.begin() as conn:
-                    for stmt in _MIGRATIONS:
+            # Each statement runs in its own transaction so one failure doesn't roll
+            # back the rest. This matters because some statements are conditionally
+            # applicable — e.g. `ALTER COLUMN ask DROP NOT NULL` errors on a fresh DB
+            # where the legacy column never existed (Postgres has no IF EXISTS form
+            # for it); that expected failure must not abort the other migrations.
+            applied = failed = 0
+            for stmt in _MIGRATIONS:
+                try:
+                    with engine.begin() as conn:
                         conn.execute(text(stmt))
-                logger.info("Startup migrations applied")
-            except Exception as e:  # non-fatal: never block startup on a migration
-                logger.warning(f"Startup migration skipped: {e}")
+                    applied += 1
+                except Exception as e:  # non-fatal: never block startup on a migration
+                    failed += 1
+                    logger.warning(f"Startup migration skipped: {stmt!r}: {e}")
+            logger.info(f"Startup migrations: {applied} applied, {failed} skipped")
         yield
 
     @staticmethod
