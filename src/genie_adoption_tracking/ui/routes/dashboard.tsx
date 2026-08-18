@@ -10,15 +10,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
-  Users,
+  Building2,
   Layers,
   DollarSign,
   ShieldAlert,
   ShieldCheck,
-  Gauge,
   Bug,
   Sparkles,
-  MessageSquare,
   ArrowUpDown,
   ArrowRight,
   X,
@@ -37,12 +35,41 @@ function fmtNum(n: number): string {
   return (n ?? 0).toLocaleString("en-US");
 }
 
+// Percentage of a whole, e.g. pct(158, 499) → "32%". Guards divide-by-zero.
+function pct(n?: number, total?: number): string {
+  if (!total) return "0%";
+  return `${Math.round(((n ?? 0) / total) * 100)}%`;
+}
+
+// Signed change, e.g. chg(22) → "+22", chg(-3) → "−3", chg(0) → "±0".
+function chg(n?: number): string {
+  const v = n ?? 0;
+  if (v > 0) return `+${v}`;
+  if (v < 0) return `−${Math.abs(v)}`;
+  return "±0";
+}
+
 const TIER_DOT: Record<string, string> = {
   green: "bg-emerald-500",
   yellow: "bg-amber-500",
   red: "bg-destructive",
   unknown: "bg-muted-foreground/50",
 };
+
+// AMER verticals (sales_subregion_level_1) across both AMER business units. Signals
+// is always scoped to one vertical; FINS is the default.
+const VERTICALS = [
+  "FINS",
+  "MFG",
+  "HLS",
+  "CMEG",
+  "RCT",
+  "DNB",
+  "PS",
+  "EE & Startup",
+  "CAN",
+  "LATAM",
+] as const;
 
 export const Route = createFileRoute("/dashboard")({
   component: () => <DashboardPage />,
@@ -69,7 +96,12 @@ interface AcctRow {
   provisioning_status?: string;
   use_case_count?: number;
   genie_spend_90d?: number;
+  genie_dbu_t7d?: number;
+  genie_dbu_t28d?: number;
+  genie_dbu_t90d?: number;
+  genie_dbu_series?: [string, number][];
   active_genie_spaces?: number;
+  genie_activated?: boolean;
   open_issues?: number;
   open_blockers?: number;
 }
@@ -81,79 +113,340 @@ interface TileSpec {
   label: string;
   value?: number;
   display?: string;
+  sublabel?: string; // small caption under the value (e.g. tier definition)
   tone?: "good" | "warn" | "bad";
   filter?: AcctFilter;
 }
 
 function DashboardPage() {
+  // Vertical scope for every Signals metric + drill-down. Always one vertical; FINS default.
+  const [vertical, setVertical] = useState<string>("FINS");
+  const scope = vertical;
+
   return (
     <AppShell>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Signals</h1>
-        <p className="text-sm text-muted-foreground">
-          FINS Genie adoption at a glance
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold">Signals</h1>
+          <p className="text-sm text-muted-foreground">
+            AMER Genie adoption at a glance · {scope}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1 rounded-md border p-0.5">
+          {VERTICALS.map((v) => (
+            <button
+              key={v}
+              onClick={() => setVertical(v)}
+              className={cn(
+                "px-3 h-9 rounded text-sm font-medium transition-colors whitespace-nowrap",
+                vertical === v
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
       </div>
       <Suspense fallback={<DashboardSkeleton />}>
-        <DashboardBody />
+        <DashboardBody scope={scope} />
       </Suspense>
     </AppShell>
   );
 }
 
-function DashboardBody() {
-  const { data } = useGetDashboardSuspense(selector());
+function DashboardBody({ scope }: { scope: string }) {
+  const { data } = useGetDashboardSuspense({
+    ...selector<DashboardOut>(),
+    params: scope ? { vertical: scope } : undefined,
+  });
 
   return (
     <div className="space-y-6">
-      {/* Headline row (start big) — click a tile to expand the accounts beneath it */}
-      <TileGrid
-        cols="lg:grid-cols-5"
-        tiles={[
-          { key: "total", icon: <Users className="h-4 w-4" />, label: "FINS accounts", value: data.total_accounts },
-          {
-            key: "genie_active",
-            icon: <Sparkles className="h-4 w-4" />,
-            label: "Genie-active (30d)",
-            value: data.genie_active_accounts ?? 0,
-            tone: "good",
-            filter: { label: "Genie-active accounts (last 30d)", params: { genie_active: "true" } },
-          },
-          {
-            key: "revenue",
-            icon: <DollarSign className="h-4 w-4" />,
-            label: "Genie revenue (30d)",
-            display: fmtDbus(data.genie_revenue_t30d ?? 0),
-            tone: "good",
-            filter: { label: "Accounts with Genie spend (30d)", params: { has_spend: "true" } },
-          },
-          { key: "readiness", icon: <Gauge className="h-4 w-4" />, label: "Avg readiness", display: `${data.avg_readiness_pct ?? 0}%` },
-          { key: "pipeline", icon: <DollarSign className="h-4 w-4" />, label: "Est. pipeline $/mo", display: fmtDbus(data.est_pipeline_per_month ?? 0) },
-        ]}
-      />
+      {/* Global account search — find any account by name/AE/SA/DSA, scoped to the
+          selected vertical. Nothing renders until the user types. */}
+      <GlobalAccountSearch scope={scope} />
+
+      {/* Headline — account book + active subset. */}
+      <Card>
+        <CardContent className="py-4 flex items-baseline gap-3 flex-wrap">
+          <Building2 className="h-4 w-4 text-muted-foreground self-center" />
+          <span className="text-3xl font-bold">{fmtNum(data.vertical_book_total ?? 0)}</span>
+          <span className="text-sm text-muted-foreground">accounts{scope ? ` in ${scope}` : ""}</span>
+          <span className="text-sm text-muted-foreground">
+            · {fmtNum(data.total_accounts)} active (paid usage, last 6 mo)
+          </span>
+        </CardContent>
+      </Card>
+
+      {/* Genie-Ready tiers (Account Readiness). Click a tier to see its accounts. */}
+      <div>
+        <div className="text-sm font-medium mb-2">Genie Ready — Account Readiness</div>
+        <TileGrid
+          scope={scope}
+          cols="lg:grid-cols-3"
+          tiles={[
+            {
+              key: "tier_green",
+              icon: <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" />,
+              label: "Green",
+              value: data.tier_green ?? 0,
+              tone: "good",
+              sublabel: `${chg(data.tier_green_change_30d)} vs ${(data.tier_green ?? 0) - (data.tier_green_change_30d ?? 0)} a month ago · Consumer / SQL entitlements in place`,
+              filter: { label: "Genie-Ready tier: Green", params: { tier: "green" } },
+            },
+            {
+              key: "tier_yellow",
+              icon: <span className="h-2.5 w-2.5 rounded-full bg-amber-500 inline-block" />,
+              label: "Yellow",
+              value: data.tier_yellow ?? 0,
+              tone: "warn",
+              sublabel: `${chg(data.tier_yellow_change_30d)} vs ${(data.tier_yellow ?? 0) - (data.tier_yellow_change_30d ?? 0)} a month ago · AIM / SCIM / Unified Login present`,
+              filter: { label: "Genie-Ready tier: Yellow", params: { tier: "yellow" } },
+            },
+            {
+              key: "tier_red",
+              icon: <span className="h-2.5 w-2.5 rounded-full bg-destructive inline-block" />,
+              label: "Red",
+              value: data.tier_red ?? 0,
+              tone: "bad",
+              sublabel: `${chg(data.tier_red_change_30d)} vs ${(data.tier_red ?? 0) - (data.tier_red_change_30d ?? 0)} a month ago · No UC pre-reqs nor identity mgmt, and Genie active`,
+              filter: { label: "Genie-Ready tier: Red", params: { tier: "red" } },
+            },
+          ]}
+        />
+        <TierMovedRow scope={scope} />
+      </div>
+
+      {/* High-level Genie activity. Click a tile to drill into the accounts. */}
+      <div>
+        <div className="text-sm font-medium mb-2">Genie activity</div>
+        <TileGrid
+          scope={scope}
+          cols="lg:grid-cols-4"
+          tiles={[
+            {
+              key: "ga_active",
+              icon: <Sparkles className="h-4 w-4" />,
+              label: "Genie-active (30d)",
+              value: data.genie_active_accounts ?? 0,
+              tone: "good",
+              sublabel: `${pct(data.genie_active_accounts, data.total_accounts)} of active accounts · ≥1 Genie space with message usage in last 30d`,
+              filter: { label: "Genie-active accounts (last 30d)", params: { genie_active: "true" } },
+            },
+            {
+              key: "ga_activated",
+              icon: <ShieldCheck className="h-4 w-4" />,
+              label: "Activated",
+              value: data.genie_activated_accounts ?? 0,
+              tone: "good",
+              sublabel: "200+ Genie BMAU 2 mo + AIM/SCIM",
+              filter: {
+                label: "Activated accounts (200+ Genie BMAU 2 mo + AIM/SCIM)",
+                params: { genie_activated: "true" },
+              },
+            },
+            {
+              key: "ga_revenue",
+              icon: <DollarSign className="h-4 w-4" />,
+              label: "Genie Agent $ (30d)",
+              display: fmtDbus(data.genie_revenue_t30d ?? 0),
+              tone: "good",
+              sublabel: "DBSQL consumption",
+              filter: { label: "Accounts with Genie spend (30d)", params: { has_spend: "true" } },
+            },
+            {
+              key: "ga_whitespace",
+              icon: <Layers className="h-4 w-4" />,
+              label: "Whitespace",
+              value: data.whitespace_accounts ?? 0,
+              tone: (data.whitespace_accounts ?? 0) > 0 ? "warn" : undefined,
+              sublabel: "Can consume + provisioned, no agent",
+              filter: { label: "Whitespace — can consume + provisioned, no active agent", params: { whitespace: "true" } },
+            },
+          ]}
+        />
+      </div>
 
       {/* Four lenses, mirroring the logfood dashboard's pages */}
       <Tabs defaultValue="pp">
         <TabsList>
           <TabsTrigger value="pp">Partner-Powered AI</TabsTrigger>
-          <TabsTrigger value="accounts">Genie Accounts</TabsTrigger>
+          <TabsTrigger value="accounts">Genie UCOs</TabsTrigger>
           <TabsTrigger value="subvertical">By Sub-Vertical</TabsTrigger>
           <TabsTrigger value="brickroad">Brickroad</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pp" className="mt-4">
-          <PartnerPoweredTab data={data} />
+          <PartnerPoweredTab data={data} scope={scope} />
         </TabsContent>
         <TabsContent value="accounts" className="mt-4">
-          <GenieAccountsTab data={data} />
+          <GenieAccountsTab data={data} scope={scope} />
         </TabsContent>
         <TabsContent value="subvertical" className="mt-4">
-          <SubVerticalTab data={data} />
+          <SubVerticalTab data={data} scope={scope} />
         </TabsContent>
         <TabsContent value="brickroad" className="mt-4">
           <BrickroadTab data={data} />
         </TabsContent>
       </Tabs>
+
+      <InsightsPanel data={data} scope={scope} />
+    </div>
+  );
+}
+
+// Auto-generated highlight bullets at the bottom of Signals.
+const INSIGHT_DOT: Record<string, string> = {
+  good: "bg-emerald-500",
+  warn: "bg-amber-500",
+  bad: "bg-destructive",
+  neutral: "bg-muted-foreground/50",
+};
+function InsightsPanel({ data, scope }: { data: DashboardOut; scope: string }) {
+  const insights = data.insights ?? [];
+  const [openIdx, setOpenIdx] = useState<number | null>(null);
+  if (insights.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Key insights — Genie UCOs</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-2">
+          {insights.map((ins, i) => {
+            const params = ins.filter_params ?? {};
+            const canExpand = Object.keys(params).length > 0;
+            const isOpen = openIdx === i;
+            return (
+              <li key={i}>
+                <div className="flex items-start gap-2 text-sm">
+                  <span
+                    className={cn(
+                      "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                      INSIGHT_DOT[ins.tone ?? "neutral"] ?? INSIGHT_DOT.neutral,
+                    )}
+                  />
+                  <span className="flex-1">{ins.text}</span>
+                  {canExpand && (
+                    <button
+                      type="button"
+                      onClick={() => setOpenIdx(isOpen ? null : i)}
+                      className="shrink-0 inline-flex items-center gap-0.5 text-xs font-medium text-primary hover:underline"
+                    >
+                      {isOpen ? "Hide" : "View accounts"}
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                {canExpand && isOpen && (
+                  <div className="mt-2">
+                    <InlineAccounts
+                      key={i}
+                      filter={{
+                        label: ins.filter_label || "Accounts",
+                        params: params as Record<string, string>,
+                      }}
+                      scope={scope}
+                      onClose={() => setOpenIdx(null)}
+                      showFilter={false}
+                    />
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Global account search on the Signals page — type a name/AE/SA/DSA and the full
+// account table (same columns as tile drill-downs) renders below. Scoped to the
+// selected vertical. Nothing shows until the user types.
+function GlobalAccountSearch({ scope }: { scope: string }) {
+  const [q, setQ] = useState("");
+  const needle = q.trim();
+  return (
+    <div>
+      <div className="relative max-w-xl">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={`Search accounts${scope ? ` in ${scope}` : ""} by name, AE, SA, or DSA…`}
+          className="pl-9 h-11"
+        />
+        {needle && (
+          <button
+            type="button"
+            onClick={() => setQ("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label="Clear search"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      {needle && (
+        <div className="mt-2">
+          <InlineAccounts
+            key={needle}
+            filter={{ label: `Search: “${needle}”`, params: { q: needle } }}
+            scope={scope}
+            onClose={() => setQ("")}
+            showFilter={false}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// "Moved into tier (last 30d)" — click a tier to expand the accounts that entered it
+// in the trailing 30 days (from → to visible in the table's tier column vs. the change).
+function TierMovedRow({ scope }: { scope: string }) {
+  const [openTier, setOpenTier] = useState<string | null>(null);
+  const TIERS: { label: string; tier: string; dot: string }[] = [
+    { label: "Green", tier: "green", dot: "bg-emerald-500" },
+    { label: "Yellow", tier: "yellow", dot: "bg-amber-500" },
+    { label: "Red", tier: "red", dot: "bg-destructive" },
+  ];
+  return (
+    <div className="mt-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs px-1">
+        <span className="text-muted-foreground">Moved into tier (last 30d):</span>
+        {TIERS.map((t) => (
+          <button
+            key={t.tier}
+            type="button"
+            onClick={() => setOpenTier((o) => (o === t.tier ? null : t.tier))}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 transition-colors",
+              openTier === t.tier ? "bg-accent" : "hover:bg-accent",
+            )}
+          >
+            <span className={`h-2 w-2 rounded-full ${t.dot}`} />
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {openTier && (
+        <div className="mt-2">
+          <InlineAccounts
+            key={openTier}
+            filter={{
+              label: `Moved into ${openTier} (last 30d)`,
+              params: { tier_moved_in: openTier },
+            }}
+            scope={scope}
+            onClose={() => setOpenTier(null)}
+            showFilter={false}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -161,7 +454,15 @@ function DashboardBody() {
 // A grid of stat tiles that expands the matching accounts INLINE, directly beneath
 // the row, when a clickable tile is selected. The active tile is ringed and points a
 // caret at the panel so the link between "the number" and "the accounts" is obvious.
-function TileGrid({ tiles, cols = "lg:grid-cols-4" }: { tiles: TileSpec[]; cols?: string }) {
+function TileGrid({
+  tiles,
+  cols = "lg:grid-cols-4",
+  scope = "",
+}: {
+  tiles: TileSpec[];
+  cols?: string;
+  scope?: string;
+}) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const open = tiles.find((t) => t.key === openKey && t.filter);
   // Column count at the widest breakpoint (last "grid-cols-N" wins), for caret placement.
@@ -181,6 +482,7 @@ function TileGrid({ tiles, cols = "lg:grid-cols-4" }: { tiles: TileSpec[]; cols?
             label={t.label}
             value={t.value}
             display={t.display}
+            sublabel={t.sublabel}
             tone={t.tone}
             active={openKey === t.key}
             onClick={
@@ -206,7 +508,7 @@ function TileGrid({ tiles, cols = "lg:grid-cols-4" }: { tiles: TileSpec[]; cols?
               }}
             />
           </div>
-          <InlineAccounts filter={open.filter} onClose={() => setOpenKey(null)} />
+          <InlineAccounts filter={open.filter} scope={scope} onClose={() => setOpenKey(null)} />
         </div>
       )}
     </div>
@@ -214,8 +516,8 @@ function TileGrid({ tiles, cols = "lg:grid-cols-4" }: { tiles: TileSpec[]; cols?
 }
 
 // Sortable columns for the inline account table.
-type SortKey = "name" | "arr" | "genie_spend_90d" | "use_case_count" | "open_issues" | "active_genie_spaces";
-const NUMERIC_SORTS: SortKey[] = ["arr", "genie_spend_90d", "use_case_count", "open_issues", "active_genie_spaces"];
+type SortKey = "name" | "arr" | "genie_spend_90d" | "genie_dbu_t7d" | "genie_dbu_t90d" | "use_case_count" | "open_issues" | "active_genie_spaces";
+const NUMERIC_SORTS: SortKey[] = ["arr", "genie_spend_90d", "genie_dbu_t7d", "genie_dbu_t90d", "use_case_count", "open_issues", "active_genie_spaces"];
 
 const PP_LABEL: Record<string, string> = {
   on: "On",
@@ -241,10 +543,14 @@ function toneDot(status: string, good: string[], bad: string[]): string {
 // sortable by any numeric column. Rendered right on the Signals page.
 function InlineAccounts({
   filter,
+  scope = "",
   onClose,
+  showFilter = true,
 }: {
   filter: AcctFilter;
+  scope?: string;
   onClose: () => void;
+  showFilter?: boolean;
 }) {
   const [rows, setRows] = useState<AcctRow[] | null>(null);
   const [sort, setSort] = useState<SortKey>("arr");
@@ -255,7 +561,12 @@ function InlineAccounts({
 
   // Serialize params so the effect re-runs on value change (not object identity),
   // and debounce so typing in the search box doesn't fire a request per keystroke.
-  const qs = new URLSearchParams(filter.params).toString();
+  // The active vertical scope is applied to the drill-down too, so it stays in sync
+  // with the (scoped) tile the user clicked.
+  const qs = new URLSearchParams({
+    ...filter.params,
+    ...(scope ? { vertical: scope } : {}),
+  }).toString();
   useEffect(() => {
     const mine = ++seq.current;
     setRows(null);
@@ -316,7 +627,9 @@ function InlineAccounts({
 
   // Totals footer — quick roll-up of the segment.
   const totalArr = sorted?.reduce((s, a) => s + (a.arr ?? 0), 0) ?? 0;
-  const totalSpend = sorted?.reduce((s, a) => s + (a.genie_spend_90d ?? 0), 0) ?? 0;
+  const totalT7 = sorted?.reduce((s, a) => s + (a.genie_dbu_t7d ?? 0), 0) ?? 0;
+  const totalT30 = sorted?.reduce((s, a) => s + (a.genie_spend_90d ?? 0), 0) ?? 0;
+  const totalT90 = sorted?.reduce((s, a) => s + (a.genie_dbu_t90d ?? 0), 0) ?? 0;
   const totalUc = sorted?.reduce((s, a) => s + (a.use_case_count ?? 0), 0) ?? 0;
   const totalSpaces = sorted?.reduce((s, a) => s + (a.active_genie_spaces ?? 0), 0) ?? 0;
 
@@ -337,7 +650,7 @@ function InlineAccounts({
         </div>
       </CardHeader>
       <CardContent>
-        {rows !== null && rows.length > 0 && (
+        {showFilter && rows !== null && rows.length > 0 && (
           <div className="relative mb-2 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -366,15 +679,18 @@ function InlineAccounts({
           </p>
         ) : (
           <div className="max-h-[28rem] overflow-auto rounded-md border bg-card">
-            <table className="w-full min-w-[860px] text-sm">
+            <table className="w-full min-w-[1100px] text-sm">
               <thead className="sticky top-0 bg-card z-10 text-xs text-muted-foreground border-b">
                 <tr className="text-left">
                   <Th k="name" label="Account" />
-                  <th className="py-2 px-2 font-medium">Tier</th>
                   <th className="py-2 px-2 font-medium">PP AI</th>
                   <th className="py-2 px-2 font-medium">Provisioning</th>
+                  <th className="py-2 px-2 font-medium">Tier</th>
+                  <th className="py-2 px-2 font-medium">Activated</th>
                   <Th k="use_case_count" label="Use cases" align="right" />
-                  <Th k="genie_spend_90d" label="Genie $ (30d)" align="right" />
+                  <Th k="genie_dbu_t7d" label="Genie $ 7d" align="right" />
+                  <Th k="genie_spend_90d" label="Genie $ 30d" align="right" />
+                  <Th k="genie_dbu_t90d" label="Genie $ 90d" align="right" />
                   <Th k="active_genie_spaces" label="Agents (30d)" align="right" />
                   <Th k="open_issues" label="Issues" align="right" />
                   <Th k="arr" label="ARR" align="right" />
@@ -398,22 +714,18 @@ function InlineAccounts({
                       </div>
                     </td>
                     <td className="py-1.5 px-2">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className={`h-2 w-2 rounded-full ${TIER_DOT[a.readiness_tier ?? "unknown"] ?? TIER_DOT.unknown}`} />
-                        <span className="capitalize">{a.readiness_tier ?? "—"}</span>
-                      </span>
-                    </td>
-                    <td className="py-1.5 px-2">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className={`h-2 w-2 rounded-full ${toneDot(a.pp_status ?? "unknown", ["on", "on_default"], ["off"])}`} />
-                        {PP_LABEL[a.pp_status ?? "unknown"] ?? a.pp_status}
-                        {a.pp_status === "off" && (
-                          <span className="text-xs text-muted-foreground">
-                            {a.pp_enforce === "on"
-                              ? "· enforce on (hard-blocked)"
-                              : "· enforce off (workspaces can consume)"}
-                          </span>
-                        )}
+                      <span className="inline-flex items-start gap-1.5">
+                        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${toneDot(a.pp_status ?? "unknown", ["on", "on_default"], ["off"])}`} />
+                        <span>
+                          {PP_LABEL[a.pp_status ?? "unknown"] ?? a.pp_status}
+                          {a.pp_status === "off" && (
+                            <span className="text-xs text-muted-foreground">
+                              {a.pp_enforce === "on"
+                                ? " · enforce on (hard-blocked)"
+                                : " · enforce off (workspaces can consume)"}
+                            </span>
+                          )}
+                        </span>
                       </span>
                     </td>
                     <td className="py-1.5 px-2">
@@ -422,9 +734,29 @@ function InlineAccounts({
                         {PROV_LABEL[a.provisioning_status ?? "unknown"] ?? a.provisioning_status}
                       </span>
                     </td>
+                    <td className="py-1.5 px-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className={`h-2 w-2 rounded-full ${TIER_DOT[a.readiness_tier ?? "unknown"] ?? TIER_DOT.unknown}`} />
+                        <span className="capitalize">{a.readiness_tier ?? "—"}</span>
+                      </span>
+                    </td>
+                    <td className="py-1.5 px-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          className={`h-2 w-2 rounded-full ${a.genie_activated ? "bg-emerald-500" : "bg-destructive"}`}
+                        />
+                        {a.genie_activated ? "Yes" : "No"}
+                      </span>
+                    </td>
                     <td className="py-1.5 px-2 text-right tabular-nums">{fmtNum(a.use_case_count ?? 0)}</td>
                     <td className="py-1.5 px-2 text-right tabular-nums">
+                      {(a.genie_dbu_t7d ?? 0) > 0 ? fmtDbus(a.genie_dbu_t7d ?? 0) : "—"}
+                    </td>
+                    <td className="py-1.5 px-2 text-right tabular-nums">
                       {(a.genie_spend_90d ?? 0) > 0 ? fmtDbus(a.genie_spend_90d ?? 0) : "—"}
+                    </td>
+                    <td className="py-1.5 px-2 text-right tabular-nums">
+                      {(a.genie_dbu_t90d ?? 0) > 0 ? fmtDbus(a.genie_dbu_t90d ?? 0) : "—"}
                     </td>
                     <td className="py-1.5 px-2 text-right tabular-nums">
                       {(a.active_genie_spaces ?? 0) > 0 ? fmtNum(a.active_genie_spaces ?? 0) : "—"}
@@ -447,7 +779,7 @@ function InlineAccounts({
                   </tr>
                   {openIssues === a.id && (
                     <tr>
-                      <td colSpan={9} className="p-0">
+                      <td colSpan={12} className="p-0">
                         <AccountIssues accountId={a.id} />
                       </td>
                     </tr>
@@ -458,9 +790,11 @@ function InlineAccounts({
               <tfoot className="sticky bottom-0 bg-card border-t-2 text-xs font-medium shadow-[0_-1px_0_0_hsl(var(--border))]">
                 <tr>
                   <td className="py-1.5 px-2 text-muted-foreground">Totals</td>
-                  <td colSpan={3}></td>
+                  <td colSpan={4}></td>
                   <td className="py-1.5 px-2 text-right tabular-nums">{fmtNum(totalUc)}</td>
-                  <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalSpend)}</td>
+                  <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalT7)}</td>
+                  <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalT30)}</td>
+                  <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalT90)}</td>
                   <td className="py-1.5 px-2 text-right tabular-nums">{fmtNum(totalSpaces)}</td>
                   <td></td>
                   <td className="py-1.5 px-2 text-right tabular-nums">{fmtDbus(totalArr)}</td>
@@ -470,18 +804,35 @@ function InlineAccounts({
           </div>
         )}
         {sorted !== null && sorted.length > 0 && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Tier = GTM Genie-Ready (user provisioning + eligibility): 🟢 ready · 🟡 partial ·
-            🔴 gaps · ⚪ unknown ·{" "}
-            <a
-              href="https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f10313a17e11d6b0b11abfa2736836/published?o=2548836972759138"
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary underline hover:no-underline"
-            >
-              full dashboard
-            </a>
-          </p>
+          <>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Tier = Account Readiness ·{" "}
+              <a
+                href="https://adb-2548836972759138.18.azuredatabricks.net/dashboardsv3/01f10313a17e11d6b0b11abfa2736836/published?o=2548836972759138"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary underline hover:no-underline"
+              >
+                Genie Ready
+              </a>
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Activated = an account with 200+ Genie BMAU for 2 consecutive months and
+              AIM/SCIM enabled, measured at the deployable level ·{" "}
+              <a
+                href="https://gtm-analytics-2548836972759138.18.azure.databricksapps.com/community/dashboard/product-deep-dives-genie"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary underline hover:no-underline"
+              >
+                Product Deep Dives — Genie
+              </a>
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Genie $ (7d / 30d / 90d) includes DBSQL consumption only — LLM usage will
+              be added soon.
+            </p>
+          </>
         )}
       </CardContent>
     </Card>
@@ -550,14 +901,16 @@ function SoWhat({ children }: { children: ReactNode }) {
 }
 
 // ------------------------------------------------------------------ Tab 1: PP AI
-function PartnerPoweredTab({ data }: { data: DashboardOut }) {
+function PartnerPoweredTab({ data, scope = "" }: { data: DashboardOut; scope?: string }) {
   return (
     <div className="space-y-6">
       <SoWhat>
-        Partner-Powered AI must be on for Genie to consume.
+        Partner-Powered AI must be on or enforce must be off for Genie to consume.
       </SoWhat>
 
       <TileGrid
+        scope={scope}
+        cols="lg:grid-cols-3"
         tiles={[
           {
             key: "pp_on",
@@ -583,21 +936,15 @@ function PartnerPoweredTab({ data }: { data: DashboardOut }) {
             tone: (data.pp_off_enforce_off ?? 0) > 0 ? "warn" : undefined,
             filter: { label: "PP AI off · enforce off", params: { pp: "off_enforce_off" } },
           },
-          {
-            key: "spaces",
-            icon: <MessageSquare className="h-4 w-4" />,
-            label: "Active Genie Agents (30d)",
-            value: data.active_genie_spaces ?? 0,
-          },
         ]}
       />
 
-      <SpendDistribution data={data} />
+      <SpendDistribution data={data} scope={scope} />
     </div>
   );
 }
 
-function SpendDistribution({ data }: { data: DashboardOut }) {
+function SpendDistribution({ data, scope = "" }: { data: DashboardOut; scope?: string }) {
   const buckets = data.spend_buckets ?? [];
   const max = Math.max(1, ...buckets.map((b) => b.account_count));
   const [filter, setFilter] = useState<AcctFilter | null>(null);
@@ -651,7 +998,7 @@ function SpendDistribution({ data }: { data: DashboardOut }) {
         })}
         {filter && (
           <div className="pt-2">
-            <InlineAccounts filter={filter} onClose={() => setFilter(null)} />
+            <InlineAccounts filter={filter} scope={scope} onClose={() => setFilter(null)} />
           </div>
         )}
       </CardContent>
@@ -660,88 +1007,50 @@ function SpendDistribution({ data }: { data: DashboardOut }) {
 }
 
 // ------------------------------------------------------- Tab 2: Genie Accounts
-function GenieAccountsTab({ data }: { data: DashboardOut }) {
+function GenieAccountsTab({ data, scope = "" }: { data: DashboardOut; scope?: string }) {
   const [stageFilter, setStageFilter] = useState<AcctFilter | null>(null);
-  const [q, setQ] = useState("");
-  const needle = q.trim();
 
   return (
     <div className="space-y-6">
       <SoWhat>
-        The UCO funnel and account lookup. Whitespace = accounts that can consume Genie
-        (PP on, or off but not enforced) and are provisioned, but have no active Genie
-        agent yet — ready to activate.
+        The Genie use-case (UCO) funnel — U1 through U6 — across the selected vertical.
       </SoWhat>
-
-      {/* Account search — find one account by name, sub-vertical, or owner */}
-      <div>
-        <div className="relative max-w-xl">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search accounts by name, sub-vertical, AE, SA, or DSA…"
-            className="pl-9 h-10"
-          />
-          {q && (
-            <button
-              onClick={() => setQ("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        {needle && (
-          <div className="mt-3">
-            <InlineAccounts
-              filter={{ label: `Search: “${needle}”`, params: { q: needle } }}
-              onClose={() => setQ("")}
-            />
-          </div>
-        )}
-      </div>
 
       {/* Summary tiles — the per-stage breakdown lives in the funnel below. */}
       <TileGrid
-        cols="lg:grid-cols-3"
+        scope={scope}
+        cols="lg:grid-cols-2"
         tiles={[
           {
             key: "total",
             icon: <Layers className="h-4 w-4" />,
             label: "Total Genie use cases",
             value: data.total_use_cases,
+            sublabel: "Use-case count (funnel below = accounts per stage)",
             filter: { label: "Accounts with a Genie use case", params: { has_usecase: "true" } },
           },
           {
             key: "live",
             icon: <Sparkles className="h-4 w-4" />,
-            label: "Live (U6)",
+            label: "Live (U6) use cases",
             value: data.live_use_cases,
             tone: "good",
+            sublabel: "Use-case count (funnel Live = accounts)",
             filter: { label: "Accounts with a Live (U6) use case", params: { stage: "u6" } },
-          },
-          {
-            key: "whitespace",
-            icon: <Layers className="h-4 w-4" />,
-            label: "Whitespace",
-            value: data.whitespace_accounts ?? 0,
-            tone: (data.whitespace_accounts ?? 0) > 0 ? "warn" : undefined,
-            filter: { label: "Whitespace — can consume + provisioned, no active agent", params: { whitespace: "true" } },
           },
         ]}
       />
 
       <Funnel data={data} active={stageFilter} onPick={setStageFilter} />
       {stageFilter && (
-        <InlineAccounts filter={stageFilter} onClose={() => setStageFilter(null)} />
+        <InlineAccounts filter={stageFilter} scope={scope} onClose={() => setStageFilter(null)} />
       )}
     </div>
   );
 }
 
 // ---------------------------------------------------- Tab 5: By Sub-Vertical
-function SubVerticalTab({ data }: { data: DashboardOut }) {
+function SubVerticalTab({ data, scope = "" }: { data: DashboardOut; scope?: string }) {
   const rows = data.sub_verticals ?? [];
   const [open, setOpen] = useState<string | null>(null);
   const maxAcct = Math.max(1, ...rows.map((r) => r.accounts));
@@ -769,7 +1078,7 @@ function SubVerticalTab({ data }: { data: DashboardOut }) {
                     <th className="py-2 px-2 font-medium">Accounts</th>
                     <th className="py-2 px-2 font-medium text-right">Genie-active</th>
                     <th className="py-2 px-2 font-medium text-right">Whitespace</th>
-                    <th className="py-2 px-2 font-medium text-right">Genie $ (90d)</th>
+                    <th className="py-2 px-2 font-medium text-right">Genie Agent (DBSQL $) (30d)</th>
                     <th className="py-2 px-2 font-medium text-right">Avg readiness</th>
                     <th className="py-2 px-2 font-medium text-right">ARR</th>
                   </tr>
@@ -830,6 +1139,7 @@ function SubVerticalTab({ data }: { data: DashboardOut }) {
                                     label: `Sub-vertical: ${r.sub_vertical}`,
                                     params: { sub_vertical: r.sub_vertical },
                                   }}
+                                  scope={scope}
                                   onClose={() => setOpen(null)}
                                 />
                               </div>
@@ -854,7 +1164,7 @@ function BrickroadTab({ data }: { data: DashboardOut }) {
   return (
     <div className="space-y-6">
       <SoWhat>
-        Genie-related Brickroad issues on FINS accounts — what's blocking or at risk,
+        Genie-related Brickroad issues on AMER accounts — what's blocking or at risk,
         ranked by revenue impact.
       </SoWhat>
 
@@ -876,7 +1186,7 @@ function BrickroadTab({ data }: { data: DashboardOut }) {
           },
           {
             key: "accts",
-            icon: <Users className="h-4 w-4" />,
+            icon: <Building2 className="h-4 w-4" />,
             label: "Accounts w/ issues",
             value: data.accounts_with_issues ?? 0,
             filter: { label: "Accounts with open Genie issues", params: { open_issues: "true" } },
@@ -904,16 +1214,49 @@ function severityTone(sev: string): string {
 }
 
 function BrickroadTable({ data }: { data: DashboardOut }) {
-  const rows = data.brickroad_issues ?? [];
+  const all = data.brickroad_issues ?? [];
+  const [q, setQ] = useState("");
+  const f = q.trim().toLowerCase();
+  const rows = f
+    ? all.filter(
+        (i) =>
+          (i.title ?? "").toLowerCase().includes(f) ||
+          (i.account_name ?? "").toLowerCase().includes(f) ||
+          (i.severity ?? "").toLowerCase().includes(f) ||
+          (i.product_area ?? "").toLowerCase().includes(f) ||
+          (i.display_id ?? "").toLowerCase().includes(f)
+      )
+    : all;
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Genie Brickroad blockers</CardTitle>
       </CardHeader>
       <CardContent>
-        {rows.length === 0 ? (
+        {all.length === 0 ? (
           <p className="text-sm text-muted-foreground">No open Genie issues.</p>
         ) : (
+          <>
+          <div className="relative mb-2 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Filter issues by account, title, severity…"
+              className="pl-9 h-9"
+            />
+            {q && (
+              <button
+                onClick={() => setQ("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-2">No issues match your filter.</p>
+          ) : (
           <div className="max-h-[28rem] overflow-auto rounded-md border">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-card z-10">
@@ -966,6 +1309,8 @@ function BrickroadTable({ data }: { data: DashboardOut }) {
               </tbody>
             </table>
           </div>
+          )}
+          </>
         )}
       </CardContent>
     </Card>
@@ -978,6 +1323,7 @@ function StatTile({
   label,
   value,
   display,
+  sublabel,
   tone,
   onClick,
   active,
@@ -986,6 +1332,7 @@ function StatTile({
   label: string;
   value?: number;
   display?: string;
+  sublabel?: string;
   tone?: "good" | "warn" | "bad";
   onClick?: () => void; // when set, the tile opens an inline drill-down on this page
   active?: boolean;
@@ -1007,6 +1354,11 @@ function StatTile({
       <div className={`text-2xl font-bold mt-1 ${toneClass}`}>
         {display ?? fmtNum(value ?? 0)}
       </div>
+      {sublabel && (
+        <div className="text-[11px] leading-tight text-muted-foreground mt-1">
+          {sublabel}
+        </div>
+      )}
       {clickable && (
         // Persistent affordance so it's obvious the tile drills in (not hover-only).
         <span className="absolute bottom-2 right-2 inline-flex items-center gap-0.5 text-[11px] font-medium text-primary/70">
@@ -1051,7 +1403,7 @@ function Funnel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Count &amp; $DBU by UCO Stage</CardTitle>
+        <CardTitle className="text-base">Accounts &amp; $DBU by UCO Stage</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         {stages.map((f) => {
@@ -1084,10 +1436,15 @@ function Funnel({
               <div className="flex-1">
                 <div className="flex items-center justify-between text-sm mb-0.5">
                   <span className="text-muted-foreground truncate">{f.name}</span>
-                  <span className="font-medium">
+                  <span className="font-medium flex items-center gap-2">
+                    {(f.moved_in_30d ?? 0) > 0 && (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-normal text-xs">
+                        +{f.moved_in_7d ?? 0} 7d · +{f.moved_in_30d ?? 0} 30d
+                      </span>
+                    )}
                     {f.count}
                     {(f.monthly_dbus ?? 0) > 0 && (
-                      <span className="text-muted-foreground font-normal ml-2">
+                      <span className="text-muted-foreground font-normal">
                         {fmtDbus(f.monthly_dbus ?? 0)}/mo
                       </span>
                     )}

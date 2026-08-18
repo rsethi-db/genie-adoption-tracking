@@ -47,6 +47,15 @@ class Task(TypedDict):
 
 # Tasks transcribed from the "What happens at every stage" workflow slide.
 TASKS: list[Task] = [
+    # --- Security & Review (shown first in the questionnaire; own section, not part
+    #     of the stage × lane grid) -----------------------------------------------
+    {"key": "sec_msa", "stage": "security", "lane": "security",
+     "label": "Is a signed Master Service Agreement (MSA) required for this "
+              "engagement, and what is its current status?"},
+    {"key": "sec_authority_review", "stage": "security", "lane": "security",
+     "label": "Has your account completed its Security Authority Review for "
+              "adopting Databricks Genie?"},
+
     # --- Happy Path ------------------------------------------------------------
     {"key": "hp_u1_demo", "stage": "u1", "lane": "happy_path",
      "label": "Demo with known domain assets"},
@@ -96,7 +105,7 @@ TASKS: list[Task] = [
      "label": "Follow up in 2×2 convos"},
 
     {"key": "rec_u3_workbench", "stage": "u3", "lane": "recommended",
-     "label": "Optimize accuracy in Workbench"},
+     "label": "Optimize accuracy using Genie Code / Workbench"},
     {"key": "rec_u3_hackathon", "stage": "u3", "lane": "recommended",
      "label": "Run a Genie Acceleration Hackathon"},
 
@@ -120,18 +129,24 @@ TASKS: list[Task] = [
 
     {"key": "an_u6_document", "stage": "u6", "lane": "as_needed",
      "label": "Document use cases → feed pipeline"},
-
-    # --- Security & Review (own section, not part of the stage × lane grid; mirrors
-    #     the Security & Review pillar in the genie-status app) --------------------
-    {"key": "sec_msa", "stage": "security", "lane": "security",
-     "label": "Is a signed Master Service Agreement (MSA) required for this "
-              "engagement, and what is its current status?"},
-    {"key": "sec_authority_review", "stage": "security", "lane": "security",
-     "label": "Has your account completed its Security Authority Review for "
-              "adopting Databricks Genie?"},
 ]
 
 _TASK_KEYS = {t["key"] for t in TASKS}
+
+# Position of each task in the questionnaire, and its human-readable label — used to
+# stamp task_order/task_name onto the persisted rows so the table can be ordered the
+# same way the questionnaire is (not alphabetically by task_key).
+TASK_ORDER = {t["key"]: i for i, t in enumerate(TASKS)}
+TASK_LABEL = {t["key"]: t["label"] for t in TASKS}
+
+# Tasks that are quantifiable — once in progress / completed, the team is asked
+# "how many?" (e.g. how many demos, workshops). Value = the noun for the prompt.
+TASK_COUNTS: dict[str, str] = {
+    "hp_u1_demo": "demos",
+    "hp_u2_workshop": "workshops",
+    "hp_u3_prototype": "prototypes",
+    "rec_u3_hackathon": "hackathons",
+}
 
 
 # Which Getting-Help resources (by playbook.RESOURCES key) are relevant to each
@@ -140,7 +155,7 @@ _TASK_KEYS = {t["key"] for t in TASKS}
 # read time — playbook.py stays the single source of truth (no duplicated URLs).
 TASK_RESOURCE_KEYS: dict[str, list[str]] = {
     # --- Happy Path ---
-    "hp_u1_demo": ["demo-industry", "demo-gtm-rooms", "demo-fevm", "demo-solution-builder"],
+    "hp_u1_demo": ["demo-industry", "demo-solution-builder"],
     "hp_u1_champions": ["plays-win-business-user", "plays-enablement"],
     "hp_u1_aim": ["plays-aim-migration", "ref-go-genie"],
     "hp_u2_workshop": [
@@ -149,13 +164,13 @@ TASK_RESOURCE_KEYS: dict[str, list[str]] = {
     ],
     "hp_u2_usecase": ["plays-win-business-user", "demo-solution-builder"],
     "hp_u2_csuite": ["plays-win-business-user", "proof-customer-stories"],
-    "hp_u3_prototype": ["demo-solution-builder"],
+    "hp_u3_prototype": ["demo-solution-builder", "ref-ai-ready-semantics"],
     "hp_u3_evaldata": [],
-    "hp_u3_metricview": [],
+    "hp_u3_metricview": ["ref-ai-ready-semantics"],
     "hp_u4_signoff": [],
     "hp_u4_uco_sizing": [],
     "hp_u5_aim_ready": [],
-    "hp_u5_pricing": ["workshops-pricing", "ref-pricing-faq", "proof-genie-cost-dashboard"],
+    "hp_u5_pricing": ["ref-pricing-faq", "ref-genie-budgets", "proof-genie-cost-dashboard"],
     "hp_u6_monitor": ["proof-genie-cost-dashboard", "demo-workbench", "proof-blockers-dashboard"],
     "hp_u6_followup": ["proof-customer-stories"],
     # --- Recommended ---

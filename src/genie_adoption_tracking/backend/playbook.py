@@ -273,22 +273,20 @@ RESOURCES: list[dict] = [
      "url": "https://home.databricks.com/sales/field-performance/products/genie-and-ai-bi/", "stages": ["prereqs", "u1"]},
     {"key": "workshops-genie-best-practices", "bucket": "Product & Reference", "label": "Genie Best Practices",
      "url": "https://docs.databricks.com/aws/en/genie-agents/best-practices", "stages": ["u2", "u3", "u5"]},
-    {"key": "workshops-pricing", "bucket": "Product & Reference", "label": "Pricing",
-     "url": "https://go/geniepricing", "stages": ["u3"]},
     {"key": "ref-pricing-faq", "bucket": "Product & Reference", "label": "Genie Products Pricing FAQ",
      "url": "https://docs.google.com/document/d/15VSQ95Kejw0bPzz24g7OKoAFmM6vYkYpkNJT4pXV52E/edit?tab=t.0#heading=h.l2pl401c73g6", "stages": ["u3"]},
+    {"key": "ref-genie-budgets", "bucket": "Product & Reference", "label": "Genie Budgets — Best Practices (go/genie/budgets)",
+     "url": "https://docs.google.com/presentation/d/1lVBOIH6hA9OtqS-exFpu-G9COMGBn-vdCQVuC_tle_M/edit?slide=id.g3f552c9fc6e_0_1845#slide=id.g3f552c9fc6e_0_1845", "stages": ["u3"]},
+    {"key": "ref-ai-ready-semantics", "bucket": "Product & Reference", "label": "How to Build AI-Ready Business Semantics on Databricks",
+     "url": "https://go/aireadysemantics", "stages": ["u2", "u3"]},
+    {"key": "demo-workbench", "bucket": "Product & Reference", "label": "Optimizing Genie: Genie Workbench",
+     "url": "https://go/genie-workbench", "stages": ["u3", "u5"]},
 
     # ---- Demo Assets ------------------------------------------------------------------
     {"key": "demo-industry", "bucket": "Demo Assets", "label": "Existing Industry demos",
      "url": "https://dbdemos-demo-catalog-2556758628403379.aws.databricksapps.com/", "stages": ["u1"]},
     {"key": "demo-solution-builder", "bucket": "Demo Assets", "label": "Build a new demo (Solution Builder)",
      "url": "https://go/solution-builder", "stages": ["u1", "u2"]},
-    {"key": "demo-gtm-rooms", "bucket": "Demo Assets", "label": "FS GTM Genie Rooms",
-     "url": "https://fsgtm-genie-7474644662581786.aws.databricksapps.com/", "stages": ["u1"]},
-    {"key": "demo-fevm", "bucket": "Demo Assets", "label": "FINS FEVM Demos",
-     "url": "https://docs.google.com/presentation/d/1uRPa7H39lhRV3xuP1a5GHgGsH4kNYPvInGRw7QV-rhE/edit", "stages": ["u1"]},
-    {"key": "demo-workbench", "bucket": "Demo Assets", "label": "Optimizing Genie: Genie Workbench",
-     "url": "https://go/genie-workbench", "stages": ["u3", "u5"]},
 
     # ---- Plays ------------------------------------------------------------------------
     {"key": "plays-win-business-user", "bucket": "Plays", "label": "Win Business User Play",

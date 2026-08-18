@@ -36,6 +36,7 @@ import {
   Circle,
   MinusCircle,
   ChevronDown,
+  CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -99,6 +100,13 @@ function AccountDetail({ accountId }: { accountId: string }) {
               {data.dsa_owner && <span>DSA · {data.dsa_owner}</span>}
             </div>
             <div className="flex items-center gap-3 mt-3 text-sm">
+              <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                {fmtDbus(data.genie_spend_90d ?? 0)} Genie Agent (DBSQL $) (30d)
+              </span>
+              <span className="text-muted-foreground">
+                {(data.active_genie_spaces ?? 0).toLocaleString()} active Genie agent
+                {(data.active_genie_spaces ?? 0) === 1 ? "" : "s"} (30d)
+              </span>
               {data.monthly_dbus > 0 && (
                 <span className="text-emerald-700 dark:text-emerald-400 font-medium">
                   {fmtDbus(data.monthly_dbus)}/mo est. DBU
@@ -134,6 +142,7 @@ function AccountDetail({ accountId }: { accountId: string }) {
           accountName={data.name}
           workflow={data.adoption}
           ppStatus={data.pp_status ?? "unknown"}
+          securityBlocker={data.security_blocker ?? false}
         />
       )}
       <AdoptionHistory accountId={data.id} />
@@ -238,6 +247,7 @@ const ADOPTION_STATUSES: { value: string; label: string }[] = [
   { value: "in_progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
   { value: "blocked", label: "Blocked" },
+  { value: "na", label: "N/A" },
 ];
 
 // Task-specific blocker reasons. When a task is Blocked, the team picks the reason
@@ -402,6 +412,20 @@ const TASK_RESOURCES: Record<string, { label: string; url: string }[]> = {
   ],
 };
 
+// A prominent call-to-action link shown ABOVE the Resources toggle for specific tasks
+// (keyed by task key), so teams can act directly. The Security Authority Review question
+// links to the PPAI tracking app where teams complete that review.
+const TASK_ACTION_LINK: Record<string, { label: string; url: string }> = {
+  sec_authority_review: {
+    label: "Complete your Security Authority Review",
+    url: "http://genie-ppai-tracking-6583047541360945.5.azure.databricksapps.com/",
+  },
+};
+
+// Leading "ACTION REQUIRED" pill on the CTA (shared style).
+const ACTION_REQUIRED_BADGE =
+  "rounded-sm bg-primary-foreground/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide";
+
 // Collapsed-by-default section with a click-to-expand label + chevron
 // (same pattern as the Genie use cases box).
 function Collapsible({ label, children }: { label: string; children: ReactNode }) {
@@ -492,16 +516,24 @@ function AdoptionTaskCard({
   value,
   onChange,
   accountName,
+  securityBlocker = false,
 }: {
   task: AdoptionTaskOut;
   tone: string;
-  value: { status: string; note: string };
-  onChange: (patch: { status?: string; note?: string }) => void;
+  value: { status: string; note: string; count: number };
+  onChange: (patch: { status?: string; note?: string; count?: number }) => void;
   accountName: string;
+  securityBlocker?: boolean;
 }) {
   const blocked = value.status === "blocked";
+  // Quantifiable tasks (demos/workshops/prototypes/hackathons) prompt "how many?"
+  // once in progress or completed.
+  const asksCount =
+    !!task.counts_things &&
+    (value.status === "in_progress" || value.status === "completed");
   // All five statuses (incl. Blocked) are available on every task.
   const statusOptions = ADOPTION_STATUSES;
+  const [showResources, setShowResources] = useState(false);
   return (
     <div
       className={cn(
@@ -518,6 +550,29 @@ function AdoptionTaskCard({
         options={statusOptions}
         onPick={(v) => onChange({ status: v })}
       />
+      {asksCount && (
+        <div className="mt-2">
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              How many {task.counts_things}?
+              <span className="text-destructive"> *</span>
+            </label>
+            <Input
+              type="number"
+              min={1}
+              required
+              value={value.count || ""}
+              onChange={(e) =>
+                onChange({ count: Math.max(0, parseInt(e.target.value || "0", 10)) })
+              }
+              className={cn(
+                "h-7 w-20 text-xs",
+                (value.count ?? 0) < 1 && "border-destructive focus-visible:ring-destructive",
+              )}
+            />
+          </div>
+        </div>
+      )}
       {/* When blocked, the reason dropdown sits right under the status (task-specific
           reasons), then the note, then the Ask-Genie link. */}
       {blocked && (
@@ -557,7 +612,7 @@ function AdoptionTaskCard({
         placeholder={blocked ? "Add detail…" : "Add a note…"}
         className="mt-2 min-h-[38px] text-xs"
       />
-      {blocked && (
+      {blocked && task.key !== "sec_authority_review" && (
         <button
           type="button"
           onClick={() => {
@@ -574,22 +629,69 @@ function AdoptionTaskCard({
           Ask Genie how to get unstuck
         </button>
       )}
-      {(TASK_RESOURCES[task.key] ?? []).length > 0 && (
-        <div className="mt-2 space-y-1">
-          {TASK_RESOURCES[task.key].map((r) => (
-            <a
-              key={r.url}
-              href={r.url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              <ExternalLink className="h-3 w-3 shrink-0" />
-              {r.label}
-            </a>
-          ))}
-        </div>
+      {/* The Security Authority Review action only shows for accounts flagged with an
+          open security blocker (from the Genie Security Blockers sheet). */}
+      {TASK_ACTION_LINK[task.key] &&
+        (task.key !== "sec_authority_review" || securityBlocker) && (
+        <a
+          href={TASK_ACTION_LINK[task.key].url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+        >
+          <span className={ACTION_REQUIRED_BADGE}>Action required</span>
+          <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+          {TASK_ACTION_LINK[task.key].label}
+        </a>
       )}
+      {(() => {
+        // Backend-resolved resources (task.resources, from playbook.RESOURCES) +
+        // any security-only extras (TASK_RESOURCES), de-duped by URL, collapsed under
+        // a "Resources (N)" toggle.
+        const links = [
+          ...(task.resources ?? []),
+          ...(TASK_RESOURCES[task.key] ?? []),
+        ];
+        const seen = new Set<string>();
+        const deduped = links.filter(
+          (r) => r.url && !seen.has(r.url) && seen.add(r.url)
+        );
+        if (deduped.length === 0) return null;
+        return (
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => setShowResources((s) => !s)}
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              <ChevronDown
+                className={cn(
+                  "h-3.5 w-3.5 transition-transform",
+                  showResources && "rotate-180"
+                )}
+              />
+              Resources
+              <span className="text-muted-foreground/70">({deduped.length})</span>
+            </button>
+            {showResources && (
+              <div className="mt-1.5 space-y-1 pl-4">
+                {deduped.map((r) => (
+                  <a
+                    key={r.url}
+                    href={r.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                    {r.label}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -612,6 +714,35 @@ const STATUS_LABEL: Record<string, string> = {
   completed: "Completed",
   blocked: "Blocked",
 };
+
+// Group history entries (already newest-first) into [dateLabel, entries] sections by
+// calendar day — "Today"/"Yesterday" for the two most recent days, else a full date.
+function groupByDate(entries: HistoryEntry[]): [string, HistoryEntry[]][] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const dayLabel = (d: Date): string => {
+    const dd = new Date(d);
+    dd.setHours(0, 0, 0, 0);
+    if (dd.getTime() === today.getTime()) return "Today";
+    if (dd.getTime() === yesterday.getTime()) return "Yesterday";
+    return dd.toLocaleDateString([], {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: dd.getFullYear() === today.getFullYear() ? undefined : "numeric",
+    });
+  };
+  const groups: [string, HistoryEntry[]][] = [];
+  for (const e of entries) {
+    const label = dayLabel(new Date(e.changed_at));
+    const last = groups[groups.length - 1];
+    if (last && last[0] === label) last[1].push(e);
+    else groups.push([label, [e]]);
+  }
+  return groups;
+}
 
 function AdoptionHistory({ accountId }: { accountId: string }) {
   const [open, setOpen] = useState(false);
@@ -662,28 +793,47 @@ function AdoptionHistory({ accountId }: { accountId: string }) {
                 here.
               </p>
             ) : (
-              <ul className="space-y-3">
-                {entries.map((e, i) => (
-                  <li key={i} className="flex gap-3 text-sm">
-                    <div className="mt-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-x-2">
-                        <span className="font-medium">{e.task_label}</span>
-                        <Badge variant="outline" className="text-[10px]">
-                          {STATUS_LABEL[e.status] ?? e.status}
-                        </Badge>
-                      </div>
-                      {e.note && (
-                        <p className="text-muted-foreground mt-0.5">“{e.note}”</p>
-                      )}
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {new Date(e.changed_at).toLocaleString()}
-                        {e.changed_by ? ` · ${e.changed_by}` : ""}
-                      </p>
+              <div className="space-y-5">
+                {groupByDate(entries).map(([day, dayEntries]) => (
+                  <div key={day}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <CalendarClock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {day}
+                      </span>
+                      <span className="text-xs text-muted-foreground/70">
+                        · {dayEntries.length} change{dayEntries.length === 1 ? "" : "s"}
+                      </span>
+                      <div className="flex-1 border-t" />
                     </div>
-                  </li>
+                    <ul className="space-y-2.5 pl-1 border-l ml-1.5">
+                      {dayEntries.map((e, i) => (
+                        <li key={i} className="flex gap-3 text-sm pl-3 relative">
+                          <div className="absolute -left-[5px] top-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-x-2">
+                              <span className="font-medium">{e.task_label}</span>
+                              <Badge variant="outline" className="text-[10px]">
+                                {STATUS_LABEL[e.status] ?? e.status}
+                              </Badge>
+                            </div>
+                            {e.note && (
+                              <p className="text-muted-foreground mt-0.5">“{e.note}”</p>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {new Date(e.changed_at).toLocaleTimeString([], {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                              {e.changed_by ? ` · ${e.changed_by}` : ""}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -697,23 +847,29 @@ function AdoptionWorkflow({
   accountName,
   workflow,
   ppStatus,
+  securityBlocker = false,
 }: {
   accountId: string;
   accountName: string;
   workflow: AdoptionWorkflowOut;
   ppStatus: string;
+  securityBlocker?: boolean;
 }) {
   const qc = useQueryClient();
 
   // Hold all task edits locally; persist to Lakebase only on Save.
-  const [edits, setEdits] = useState<Record<string, { status: string; note: string }>>(
-    () => {
-      const m: Record<string, { status: string; note: string }> = {};
-      for (const t of workflow.tasks)
-        m[t.key] = { status: t.status ?? "not_initiated", note: t.note ?? "" };
-      return m;
-    }
-  );
+  const [edits, setEdits] = useState<
+    Record<string, { status: string; note: string; count: number }>
+  >(() => {
+    const m: Record<string, { status: string; note: string; count: number }> = {};
+    for (const t of workflow.tasks)
+      m[t.key] = {
+        status: t.status ?? "not_initiated",
+        note: t.note ?? "",
+        count: t.count ?? 0,
+      };
+    return m;
+  });
   const [dirty, setDirty] = useState(false);
 
   const save = useSaveAdoptionTasks({
@@ -728,12 +884,28 @@ function AdoptionWorkflow({
     },
   });
 
-  const setField = (key: string, patch: { status?: string; note?: string }) => {
+  const setField = (
+    key: string,
+    patch: { status?: string; note?: string; count?: number },
+  ) => {
     setEdits((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
     setDirty(true);
   };
 
-  const onSave = () =>
+  // Quantifiable tasks (demos/workshops/…) require a count once in progress/completed.
+  const missingCounts = workflow.tasks.filter((t) => {
+    if (!t.counts_things) return false;
+    const st = edits[t.key]?.status;
+    if (st !== "in_progress" && st !== "completed") return false;
+    return (edits[t.key]?.count ?? 0) < 1;
+  });
+
+  const onSave = () => {
+    if (missingCounts.length > 0) {
+      const first = missingCounts[0];
+      toast.error(`Enter how many ${first.counts_things} for "${first.label}"`);
+      return;
+    }
     save.mutate({
       params: { account_id: accountId },
       data: {
@@ -741,9 +913,11 @@ function AdoptionWorkflow({
           task_key,
           status: v.status,
           note: v.note,
+          count: v.count,
         })),
       },
     });
+  };
 
   // Index tasks by lane+stage so each lane renders as one aligned horizontal band
   // (color row) across the stage columns — matching the workflow slide.
@@ -792,16 +966,24 @@ function AdoptionWorkflow({
           )}
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
-          <Button onClick={onSave} disabled={save.isPending || !dirty}>
+          <Button
+            onClick={onSave}
+            disabled={save.isPending || !dirty || missingCounts.length > 0}
+          >
             {save.isPending
               ? "Saving…"
               : unsavedCount > 0
                 ? `Save (${unsavedCount})`
                 : "Save"}
           </Button>
-          {dirty && !save.isPending && (
+          {missingCounts.length > 0 ? (
+            <span className="text-[10px] text-destructive">
+              Enter a count for {missingCounts.length} task
+              {missingCounts.length === 1 ? "" : "s"}
+            </span>
+          ) : dirty && !save.isPending ? (
             <span className="text-[10px] text-muted-foreground">Unsaved changes</span>
-          )}
+          ) : null}
         </div>
       </CardHeader>
       <CardContent>
@@ -828,9 +1010,10 @@ function AdoptionWorkflow({
                   key={t.key}
                   task={t}
                   tone=""
-                  value={edits[t.key] ?? { status: "not_initiated", note: "" }}
+                  value={edits[t.key] ?? { status: "not_initiated", note: "", count: 0 }}
                   onChange={(patch) => setField(t.key, patch)}
                   accountName={accountName}
+                  securityBlocker={securityBlocker}
                 />
               ))}
             </div>
@@ -870,7 +1053,7 @@ function AdoptionWorkflow({
                             key={t.key}
                             task={t}
                             tone={lane.tone}
-                            value={edits[t.key] ?? { status: "not_initiated", note: "" }}
+                            value={edits[t.key] ?? { status: "not_initiated", note: "", count: 0 }}
                             onChange={(patch) => setField(t.key, patch)}
                             accountName={accountName}
                           />
@@ -1255,9 +1438,11 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
   // User-provisioning readiness = AIM OR SCIM (provisioning_status is the broader
   // "any provisioning" signal); aim tells us whether the preferred method is used.
   const prov = data.provisioning_status ?? "unknown";
-  // Readiness reflects the team-filled Adoption Workflow (matrix tasks, excluding the
-  // Security & Review questions) — not GTM auto-signals. Done = marked "completed".
-  const workflowTasks = (data.adoption?.tasks ?? []).filter((t) => t.lane !== "security");
+  // Readiness reflects the team-filled Genie Playbook — Happy Path tasks only (the core
+  // adoption path; Recommended / As Needed / Security don't count). N/A tasks are
+  // excluded from the score (not applicable). Done = marked "completed".
+  const happyPathTasks = (data.adoption?.tasks ?? []).filter((t) => t.lane === "happy_path");
+  const workflowTasks = happyPathTasks.filter((t) => t.status !== "na");
   const applicable = workflowTasks;
   const done = workflowTasks.filter((t) => t.status === "completed");
   const readinessPct =
@@ -1393,14 +1578,21 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
         <div className="divide-y border-t">
           <EligibilityRow
             tone={ppTone}
-            label="Partner-Powered AI"
+            label={
+              "Partner-Powered AI" +
+              // Show the enforce state right next to the label (e.g.
+              // "Partner-Powered AI · Enforce On").
+              (data.pp_enforce === "on"
+                ? " · Enforce On"
+                : data.pp_enforce === "off"
+                  ? " · Enforce Off"
+                  : "")
+            }
             value={
               ppConsumeViaWs
                 ? "On (select workspaces)"
                 : isPpEnabled(pp)
-                  ? pp === "on_default"
-                    ? "On (default)"
-                    : "On"
+                  ? "On"
                   : pp === "off"
                     ? "Off"
                     : "Unknown"

@@ -53,14 +53,19 @@ interface AccountResult {
   ae_owner?: string;
   sa_owner?: string;
   dsa_owner?: string;
+  arr?: number;
+  pp_status?: string;
+  genie_spend_90d?: number;
 }
 interface AudienceAccount {
   account_id: string;
   account_name: string;
   ae_owner: string;
   sa_owner: string;
+  dsa_owner: string;
   ae_email: string;
   sa_email: string;
+  dsa_email: string;
   arr: number;
   pp_status: string;
   genie_spend_90d: number;
@@ -543,7 +548,14 @@ function NewCampaignForm({
             <Textarea
               value={nlText}
               onChange={(e) => setNlText(e.target.value)}
-              placeholder="e.g. banking accounts where genie usage is less than 200 dollars per month"
+              onKeyDown={(e) => {
+                // Enter runs the query; Shift+Enter inserts a newline.
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  runQuery();
+                }
+              }}
+              placeholder="e.g. banking accounts where genie usage is less than 200 dollars per month  (Enter to search, Shift+Enter for a new line)"
               className="min-h-[60px]"
             />
             <div className="flex items-center justify-between gap-2">
@@ -624,6 +636,7 @@ function NewCampaignForm({
                       <th className="px-2 py-1.5">account_id</th>
                       <th className="px-2 py-1.5">AE email</th>
                       <th className="px-2 py-1.5">SA email</th>
+                      <th className="px-2 py-1.5">DSA email</th>
                       <th className="px-2 py-1.5 text-right">ARR</th>
                     </tr>
                   </thead>
@@ -653,6 +666,9 @@ function NewCampaignForm({
                           </td>
                           <td className="px-2 py-1.5 text-muted-foreground">
                             {a.sa_email || "—"}
+                          </td>
+                          <td className="px-2 py-1.5 text-muted-foreground">
+                            {a.dsa_email || "—"}
                           </td>
                           <td className="px-2 py-1.5 text-right whitespace-nowrap">
                             {fmtArr(a.arr)}
@@ -749,11 +765,13 @@ function ManualAdd({
       account_name: a.name,
       ae_owner: a.ae_owner ?? "",
       sa_owner: a.sa_owner ?? "",
+      dsa_owner: a.dsa_owner ?? "",
       ae_email: deriveEmail(a.ae_owner ?? ""),
       sa_email: deriveEmail(a.sa_owner ?? ""),
-      arr: 0,
-      pp_status: "unknown",
-      genie_spend_90d: 0,
+      dsa_email: deriveEmail(a.dsa_owner ?? ""),
+      arr: a.arr ?? 0,
+      pp_status: a.pp_status ?? "unknown",
+      genie_spend_90d: a.genie_spend_90d ?? 0,
     });
     setQ("");
     setResults([]);

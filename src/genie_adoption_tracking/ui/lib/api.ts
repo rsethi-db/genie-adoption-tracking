@@ -13,6 +13,7 @@ export class ApiError extends Error {
     }
 }
 export interface AccountDetailOut {
+    active_genie_spaces?: number;
     adoption?: AdoptionWorkflowOut | null;
     ae_owner: string;
     aim_status?: string;
@@ -21,6 +22,7 @@ export interface AccountDetailOut {
     created_at: string;
     dsa_owner: string;
     genie_active?: boolean;
+    genie_dbu_series?: unknown[];
     genie_spend_90d?: number;
     id: string;
     issues?: AccountIssueOut[];
@@ -36,6 +38,8 @@ export interface AccountDetailOut {
     readiness_pct?: number;
     readiness_tier?: string;
     sa_owner: string;
+    security_blocker?: boolean;
+    security_status?: string;
     sub_vertical: string;
     use_cases: UseCaseListOut[];
     ws_pp_off?: number;
@@ -68,7 +72,12 @@ export interface AccountOut {
     arr?: number;
     created_at: string;
     dsa_owner?: string;
+    genie_activated?: boolean;
     genie_active?: boolean;
+    genie_dbu_series?: unknown[];
+    genie_dbu_t28d?: number;
+    genie_dbu_t7d?: number;
+    genie_dbu_t90d?: number;
     genie_spend_90d?: number;
     id: string;
     monthly_dbus?: number;
@@ -85,6 +94,7 @@ export interface AccountOut {
     sa_owner: string;
     sub_vertical: string;
     use_case_count?: number;
+    vertical?: string;
     ws_pp_off?: number;
     ws_pp_on?: number;
     ws_total?: number;
@@ -129,6 +139,8 @@ export interface AdoptionStageOut {
     name: string;
 }
 export interface AdoptionTaskOut {
+    count?: number;
+    counts_things?: string;
     key: string;
     label: string;
     lane: string;
@@ -138,6 +150,7 @@ export interface AdoptionTaskOut {
     status?: string;
 }
 export interface AdoptionTaskUpdateIn {
+    count?: number | null;
     note?: string | null;
     status?: string | null;
     task_key: string;
@@ -153,6 +166,8 @@ export interface AudienceAccountOut {
     ae_email?: string;
     ae_owner?: string;
     arr?: number;
+    dsa_email?: string;
+    dsa_owner?: string;
     genie_spend_90d?: number;
     pp_status?: string;
     sa_email?: string;
@@ -164,8 +179,14 @@ export interface AudienceFilters {
     genie_active?: boolean | null;
     genie_spend_max?: number | null;
     genie_spend_min?: number | null;
+    has_use_case?: boolean | null;
+    open_issues?: boolean | null;
+    pp_enforce?: string | null;
     pp_status?: string | null;
+    provisioning?: string | null;
+    readiness_tier?: string | null;
     sub_vertical?: string | null;
+    whitespace?: boolean | null;
 }
 export interface AudienceQueryIn {
     text: string;
@@ -299,10 +320,12 @@ export interface DashboardOut {
     brickroad_issues?: BrickroadIssueOut[];
     est_pipeline_per_month?: number;
     funnel: FunnelBucketOut[];
+    genie_activated_accounts?: number;
     genie_active_accounts?: number;
     genie_ready_accounts?: GenieReadyAccountOut[];
     genie_revenue_t30d?: number;
     genie_spend_90d?: number;
+    insights?: InsightOut[];
     issues_at_risk?: number;
     live_use_cases: number;
     open_blockers: number;
@@ -315,14 +338,18 @@ export interface DashboardOut {
     stalled: StalledUseCaseOut[];
     sub_verticals?: SubVerticalStatOut[];
     tier_green?: number;
+    tier_green_change_30d?: number;
     tier_red?: number;
+    tier_red_change_30d?: number;
     tier_unknown?: number;
     tier_yellow?: number;
+    tier_yellow_change_30d?: number;
     top_resources: TopResourceOut[];
     total_accounts: number;
     total_monthly_dbus?: number;
     total_revenue_impact?: number;
     total_use_cases: number;
+    vertical_book_total?: number;
     whitespace_accounts?: number;
     whitespace_top?: WhitespaceAccountOut[];
     workspaces_with_genie?: number;
@@ -331,6 +358,8 @@ export interface FunnelBucketOut {
     code: string;
     count: number;
     monthly_dbus?: number;
+    moved_in_30d?: number;
+    moved_in_7d?: number;
     name: string;
     stage: string;
 }
@@ -372,6 +401,12 @@ export interface GenieStatusOut {
 }
 export interface HTTPValidationError {
     detail?: ValidationError[];
+}
+export interface InsightOut {
+    filter_label?: string;
+    filter_params?: Record<string, unknown>;
+    text: string;
+    tone?: string;
 }
 export interface Name {
     family_name?: string | null;
@@ -556,6 +591,11 @@ export interface ListAccountsParams {
     sub_vertical?: string;
     spend_bucket?: number;
     has_usecase?: boolean;
+    vertical?: string;
+    all?: boolean;
+    genie_activated?: boolean;
+    tier_moved_in?: string;
+    tier_moved_out?: string;
 }
 export const listAccounts = async (params?: ListAccountsParams, options?: RequestInit): Promise<{
     data: AccountOut[];
@@ -574,6 +614,11 @@ export const listAccounts = async (params?: ListAccountsParams, options?: Reques
     if (params?.sub_vertical != null) searchParams.set("sub_vertical", String(params?.sub_vertical));
     if (params?.spend_bucket != null) searchParams.set("spend_bucket", String(params?.spend_bucket));
     if (params?.has_usecase != null) searchParams.set("has_usecase", String(params?.has_usecase));
+    if (params?.vertical != null) searchParams.set("vertical", String(params?.vertical));
+    if (params?.all != null) searchParams.set("all", String(params?.all));
+    if (params?.genie_activated != null) searchParams.set("genie_activated", String(params?.genie_activated));
+    if (params?.tier_moved_in != null) searchParams.set("tier_moved_in", String(params?.tier_moved_in));
+    if (params?.tier_moved_out != null) searchParams.set("tier_moved_out", String(params?.tier_moved_out));
     const queryString = searchParams.toString();
     const url = queryString ? `/api/accounts?${queryString}` : "/api/accounts";
     const res = await fetch(url, {
@@ -1677,10 +1722,17 @@ export function useCurrentUserSuspense<TData = {
         ...options?.query
     });
 }
-export const getDashboard = async (options?: RequestInit): Promise<{
+export interface GetDashboardParams {
+    vertical?: string;
+}
+export const getDashboard = async (params?: GetDashboardParams, options?: RequestInit): Promise<{
     data: DashboardOut;
 }> =>{
-    const res = await fetch("/api/dashboard", {
+    const searchParams = new URLSearchParams();
+    if (params?.vertical != null) searchParams.set("vertical", String(params?.vertical));
+    const queryString = searchParams.toString();
+    const url = queryString ? `/api/dashboard?${queryString}` : "/api/dashboard";
+    const res = await fetch(url, {
         ...options,
         method: "GET"
     });
@@ -1698,34 +1750,37 @@ export const getDashboard = async (options?: RequestInit): Promise<{
         data: await res.json()
     };
 };
-export const getDashboardKey = ()=>{
+export const getDashboardKey = (params?: GetDashboardParams)=>{
     return [
-        "/api/dashboard"
+        "/api/dashboard",
+        params
     ] as const;
 };
 export function useGetDashboard<TData = {
     data: DashboardOut;
 }>(options?: {
+    params?: GetDashboardParams;
     query?: Omit<UseQueryOptions<{
         data: DashboardOut;
     }, ApiError, TData>, "queryKey" | "queryFn">;
 }) {
     return useQuery({
-        queryKey: getDashboardKey(),
-        queryFn: ()=>getDashboard(),
+        queryKey: getDashboardKey(options?.params),
+        queryFn: ()=>getDashboard(options?.params),
         ...options?.query
     });
 }
 export function useGetDashboardSuspense<TData = {
     data: DashboardOut;
 }>(options?: {
+    params?: GetDashboardParams;
     query?: Omit<UseSuspenseQueryOptions<{
         data: DashboardOut;
     }, ApiError, TData>, "queryKey" | "queryFn">;
 }) {
     return useSuspenseQuery({
-        queryKey: getDashboardKey(),
-        queryFn: ()=>getDashboard(),
+        queryKey: getDashboardKey(options?.params),
+        queryFn: ()=>getDashboard(options?.params),
         ...options?.query
     });
 }

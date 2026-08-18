@@ -77,6 +77,7 @@ class AccountOut(BaseModel):
     id: str
     name: str
     sub_vertical: str
+    vertical: str = "FINS"
     ae_owner: str
     sa_owner: str
     dsa_owner: str = ""
@@ -95,6 +96,11 @@ class AccountOut(BaseModel):
     genie_spend_90d: float = 0.0
     active_genie_spaces: int = 0
     genie_active: bool = False
+    genie_activated: bool = False
+    genie_dbu_t7d: float = 0.0
+    genie_dbu_t28d: float = 0.0
+    genie_dbu_t90d: float = 0.0
+    genie_dbu_series: list = []
     readiness_pct: int = 0
     open_issues: int = 0
     created_at: datetime
@@ -132,6 +138,10 @@ class AdoptionTaskOut(BaseModel):
     label: str
     status: str = "not_initiated"  # not_initiated | na | in_progress | completed
     note: str = ""
+    # "How many?" count (demos/workshops/prototypes/hackathons). 0 = unset.
+    count: int = 0
+    # Whether this task prompts for a "how many?" count (set for quantifiable tasks).
+    counts_things: str = ""  # e.g. "demos", "workshops" — empty = not quantifiable
     # Relevant Getting-Help resources for this task (resolved from playbook.RESOURCES).
     resources: list[TaskResourceOut] = []
 
@@ -146,6 +156,7 @@ class AdoptionTaskUpdateIn(BaseModel):
     task_key: str
     status: str | None = None
     note: str | None = None
+    count: int | None = None
 
 
 class AdoptionHistoryEntryOut(BaseModel):
@@ -197,7 +208,11 @@ class AccountDetailOut(BaseModel):
     provisioning_ws_total: int = 0
     readiness_tier: str = "unknown"
     genie_spend_90d: float = 0.0
+    active_genie_spaces: int = 0
     genie_active: bool = False
+    genie_dbu_series: list = []
+    security_blocker: bool = False
+    security_status: str = ""
     readiness_pct: int = 0
     created_at: datetime
     open_blockers: int
@@ -325,12 +340,27 @@ class OkOut(BaseModel):
 # --------------------------------------------------------------------------------------
 
 
+class InsightOut(BaseModel):
+    """An auto-generated highlight bullet for the Signals footer. When `filter_params`
+    is set, the UI can expand the bullet to list the accounts behind it (same params
+    the /accounts endpoint accepts)."""
+
+    text: str
+    tone: str = "neutral"  # good | warn | bad | neutral
+    filter_label: str = ""
+    filter_params: dict = {}
+
+
 class FunnelBucketOut(BaseModel):
     stage: str
     code: str
     name: str
     count: int
     monthly_dbus: float = 0.0
+    # Accounts that had a use case move INTO this stage in the trailing 7 / 30 days
+    # (from GTM stage_move_in_date) — the WoW / MoM flow.
+    moved_in_7d: int = 0
+    moved_in_30d: int = 0
 
 
 class BlockerAggOut(BaseModel):
@@ -430,6 +460,11 @@ class DashboardOut(BaseModel):
     open_issues: int = 0
     accounts_with_issues: int = 0
     genie_active_accounts: int = 0
+    genie_activated_accounts: int = 0  # GTM "Activated Account" (200+ BMAU 2mo + AIM/SCIM)
+    # Full account book for the selected vertical from the GTM activation deep-dive
+    # (the dashboard's parity figure, e.g. FINS = 811). Display-only; broader than the
+    # app's active universe (includes dormant/non-customer accounts). 0 = all verticals.
+    vertical_book_total: int = 0
     workspaces_with_genie: int = 0
     genie_spend_90d: float = 0.0
     # --- logfood parity: headline / Partner-Powered AI page ---
@@ -447,6 +482,10 @@ class DashboardOut(BaseModel):
     tier_yellow: int = 0
     tier_red: int = 0
     tier_unknown: int = 0
+    # Net 30-day (28d) change per tier = current count − count 28 days ago.
+    tier_green_change_30d: int = 0
+    tier_yellow_change_30d: int = 0
+    tier_red_change_30d: int = 0
     funnel: list[FunnelBucketOut]
     blockers_by_category: list[BlockerAggOut]
     stalled: list[StalledUseCaseOut]
@@ -457,6 +496,8 @@ class DashboardOut(BaseModel):
     brickroad_issues: list[BrickroadIssueOut] = []
     genie_ready_accounts: list[GenieReadyAccountOut] = []
     sub_verticals: list[SubVerticalStatOut] = []
+    # Auto-generated highlight bullets (tone: good | warn | bad | neutral).
+    insights: list["InsightOut"] = []
 
 
 # AccountDetailOut forward-references UseCaseListOut (defined above), resolve it.
@@ -493,10 +534,17 @@ class AudienceFilters(BaseModel):
     arr_min: float | None = None
     arr_max: float | None = None
     pp_status: str | None = None  # "on" | "off"
+    pp_enforce: str | None = None  # "on" | "off" — PP-off enforce state
     genie_spend_min: float | None = None
     genie_spend_max: float | None = None
     sub_vertical: str | None = None
     genie_active: bool | None = None
+    # Richer Signals concepts (same definitions as the Signals dashboard):
+    provisioning: str | None = None  # "on" | "partial" | "off" (off = incl. blank/unknown)
+    readiness_tier: str | None = None  # "green" | "yellow" | "red" | "unknown"
+    whitespace: bool | None = None  # can-consume + provisioned + no active agent
+    has_use_case: bool | None = None  # has ≥1 Genie use case
+    open_issues: bool | None = None  # has ≥1 open Brickroad issue
 
 
 class AudienceAccountOut(BaseModel):
@@ -504,8 +552,10 @@ class AudienceAccountOut(BaseModel):
     account_name: str
     ae_owner: str = ""
     sa_owner: str = ""
+    dsa_owner: str = ""
     ae_email: str = ""
     sa_email: str = ""
+    dsa_email: str = ""
     arr: float = 0.0
     pp_status: str = "unknown"
     genie_spend_90d: float = 0.0
@@ -515,6 +565,9 @@ class AudienceQueryOut(BaseModel):
     filters: AudienceFilters
     # Human-readable echo of what the filters mean, so the user can sanity-check.
     interpreted: str
+    # The equivalent SQL the filters translate to (over gat_account + derived signals),
+    # shown collapsed so a user can see exactly how the audience was resolved.
+    sql: str = ""
     accounts: list[AudienceAccountOut]
     # The equivalent SQL for the parsed filters, so the UI can show it in an editable
     # box the user can tweak and re-run to override the NL parse.

@@ -39,6 +39,8 @@ class Account(SQLModel, table=True):
     # PK stays the internal uuid so existing FK'd user data (task states, plan, history)
     # is never re-parented.
     sfdc_account_id: str = Field(default="", index=True)
+    # AMER Industries vertical (sales_subregion_level_1): FINS / MFG / PS / HLS.
+    vertical: str = Field(default="FINS", index=True)
     name: str = Field(index=True)
     sub_vertical: str = Field(default="")
     ae_owner: str = Field(default="")
@@ -65,14 +67,34 @@ class Account(SQLModel, table=True):
     provisioning_ws_total: int = Field(default=0)
     # True if the account consumed Genie in the trailing 2 years (active footprint).
     genie_active: bool = Field(default=False)
-    # Genie-Ready tier from GTM (rpt_account_genie_ready): green | yellow | red | unknown.
-    # A GTM signal, distinct from the team-filled workflow readiness %.
+    # Open Security Authority Review blocker (from the "Genie Security Blockers" sheet).
+    # Drives the "Complete your Security Authority Review" action on the account page.
+    security_blocker: bool = Field(default=False, index=True)
+    security_status: str = Field(default="")  # e.g. "3. Review Actively Engaged"
+    # Genie "Activated Account" (GTM product-deep-dives definition): 200+ Genie BMAU for
+    # 2 consecutive months AND AIM/SCIM enabled, measured at deployable level. A much
+    # stricter bar than genie_active — from account_consumption_daily.genie_activated.
+    genie_activated: bool = Field(default=False, index=True)
+    # Genie-Ready tier from the GTM activation deep-dive (deployable_best_genie_ready_color;
+    # matches the Product Deep Dives dashboard): green | yellow | red | unknown. A GTM
+    # signal, distinct from the team-filled workflow readiness %.
     readiness_tier: str = Field(default="unknown", index=True)
+    # The tier 28 days ago (…_28d_ago) — drives the 30-day tier change + moved-accounts.
+    readiness_tier_prev: str = Field(default="unknown", index=True)
     # Genie-specific spend, trailing 90 days (USD), from fins_data.genie_dbu_dollars.
     genie_spend_90d: float = Field(default=0.0)
     # Genie-specific spend, trailing 30 days (USD) — the T30D figure the logfood
     # dashboard's PP-off page reports (fins_data.genie_dbu_dollars, last 30 days).
     genie_dollars_t30d: float = Field(default=0.0)
+    # Standalone-Genie $DBU rolling-window sums (precomputed in account_consumption_daily):
+    # trailing 7 / 28 / ~90 (t91d) days, as of the latest snapshot.
+    genie_dbu_t7d: float = Field(default=0.0)
+    genie_dbu_t28d: float = Field(default=0.0)
+    genie_dbu_t90d: float = Field(default=0.0)
+    # Daily standalone-Genie $DBU series over the last ~90 days, as [["YYYY-MM-DD", $], …]
+    # (oldest→newest, only days with usage). Powers the account-page trend chart + the
+    # Signals sparkline.
+    genie_dbu_series: list = Field(default_factory=list, sa_column=Column(JSON))
     # Active Genie spaces (data rooms with usage in the trailing 30 days), summed
     # across the account's workspaces (metric_store.fct_data_room_messages_daily).
     active_genie_spaces: int = Field(default=0)
@@ -91,6 +113,9 @@ class UseCase(SQLModel, table=True):
     description: str = Field(default="")
     stage: str = Field(default="prereqs", index=True)
     estimated_monthly_dbus: float = Field(default=0.0)
+    # When this use case moved into its current stage (GTM stage_move_in_date). Drives
+    # the funnel's per-stage 7d/30d flow-in metrics. Null for hand-created use cases.
+    stage_move_in_date: datetime | None = Field(default=None)
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
     created_by: str = Field(default="")
@@ -165,10 +190,17 @@ class AdoptionTaskState(SQLModel, table=True):
 
     id: str = Field(primary_key=True)
     account_id: str = Field(index=True, foreign_key="gat_account.id")
+    account_name: str = Field(default="")
     task_key: str = Field(index=True)
-    # not_initiated | na | in_progress | completed
+    task_name: str = Field(default="")
+    # position in the questionnaire — ORDER BY task_order == questionnaire order
+    task_order: int = Field(default=0, index=True)
+    # not_initiated | na | in_progress | completed | blocked
     status: str = Field(default="not_initiated")
     note: str = Field(default="")
+    # "How many?" count for quantifiable tasks (demos, workshops, prototypes, hackathons)
+    # once in progress / completed. 0 = not applicable / unset.
+    count: int = Field(default=0)
     updated_at: datetime = Field(default_factory=_utcnow)
     updated_by: str = Field(default="")
 
@@ -183,7 +215,11 @@ class AdoptionTaskHistory(SQLModel, table=True):
 
     id: str = Field(primary_key=True)
     account_id: str = Field(index=True, foreign_key="gat_account.id")
+    account_name: str = Field(default="")
     task_key: str = Field(index=True)
+    task_name: str = Field(default="")
+    # position in the questionnaire — ORDER BY task_order == questionnaire order
+    task_order: int = Field(default=0, index=True)
     status: str = Field(default="")
     note: str = Field(default="")
     changed_at: datetime = Field(default_factory=_utcnow, index=True)
@@ -218,6 +254,28 @@ class ResourceClick(SQLModel, table=True):
     stage: str = Field(default="")
     created_at: datetime = Field(default_factory=_utcnow, index=True)
     created_by: str = Field(default="")
+
+
+class VerticalBook(SQLModel, table=True):
+    """Per-vertical account-book totals from the GTM Genie Account Activation deep-dive
+    (temp__rpt_genie_aibi_activation_chart, latest snapshot, by sales_subregion_level_1).
+    A display-only parity figure — the full FINS/MFG/... book behind the dashboard's
+    activation count (e.g. FINS = 811), including dormant/non-customer accounts that the
+    app's active universe intentionally excludes. NOT the app's account list."""
+
+    __tablename__ = "gat_vertical_book"
+
+    vertical: str = Field(primary_key=True)  # sales_subregion_level_1 (FINS/MFG/...)
+    book_total: int = Field(default=0)  # distinct accounts on the activation book
+    # Genie-Ready tier counts over the FULL book (matches the dashboard's stacked bar),
+    # with the value 28 days ago for the 30-day change.
+    book_green: int = Field(default=0)
+    book_yellow: int = Field(default=0)
+    book_red: int = Field(default=0)
+    book_green_prev: int = Field(default=0)
+    book_yellow_prev: int = Field(default=0)
+    book_red_prev: int = Field(default=0)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 class GenieQuery(SQLModel, table=True):
