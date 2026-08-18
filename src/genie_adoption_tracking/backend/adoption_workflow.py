@@ -105,7 +105,7 @@ TASKS: list[Task] = [
      "label": "Follow up in 2×2 convos"},
 
     {"key": "rec_u3_workbench", "stage": "u3", "lane": "recommended",
-     "label": "Optimize accuracy in Workbench"},
+     "label": "Optimize accuracy using Genie Code / Workbench"},
     {"key": "rec_u3_hackathon", "stage": "u3", "lane": "recommended",
      "label": "Run a Genie Acceleration Hackathon"},
 
@@ -138,6 +138,15 @@ _TASK_KEYS = {t["key"] for t in TASKS}
 # same way the questionnaire is (not alphabetically by task_key).
 TASK_ORDER = {t["key"]: i for i, t in enumerate(TASKS)}
 TASK_LABEL = {t["key"]: t["label"] for t in TASKS}
+
+# Tasks that are quantifiable — once in progress / completed, the team is asked
+# "how many?" (e.g. how many demos, workshops). Value = the noun for the prompt.
+TASK_COUNTS: dict[str, str] = {
+    "hp_u1_demo": "demos",
+    "hp_u2_workshop": "workshops",
+    "hp_u3_prototype": "prototypes",
+    "rec_u3_hackathon": "hackathons",
+}
 
 
 # Which Getting-Help resources (by playbook.RESOURCES key) are relevant to each

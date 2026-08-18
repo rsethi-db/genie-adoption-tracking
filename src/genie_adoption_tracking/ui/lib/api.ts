@@ -139,6 +139,8 @@ export interface AdoptionStageOut {
     name: string;
 }
 export interface AdoptionTaskOut {
+    count?: number;
+    counts_things?: string;
     key: string;
     label: string;
     lane: string;
@@ -148,6 +150,7 @@ export interface AdoptionTaskOut {
     status?: string;
 }
 export interface AdoptionTaskUpdateIn {
+    count?: number | null;
     note?: string | null;
     status?: string | null;
     task_key: string;

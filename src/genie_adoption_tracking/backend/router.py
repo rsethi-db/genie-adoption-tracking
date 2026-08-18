@@ -338,6 +338,8 @@ def _build_adoption(session: Session, account: Account) -> AdoptionWorkflowOut:
             status=(stored[t["key"]].status if t["key"] in stored
                     else adoption_workflow.DEFAULT_STATUS),
             note=stored[t["key"]].note if t["key"] in stored else "",
+            count=(stored[t["key"]].count if t["key"] in stored else 0),
+            counts_things=adoption_workflow.TASK_COUNTS.get(t["key"], ""),
             resources=_task_resources(t["key"]),
         )
         for t in adoption_workflow.TASKS
@@ -723,11 +725,18 @@ def update_adoption_task(
         )
     new_status = body.status if body.status is not None else existing.status
     new_note = body.note if body.note is not None else existing.note
-    changed = (new_status != existing.status) or (new_note != existing.note)
+    new_count = body.count if body.count is not None else existing.count
+    changed = (
+        (new_status != existing.status)
+        or (new_note != existing.note)
+        or (new_count != existing.count)
+    )
     if body.status is not None:
         existing.status = body.status
     if body.note is not None:
         existing.note = body.note
+    if body.count is not None:
+        existing.count = body.count
     now = _utcnow()
     actor = _actor(user_ws)
     existing.account_name = acct.name
@@ -789,13 +798,20 @@ def save_adoption_tasks(
             existing[item.task_key] = row
         new_status = item.status if item.status is not None else row.status
         new_note = item.note if item.note is not None else row.note
+        new_count = item.count if item.count is not None else row.count
         # Only log history when something actually changed (avoid noise from Save
         # re-writing untouched tasks).
-        changed = (new_status != row.status) or (new_note != row.note)
+        changed = (
+            (new_status != row.status)
+            or (new_note != row.note)
+            or (new_count != row.count)
+        )
         if item.status is not None:
             row.status = item.status
         if item.note is not None:
             row.note = item.note
+        if item.count is not None:
+            row.count = item.count
         row.account_name = acct.name
         row.task_name = adoption_workflow.TASK_LABEL.get(item.task_key, "")
         row.task_order = adoption_workflow.TASK_ORDER.get(item.task_key, 0)

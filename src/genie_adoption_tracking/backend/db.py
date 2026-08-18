@@ -198,6 +198,9 @@ class AdoptionTaskState(SQLModel, table=True):
     # not_initiated | na | in_progress | completed | blocked
     status: str = Field(default="not_initiated")
     note: str = Field(default="")
+    # "How many?" count for quantifiable tasks (demos, workshops, prototypes, hackathons)
+    # once in progress / completed. 0 = not applicable / unset.
+    count: int = Field(default=0)
     updated_at: datetime = Field(default_factory=_utcnow)
     updated_by: str = Field(default="")
 

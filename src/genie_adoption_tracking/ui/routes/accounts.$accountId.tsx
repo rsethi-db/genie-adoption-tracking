@@ -520,12 +520,17 @@ function AdoptionTaskCard({
 }: {
   task: AdoptionTaskOut;
   tone: string;
-  value: { status: string; note: string };
-  onChange: (patch: { status?: string; note?: string }) => void;
+  value: { status: string; note: string; count: number };
+  onChange: (patch: { status?: string; note?: string; count?: number }) => void;
   accountName: string;
   securityBlocker?: boolean;
 }) {
   const blocked = value.status === "blocked";
+  // Quantifiable tasks (demos/workshops/prototypes/hackathons) prompt "how many?"
+  // once in progress or completed.
+  const asksCount =
+    !!task.counts_things &&
+    (value.status === "in_progress" || value.status === "completed");
   // All five statuses (incl. Blocked) are available on every task.
   const statusOptions = ADOPTION_STATUSES;
   const [showResources, setShowResources] = useState(false);
@@ -545,6 +550,29 @@ function AdoptionTaskCard({
         options={statusOptions}
         onPick={(v) => onChange({ status: v })}
       />
+      {asksCount && (
+        <div className="mt-2">
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              How many {task.counts_things}?
+              <span className="text-destructive"> *</span>
+            </label>
+            <Input
+              type="number"
+              min={1}
+              required
+              value={value.count || ""}
+              onChange={(e) =>
+                onChange({ count: Math.max(0, parseInt(e.target.value || "0", 10)) })
+              }
+              className={cn(
+                "h-7 w-20 text-xs",
+                (value.count ?? 0) < 1 && "border-destructive focus-visible:ring-destructive",
+              )}
+            />
+          </div>
+        </div>
+      )}
       {/* When blocked, the reason dropdown sits right under the status (task-specific
           reasons), then the note, then the Ask-Genie link. */}
       {blocked && (
@@ -830,14 +858,18 @@ function AdoptionWorkflow({
   const qc = useQueryClient();
 
   // Hold all task edits locally; persist to Lakebase only on Save.
-  const [edits, setEdits] = useState<Record<string, { status: string; note: string }>>(
-    () => {
-      const m: Record<string, { status: string; note: string }> = {};
-      for (const t of workflow.tasks)
-        m[t.key] = { status: t.status ?? "not_initiated", note: t.note ?? "" };
-      return m;
-    }
-  );
+  const [edits, setEdits] = useState<
+    Record<string, { status: string; note: string; count: number }>
+  >(() => {
+    const m: Record<string, { status: string; note: string; count: number }> = {};
+    for (const t of workflow.tasks)
+      m[t.key] = {
+        status: t.status ?? "not_initiated",
+        note: t.note ?? "",
+        count: t.count ?? 0,
+      };
+    return m;
+  });
   const [dirty, setDirty] = useState(false);
 
   const save = useSaveAdoptionTasks({
@@ -852,12 +884,28 @@ function AdoptionWorkflow({
     },
   });
 
-  const setField = (key: string, patch: { status?: string; note?: string }) => {
+  const setField = (
+    key: string,
+    patch: { status?: string; note?: string; count?: number },
+  ) => {
     setEdits((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
     setDirty(true);
   };
 
-  const onSave = () =>
+  // Quantifiable tasks (demos/workshops/…) require a count once in progress/completed.
+  const missingCounts = workflow.tasks.filter((t) => {
+    if (!t.counts_things) return false;
+    const st = edits[t.key]?.status;
+    if (st !== "in_progress" && st !== "completed") return false;
+    return (edits[t.key]?.count ?? 0) < 1;
+  });
+
+  const onSave = () => {
+    if (missingCounts.length > 0) {
+      const first = missingCounts[0];
+      toast.error(`Enter how many ${first.counts_things} for "${first.label}"`);
+      return;
+    }
     save.mutate({
       params: { account_id: accountId },
       data: {
@@ -865,9 +913,11 @@ function AdoptionWorkflow({
           task_key,
           status: v.status,
           note: v.note,
+          count: v.count,
         })),
       },
     });
+  };
 
   // Index tasks by lane+stage so each lane renders as one aligned horizontal band
   // (color row) across the stage columns — matching the workflow slide.
@@ -916,16 +966,24 @@ function AdoptionWorkflow({
           )}
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
-          <Button onClick={onSave} disabled={save.isPending || !dirty}>
+          <Button
+            onClick={onSave}
+            disabled={save.isPending || !dirty || missingCounts.length > 0}
+          >
             {save.isPending
               ? "Saving…"
               : unsavedCount > 0
                 ? `Save (${unsavedCount})`
                 : "Save"}
           </Button>
-          {dirty && !save.isPending && (
+          {missingCounts.length > 0 ? (
+            <span className="text-[10px] text-destructive">
+              Enter a count for {missingCounts.length} task
+              {missingCounts.length === 1 ? "" : "s"}
+            </span>
+          ) : dirty && !save.isPending ? (
             <span className="text-[10px] text-muted-foreground">Unsaved changes</span>
-          )}
+          ) : null}
         </div>
       </CardHeader>
       <CardContent>
@@ -952,7 +1010,7 @@ function AdoptionWorkflow({
                   key={t.key}
                   task={t}
                   tone=""
-                  value={edits[t.key] ?? { status: "not_initiated", note: "" }}
+                  value={edits[t.key] ?? { status: "not_initiated", note: "", count: 0 }}
                   onChange={(patch) => setField(t.key, patch)}
                   accountName={accountName}
                   securityBlocker={securityBlocker}
@@ -995,7 +1053,7 @@ function AdoptionWorkflow({
                             key={t.key}
                             task={t}
                             tone={lane.tone}
-                            value={edits[t.key] ?? { status: "not_initiated", note: "" }}
+                            value={edits[t.key] ?? { status: "not_initiated", note: "", count: 0 }}
                             onChange={(patch) => setField(t.key, patch)}
                             accountName={accountName}
                           />

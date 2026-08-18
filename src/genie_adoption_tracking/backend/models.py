@@ -138,6 +138,10 @@ class AdoptionTaskOut(BaseModel):
     label: str
     status: str = "not_initiated"  # not_initiated | na | in_progress | completed
     note: str = ""
+    # "How many?" count (demos/workshops/prototypes/hackathons). 0 = unset.
+    count: int = 0
+    # Whether this task prompts for a "how many?" count (set for quantifiable tasks).
+    counts_things: str = ""  # e.g. "demos", "workshops" — empty = not quantifiable
     # Relevant Getting-Help resources for this task (resolved from playbook.RESOURCES).
     resources: list[TaskResourceOut] = []
 
@@ -152,6 +156,7 @@ class AdoptionTaskUpdateIn(BaseModel):
     task_key: str
     status: str | None = None
     note: str | None = None
+    count: int | None = None
 
 
 class AdoptionHistoryEntryOut(BaseModel):

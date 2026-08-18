@@ -72,6 +72,7 @@ _MIGRATIONS = [
     "ALTER TABLE gat_adoption_task_state ADD COLUMN IF NOT EXISTS account_name VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_adoption_task_state ADD COLUMN IF NOT EXISTS task_name VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_adoption_task_state ADD COLUMN IF NOT EXISTS task_order INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE gat_adoption_task_state ADD COLUMN IF NOT EXISTS count INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE gat_adoption_task_history ADD COLUMN IF NOT EXISTS account_name VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_adoption_task_history ADD COLUMN IF NOT EXISTS task_name VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_adoption_task_history ADD COLUMN IF NOT EXISTS task_order INTEGER NOT NULL DEFAULT 0",
