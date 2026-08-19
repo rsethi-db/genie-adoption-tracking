@@ -187,9 +187,9 @@ function toISO(s: string): string | null {
   return iso;
 }
 
-// A mm/dd/yyyy text field with a calendar icon that opens the browser's native
-// date picker. Typing stays free-form (validated on submit via toISO); picking
-// from the calendar writes the value back as mm/dd/yyyy.
+// A native date field — always shows the browser's calendar picker (click the field
+// or its calendar icon). Stores the value upstream as mm/dd/yyyy (what toISO expects
+// on submit); the native control works in ISO (yyyy-mm-dd), so we convert both ways.
 function DateField({
   value,
   onChange,
@@ -197,48 +197,30 @@ function DateField({
   value: string;
   onChange: (v: string) => void;
 }) {
-  const nativeRef = useRef<HTMLInputElement>(null);
-
-  function openPicker() {
-    const el = nativeRef.current;
-    if (!el) return;
-    // showPicker() is the reliable way to pop the native calendar on demand.
-    if (typeof el.showPicker === "function") el.showPicker();
-    else el.click();
-  }
-
+  const ref = useRef<HTMLInputElement>(null);
   return (
-    <div className="relative mt-1">
-      <Input
-        inputMode="numeric"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="mm/dd/yyyy"
-        className="pr-9"
-      />
-      <button
-        type="button"
-        onClick={openPicker}
-        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-        aria-label="Open calendar"
-      >
-        <CalendarClock className="h-4 w-4" />
-      </button>
-      {/* Hidden native picker; its ISO value is mirrored to/from mm/dd/yyyy text. */}
-      <input
-        ref={nativeRef}
-        type="date"
-        value={toISO(value) || ""}
-        onChange={(e) => {
-          const iso = e.target.value; // yyyy-mm-dd
-          const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-          onChange(m ? `${m[2]}/${m[3]}/${m[1]}` : "");
-        }}
-        className="sr-only"
-        tabIndex={-1}
-        aria-hidden="true"
-      />
-    </div>
+    <Input
+      ref={ref}
+      type="date"
+      value={toISO(value) || ""}
+      onChange={(e) => {
+        const iso = e.target.value; // yyyy-mm-dd (or "" when cleared)
+        const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        onChange(m ? `${m[2]}/${m[3]}/${m[1]}` : "");
+      }}
+      onClick={() => {
+        // Open the calendar on any click, not just the small native icon.
+        const el = ref.current;
+        if (el && typeof el.showPicker === "function") {
+          try {
+            el.showPicker();
+          } catch {
+            /* showPicker throws if not user-activated — ignore */
+          }
+        }
+      }}
+      className="mt-1"
+    />
   );
 }
 
