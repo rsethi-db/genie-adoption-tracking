@@ -37,8 +37,12 @@ import {
   MinusCircle,
   ChevronDown,
   CalendarClock,
+  Lightbulb,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { toast } from "sonner";
+import { nextActions, momentum, type NextAction } from "@/lib/next-best-action";
 import {
   PP_DOCS_URL,
   PP_SECURITY_REVIEW_URL,
@@ -86,6 +90,20 @@ function AccountDetail({ accountId }: { accountId: string }) {
     query: { select: (d) => d.data },
   });
 
+  // Momentum from the daily $ series (last 2wk vs prior) + the top recommended move —
+  // used for the header trend chip and to seed the Genie chat with real context.
+  const mo = momentum(data.genie_dbu_series);
+  const topAction = nextActions(data)[0];
+  const askContext =
+    `Context for ${data.name}: ` +
+    `Partner-Powered AI ${data.pp_status ?? "unknown"} (enforce ${data.pp_enforce ?? "unknown"}); ` +
+    `provisioning ${data.provisioning_status ?? "unknown"}; ` +
+    `Genie-Ready tier ${data.readiness_tier ?? "unknown"}; ` +
+    `${(data.active_genie_spaces ?? 0)} active Genie space(s); ` +
+    `Genie $ ${fmtDbus(data.genie_spend_90d ?? 0)}/30d (${mo.dir === "none" ? "no trend" : `${mo.pct >= 0 ? "+" : ""}${mo.pct}% vs prior 2wk`}). ` +
+    `Recommended next step: ${topAction.title}. ` +
+    `What should I focus on next, and how?`;
+
   return (
     <div>
       {/* Header */}
@@ -100,8 +118,28 @@ function AccountDetail({ accountId }: { accountId: string }) {
               {data.dsa_owner && <span>DSA · {data.dsa_owner}</span>}
             </div>
             <div className="flex items-center gap-3 mt-3 text-sm">
-              <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+              <span className="text-emerald-700 dark:text-emerald-400 font-medium inline-flex items-center gap-1.5">
                 {fmtDbus(data.genie_spend_90d ?? 0)} Genie Agent (DBSQL $) (30d)
+                {(mo.dir === "up" || mo.dir === "down" || mo.dir === "dark") && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[11px] font-semibold",
+                      mo.dir === "up"
+                        ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                        : "bg-destructive/10 text-destructive",
+                    )}
+                    title="Genie $ trend: last 2 weeks vs the prior 2 weeks"
+                  >
+                    {mo.dir === "up" ? (
+                      <TrendingUp className="h-3 w-3" />
+                    ) : (
+                      <TrendingDown className="h-3 w-3" />
+                    )}
+                    {mo.dir === "dark"
+                      ? "went quiet"
+                      : `${mo.pct >= 0 ? "+" : ""}${mo.pct}% 2wk`}
+                  </span>
+                )}
               </span>
               <span className="text-muted-foreground">
                 {(data.active_genie_spaces ?? 0).toLocaleString()} active Genie agent
@@ -124,14 +162,15 @@ function AccountDetail({ accountId }: { accountId: string }) {
           <Button
             variant="outline"
             className="gap-2 shrink-0"
-            onClick={() =>
-              openGenieChat(`What should I focus on next with ${data.name}?`)
-            }
+            onClick={() => openGenieChat(askContext)}
           >
             <Sparkles className="h-4 w-4" /> Ask about this account
           </Button>
         </div>
       </div>
+
+      {/* Start here — the single highest-leverage next move, derived from signals. */}
+      <NextBestAction data={data} />
 
       {/* Readiness & eligibility — one compact card replacing the 3 stacked banners */}
       <ReadinessEligibility data={data} />
@@ -994,8 +1033,8 @@ function AdoptionWorkflow({
               PRE-REQS · READY?
             </span>
             <span className="text-white/80">
-              Determine eligibility — do they have the foundational tech blocks to
-              proceed?
+              Determine eligibility — does your customer have the foundational tech
+              blocks to proceed?
             </span>
           </div>
         )}
@@ -1087,6 +1126,16 @@ function AdoptionWorkflow({
   );
 }
 
+// Days a use case has sat untouched, if it's stalled (not Live and 30+ days old).
+// 0 = not stalled. Drives the amber "Nd" badge in the funnel.
+function ucStalledDays(uc: UseCaseListOut): number {
+  if (uc.stage === "u6") return 0;
+  const t = Date.parse(uc.updated_at);
+  if (Number.isNaN(t)) return 0;
+  const d = Math.floor((Date.now() - t) / 86_400_000);
+  return d >= 30 ? d : 0;
+}
+
 const UC_STAGES: { key: string; code: string }[] = [
   { key: "u1", code: "U1" },
   { key: "u2", code: "U2" },
@@ -1175,12 +1224,24 @@ function UseCaseFlow({ useCases }: { useCases: UseCaseListOut[] }) {
                                     {fmtDbus(uc.estimated_monthly_dbus ?? 0)}/mo est. DBU
                                   </div>
                                 )}
-                                {(uc.open_blockers ?? 0) > 0 && (
-                                  <Badge variant="destructive" className="gap-1 mt-1.5">
-                                    <AlertTriangle className="h-3 w-3" />
-                                    {uc.open_blockers}
-                                  </Badge>
-                                )}
+                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                  {(uc.open_blockers ?? 0) > 0 && (
+                                    <Badge variant="destructive" className="gap-1">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      {uc.open_blockers}
+                                    </Badge>
+                                  )}
+                                  {ucStalledDays(uc) > 0 && (
+                                    <Badge
+                                      variant="outline"
+                                      className="gap-1 border-amber-500/50 text-amber-700 dark:text-amber-400"
+                                      title="No update in 30+ days and not yet Live — re-engage or close"
+                                    >
+                                      <Clock className="h-3 w-3" />
+                                      {ucStalledDays(uc)}d
+                                    </Badge>
+                                  )}
+                                </div>
                               </CardContent>
                             </Card>
                           </Link>
@@ -1414,6 +1475,112 @@ function WsCounts({
   );
 }
 
+// "Start here" — the single highest-leverage next move for this account, derived from
+// its live signals (see lib/next-best-action). Leads the page so the team gets a
+// recommendation, not a blank form. Secondary actions are listed compactly below.
+const NBA_TONE: Record<
+  string,
+  { ring: string; chip: string; label: string }
+> = {
+  blocked: {
+    ring: "border-destructive/40 bg-destructive/[0.04]",
+    chip: "bg-destructive/10 text-destructive",
+    label: "Unblock",
+  },
+  activate: {
+    ring: "border-amber-500/40 bg-amber-500/[0.04]",
+    chip: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    label: "Activate",
+  },
+  grow: {
+    ring: "border-emerald-500/40 bg-emerald-500/[0.04]",
+    chip: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+    label: "Grow",
+  },
+  done: {
+    ring: "border-border",
+    chip: "bg-muted text-muted-foreground",
+    label: "On track",
+  },
+};
+
+function NextBestAction({ data }: { data: AccountDetailOut }) {
+  const actions = nextActions(data);
+  const top = actions[0];
+  const rest = actions.slice(1);
+  const meta = NBA_TONE[top.tone] ?? NBA_TONE.done;
+  return (
+    <Card className={cn("mb-6 border-2 shadow-sm", meta.ring)}>
+      <CardContent className="py-5">
+        <div className="flex items-start gap-4">
+          <div className="shrink-0 rounded-xl bg-amber-500/10 p-3 ring-1 ring-amber-500/20">
+            <Lightbulb className="h-7 w-7 text-amber-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Recommendation
+              </span>
+              <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase", meta.chip)}>
+                {meta.label}
+              </span>
+            </div>
+            <div className="mt-1 text-lg font-bold leading-snug">{top.title}</div>
+            <div className="mt-1.5 text-sm text-muted-foreground">{top.why}</div>
+            <div className="mt-3 flex items-center gap-4">
+              {top.href && (
+                <a
+                  href={top.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> {top.hrefLabel ?? "Open"}
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() =>
+                  openGenieChat(
+                    `For ${data.name}: ${top.title}. ${top.why} How should I approach this?`,
+                  )
+                }
+                className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+              >
+                <Sparkles className="h-3.5 w-3.5" /> Ask Genie how
+              </button>
+            </div>
+            {rest.length > 0 && (
+              <div className="mt-4 border-t pt-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                  Then
+                </div>
+                <ul className="space-y-1">
+                  {rest.map((a: NextAction) => (
+                    <li key={a.key} className="flex items-start gap-1.5 text-xs">
+                      <span
+                        className={cn(
+                          "mt-1 h-1.5 w-1.5 shrink-0 rounded-full",
+                          a.tone === "blocked"
+                            ? "bg-destructive"
+                            : a.tone === "activate"
+                              ? "bg-amber-500"
+                              : "bg-emerald-500",
+                        )}
+                      />
+                      <span className="text-muted-foreground">{a.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // One compact "Readiness & eligibility" card that replaces the three full-width
 // stacked banners (PP / Enforce / AIM). Shows the readiness bar with an expandable
 // plan breakdown, plus a status strip for the eligibility signals — each row expands
@@ -1507,6 +1674,40 @@ function ReadinessEligibility({ data }: { data: AccountDetailOut }) {
             </span>
           </div>
           <Progress value={readinessPct} />
+          {(() => {
+            // Distance to Genie-Ready, driven by the GTM readiness TIER (Green/Yellow/
+            // Red) — a per-account tier where ONE qualifying workspace is enough, not a
+            // "provision every workspace" goal. Green = already Genie-Ready.
+            const tier = data.readiness_tier ?? "unknown";
+            if (tier === "green") {
+              return (
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1.5 font-medium">
+                  ✓ Genie-Ready — pre-requisites, AIM/Account SCIM, and SQL-/consumer-only
+                  onboarding all in place.
+                </p>
+              );
+            }
+            const steps: string[] = [];
+            if (!ppEnabled) steps.push("enable Partner-Powered AI");
+            else if (ppConsumeViaWs) steps.push("enable Partner-Powered AI account-wide");
+            if (tier === "yellow") {
+              steps.push("enable SQL-only / consumer-only user onboarding");
+            } else {
+              // Red / unknown — missing pre-reqs or identity.
+              if (prov !== "on" && prov !== "partial")
+                steps.push("set up AIM or Account SCIM");
+              steps.push("confirm pre-requisites (Premium, UC, Identity Federation)");
+            }
+            if (steps.length === 0) return null;
+            return (
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                <span className="font-medium text-foreground">
+                  To reach Genie-Ready:
+                </span>{" "}
+                {steps.join(" · ")}
+              </p>
+            );
+          })()}
           {showBreakdown && (
             <>
               <p className="text-[11px] text-muted-foreground mt-1.5">

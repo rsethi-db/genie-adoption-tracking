@@ -196,6 +196,16 @@ export function GenieChat() {
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const accountId = useCurrentAccountId();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Keep the composer sized to its content — so a long pre-filled prompt (e.g. from
+  // "Ask Genie how" on the account page) is fully visible, not clipped to 3 rows.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
+  }, [input, open]);
 
   function openHistory() {
     setShowHistory(true);
@@ -447,14 +457,9 @@ export function GenieChat() {
         <div className="border-t p-3 shrink-0">
           <div className="flex items-end gap-2">
             <textarea
+              ref={inputRef}
               value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                // Auto-grow with content.
-                const el = e.currentTarget;
-                el.style.height = "auto";
-                el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
-              }}
+              onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -463,7 +468,7 @@ export function GenieChat() {
               }}
               rows={3}
               placeholder="Ask a question…  (Enter to send, Shift+Enter for a new line)"
-              className="flex-1 resize-y rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[72px] max-h-60"
+              className="flex-1 resize-y rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[72px] max-h-80"
             />
             <Button size="icon" onClick={send} disabled={busy || !input.trim()}>
               <Send className="h-4 w-4" />
