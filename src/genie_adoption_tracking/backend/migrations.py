@@ -78,8 +78,25 @@ _MIGRATIONS = [
     "ALTER TABLE gat_adoption_task_history ADD COLUMN IF NOT EXISTS task_order INTEGER NOT NULL DEFAULT 0",
     # Campaign redesign: time-boxed outreach to a chosen set of accounts + a Form.
     # New columns are added to any pre-existing gat_campaign; the dropped legacy
-    # columns (ask/cta/segment/sub_vertical/deadline/priority/active) are simply left
-    # in place if present — harmless and avoids destructive DDL.
+    # columns (ask/cta/segment/sub_vertical/deadline/priority/active) are left in place
+    # but had a NOT NULL constraint with no default — which blocked every v3 insert
+    # (NotNullViolation on `ask`). Drop NOT NULL on each legacy column IF it still exists
+    # (fresh installs never had them), so v3 rows can omit them without aborting the txn.
+    """
+    DO $$
+    DECLARE col text;
+    BEGIN
+      FOREACH col IN ARRAY ARRAY['ask','cta','segment','sub_vertical','deadline','priority','active']
+      LOOP
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'gat_campaign' AND column_name = col
+        ) THEN
+          EXECUTE format('ALTER TABLE gat_campaign ALTER COLUMN %I DROP NOT NULL', col);
+        END IF;
+      END LOOP;
+    END $$;
+    """,
     "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS start_date VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS end_date VARCHAR NOT NULL DEFAULT ''",
     "ALTER TABLE gat_campaign ADD COLUMN IF NOT EXISTS audience_text VARCHAR NOT NULL DEFAULT ''",

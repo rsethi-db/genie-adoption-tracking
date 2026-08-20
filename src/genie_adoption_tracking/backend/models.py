@@ -544,7 +544,9 @@ class AudienceFilters(BaseModel):
     readiness_tier: str | None = None  # "green" | "yellow" | "red" | "unknown"
     whitespace: bool | None = None  # can-consume + provisioned + no active agent
     has_use_case: bool | None = None  # has ≥1 Genie use case
+    use_case_stage: str | None = None  # has ≥1 use case at this stage: u1..u6
     open_issues: bool | None = None  # has ≥1 open Brickroad issue
+    vertical: str | None = None  # AMER vertical (FINS/MFG/PS/HLS/…) exact match
 
 
 class AudienceAccountOut(BaseModel):

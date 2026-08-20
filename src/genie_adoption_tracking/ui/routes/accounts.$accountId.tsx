@@ -968,7 +968,9 @@ function AdoptionWorkflow({
     else byCell.set(k, [t]);
   }
 
-  const gridCols = `repeat(${workflow.stages.length}, minmax(230px, 1fr))`;
+  // Columns share the full width evenly (floor low enough that all 6 stages fit the
+  // page without horizontal scroll; only very narrow screens scroll).
+  const gridCols = `repeat(${workflow.stages.length}, minmax(0, 1fr))`;
 
   // Pre-Reqs eligibility banner shows only when Partner-Powered AI is not enabled;
   // Security & Review (below) shows for ALL accounts.
@@ -1060,7 +1062,7 @@ function AdoptionWorkflow({
         )}
 
         <div className="overflow-x-auto">
-          <div style={{ minWidth: 900 }}>
+          <div className="min-w-[720px]">
             {/* Stage header row — U-codes in red */}
             <div className="grid gap-3 mb-2" style={{ gridTemplateColumns: gridCols }}>
               {workflow.stages.map((s) => (
@@ -1510,23 +1512,28 @@ function NextBestAction({ data }: { data: AccountDetailOut }) {
   const rest = actions.slice(1);
   const meta = NBA_TONE[top.tone] ?? NBA_TONE.done;
   return (
-    <Card className={cn("mb-6 border-2 shadow-sm", meta.ring)}>
-      <CardContent className="py-5">
+    <Card
+      className={cn(
+        "mb-6 border-2 shadow-md ring-1 ring-primary/20 bg-primary/[0.04]",
+        meta.ring,
+      )}
+    >
+      <CardContent className="py-6">
         <div className="flex items-start gap-4">
-          <div className="shrink-0 rounded-xl bg-amber-500/10 p-3 ring-1 ring-amber-500/20">
-            <Lightbulb className="h-7 w-7 text-amber-500" />
+          <div className="shrink-0 rounded-xl bg-amber-500/15 p-3.5 ring-1 ring-amber-500/30">
+            <Lightbulb className="h-9 w-9 text-amber-500" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Recommendation
+              <span className="text-sm font-bold uppercase tracking-wider text-primary">
+                ★ Recommendation
               </span>
-              <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase", meta.chip)}>
+              <span className={cn("rounded px-2 py-0.5 text-[11px] font-bold uppercase", meta.chip)}>
                 {meta.label}
               </span>
             </div>
-            <div className="mt-1 text-lg font-bold leading-snug">{top.title}</div>
-            <div className="mt-1.5 text-sm text-muted-foreground">{top.why}</div>
+            <div className="mt-1.5 text-xl font-bold leading-snug">{top.title}</div>
+            <div className="mt-2 text-sm text-muted-foreground">{top.why}</div>
             <div className="mt-3 flex items-center gap-4">
               {top.href && (
                 <a

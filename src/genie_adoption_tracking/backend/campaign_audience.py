@@ -66,20 +66,25 @@ Schema (include a key ONLY if the text implies it; omit otherwise):
   pp_enforce: "on" | "off"   # for PP-off accounts: enforce on (hard-blocked) / off (workspaces can consume)
   genie_spend_min: number    # minimum trailing-30d Genie spend in USD
   genie_spend_max: number    # maximum trailing-30d Genie spend in USD
-  sub_vertical: string       # a business sub-vertical/segment substring
+  vertical: string           # AMER vertical (exact): FINS, MFG, PS, HLS, CMEG, RCT, DNB, CAN, LATAM, "EE & Startup"
+  sub_vertical: string       # a finer business sub-vertical/segment substring (e.g. Banking, Insurance, Hunter)
   genie_active: boolean      # has an active Genie agent (used Genie in last 30d)
   provisioning: "on"|"partial"|"off"  # user provisioning (AIM/SCIM); off = none/blank
   readiness_tier: "green"|"yellow"|"red"|"unknown"  # GTM Genie-Ready tier
   whitespace: boolean        # can consume Genie + provisioned but NO active agent
   has_use_case: boolean      # has at least one Genie use case
+  use_case_stage: "u1"|"u2"|"u3"|"u4"|"u5"|"u6"  # has >=1 use case at this UCO stage (u6 = Live)
   open_issues: boolean       # has at least one open Brickroad issue
 
 Interpret money shorthands: $250K = 250000, $1.2M = 1200000, $200 = 200.
 Mappings:
+  "FINS"/"MFG"/"PS"/"HLS"/"CMEG"/"RCT"/"DNB"/"CAN"/"LATAM"/"EE & Startup" (a top-level vertical) -> vertical:"FINS" etc.
+  a finer segment like "banking"/"insurance"/"hunter"/"capital markets" -> sub_vertical:"..."
   "no genie usage"/"not using genie"/"no genie activity"/"no agents" -> genie_active:false
   "using genie"/"genie active"/"has agents" -> genie_active:true
   "whitespace"/"ready but idle"/"ready to activate"/"can consume but not using" -> whitespace:true
   "has a use case"/"has genie use cases" -> has_use_case:true ; "no use case" -> has_use_case:false
+  "use case in U6"/"live use case"/"at least 1 use case in live"/"UCO at U3" -> use_case_stage:"u6" (or u1..u5)
   "partner powered enabled/on" -> pp_status:"on" ; "PP off"/"partner powered off" -> pp_status:"off"
   "PP off but enforce off"/"off, not enforced"/"off but workspaces can consume" -> pp_status:"off",pp_enforce:"off"
   "PP off and enforced"/"hard blocked" -> pp_status:"off",pp_enforce:"on"
@@ -89,7 +94,9 @@ Mappings:
   "usage < $200"/"genie spend under 200" -> genie_spend_max:200
 Examples:
   "FINS accounts where ARR > $250K, partner powered enabled and genie usage < $200"
-    -> {"arr_min":250000,"pp_status":"on","genie_spend_max":200}
+    -> {"vertical":"FINS","arr_min":250000,"pp_status":"on","genie_spend_max":200}
+  "FINS accounts in Hunter sub-vertical with at least 1 use case in U6 / live"
+    -> {"vertical":"FINS","sub_vertical":"Hunter","use_case_stage":"u6"}
   "accounts with no genie usage" -> {"genie_active":false}
   "whitespace accounts in banking over $1M ARR" -> {"whitespace":true,"sub_vertical":"Banking","arr_min":1000000}
   "green tier accounts not using genie" -> {"readiness_tier":"green","genie_active":false}
@@ -172,6 +179,8 @@ def _describe(f: AudienceFilters) -> str:
         bits.append(f"Genie spend ≥ ${f.genie_spend_min:,.0f}")
     if f.genie_spend_max is not None:
         bits.append(f"Genie spend ≤ ${f.genie_spend_max:,.0f}")
+    if f.vertical:
+        bits.append(f"vertical = {f.vertical}")
     if f.sub_vertical:
         bits.append(f"sub-vertical contains “{f.sub_vertical}”")
     if f.genie_active is not None:
@@ -184,6 +193,9 @@ def _describe(f: AudienceFilters) -> str:
         bits.append("whitespace (ready but idle)" if f.whitespace else "not whitespace")
     if f.has_use_case is not None:
         bits.append("has a Genie use case" if f.has_use_case else "no Genie use case")
+    if f.use_case_stage:
+        label = "Live (U6)" if f.use_case_stage.lower() == "u6" else f.use_case_stage.upper()
+        bits.append(f"has a use case at {label}")
     if f.open_issues is not None:
         bits.append("has open issues" if f.open_issues else "no open issues")
     return " · ".join(bits) if bits else "No filters recognized — showing no accounts."
@@ -226,6 +238,8 @@ def _to_sql(f: AudienceFilters) -> str:
         w.append(f"genie_dollars_t30d >= {f.genie_spend_min:.0f}")
     if f.genie_spend_max is not None:
         w.append(f"genie_dollars_t30d <= {f.genie_spend_max:.0f}")
+    if f.vertical:
+        w.append(f"lower(vertical) = {_sql_literal(f.vertical.lower())}")
     if f.sub_vertical:
         w.append(f"lower(sub_vertical) LIKE '%{f.sub_vertical.lower()}%'")
     if f.genie_active is True:
@@ -252,6 +266,11 @@ def _to_sql(f: AudienceFilters) -> str:
         w.append("EXISTS (SELECT 1 FROM gat_use_case u WHERE u.account_id = a.id)")
     elif f.has_use_case is False:
         w.append("NOT EXISTS (SELECT 1 FROM gat_use_case u WHERE u.account_id = a.id)")
+    if f.use_case_stage:
+        w.append(
+            "EXISTS (SELECT 1 FROM gat_use_case u WHERE u.account_id = a.id "
+            f"AND u.stage = {_sql_literal(f.use_case_stage.lower())})"
+        )
     if f.open_issues is True:
         w.append(
             "EXISTS (SELECT 1 FROM gat_account_issue i WHERE i.account_id = a.id "
@@ -286,6 +305,8 @@ def _matches(a: Account, f: AudienceFilters) -> bool:
         return False
     if f.genie_spend_max is not None and a.genie_spend_90d > f.genie_spend_max:
         return False
+    if f.vertical and (a.vertical or "").lower() != f.vertical.lower():
+        return False
     if f.sub_vertical and f.sub_vertical.lower() not in (a.sub_vertical or "").lower():
         return False
     # genie_active = has an active Genie agent in the last 30d (matches Signals).
@@ -301,7 +322,8 @@ def _matches(a: Account, f: AudienceFilters) -> bool:
         return False
     if f.whitespace is not None and _acct_is_whitespace(a) != f.whitespace:
         return False
-    # has_use_case / open_issues are checked at the query level (need joins), not here.
+    # has_use_case / use_case_stage / open_issues are checked at the query level
+    # (they need joins to gat_use_case / gat_account_issue), not here.
     return True
 
 
@@ -391,9 +413,17 @@ def query_audience(
     # Precompute use-case / open-issue account sets once (needed for has_use_case /
     # open_issues, which can't be read off the Account row alone).
     acct_ids_with_uc: set[str] = set()
+    acct_ids_with_stage: set[str] = set()
     acct_ids_with_open_issue: set[str] = set()
     if filters.has_use_case is not None:
         acct_ids_with_uc = {uc.account_id for uc in session.exec(select(UseCase)).all()}
+    if filters.use_case_stage:
+        stage = filters.use_case_stage.lower()
+        acct_ids_with_stage = {
+            uc.account_id
+            for uc in session.exec(select(UseCase)).all()
+            if (uc.stage or "").lower() == stage
+        }
     if filters.open_issues is not None:
         acct_ids_with_open_issue = {
             i.account_id
@@ -407,6 +437,8 @@ def query_audience(
         if filters.has_use_case is not None:
             if (a.id in acct_ids_with_uc) != filters.has_use_case:
                 return False
+        if filters.use_case_stage and a.id not in acct_ids_with_stage:
+            return False
         if filters.open_issues is not None:
             if (a.id in acct_ids_with_open_issue) != filters.open_issues:
                 return False

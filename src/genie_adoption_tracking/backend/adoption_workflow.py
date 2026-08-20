@@ -72,7 +72,7 @@ TASKS: list[Task] = [
      "label": "Establish strong C-suite sponsorship"},
 
     {"key": "hp_u3_prototype", "stage": "u3", "lane": "happy_path",
-     "label": "Build prototype on customer data"},
+     "label": "Build prototype (POC / pilot) on customer data"},
     {"key": "hp_u3_evaldata", "stage": "u3", "lane": "happy_path",
      "label": "Gather evaluation data (Q&A)"},
     {"key": "hp_u3_metricview", "stage": "u3", "lane": "happy_path",
@@ -107,7 +107,7 @@ TASKS: list[Task] = [
     {"key": "rec_u3_workbench", "stage": "u3", "lane": "recommended",
      "label": "Optimize accuracy using Genie Code / Workbench"},
     {"key": "rec_u3_hackathon", "stage": "u3", "lane": "recommended",
-     "label": "Run a Genie Acceleration Hackathon"},
+     "label": "Genie Hackathon"},
 
     {"key": "rec_u4_expand_lob", "stage": "u4", "lane": "recommended",
      "label": "Expand to other LoB / users"},
@@ -142,7 +142,6 @@ TASK_LABEL = {t["key"]: t["label"] for t in TASKS}
 # Tasks that are quantifiable — once in progress / completed, the team is asked
 # "how many?" (e.g. how many demos, workshops). Value = the noun for the prompt.
 TASK_COUNTS: dict[str, str] = {
-    "hp_u1_demo": "demos",
     "hp_u2_workshop": "workshops",
     "hp_u3_prototype": "prototypes",
     "rec_u3_hackathon": "hackathons",

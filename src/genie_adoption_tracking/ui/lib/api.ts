@@ -186,6 +186,8 @@ export interface AudienceFilters {
     provisioning?: string | null;
     readiness_tier?: string | null;
     sub_vertical?: string | null;
+    use_case_stage?: string | null;
+    vertical?: string | null;
     whitespace?: boolean | null;
 }
 export interface AudienceQueryIn {

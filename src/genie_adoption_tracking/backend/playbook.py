@@ -153,7 +153,7 @@ CHECKLIST: list[dict] = [
     {"key": "u4-hp-stakeholders", "stage": "u4", "lane": "happy_path",
      "label": "Follow up with IT / Business stakeholders"},
     {"key": "u4-hp-hackathon", "stage": "u4", "lane": "happy_path",
-     "label": "Run a Genie Acceleration Hackathon"},
+     "label": "Genie Hackathon"},
 
     # ---- U5 Onboarding ----------------------------------------------------------------
     {"key": "u5-hp-expand", "stage": "u5", "lane": "happy_path",
@@ -309,7 +309,7 @@ RESOURCES: list[dict] = [
      "url": "https://docs.google.com/presentation/d/1Hch4DwjZyvupg8rAhlfPBneKLZBGw04JtELWDNPJzag/edit", "stages": ["u2"]},
     {"key": "workshops-workshop-in-box", "bucket": "Workshops and Training", "label": "Genie Workshop in a Box",
      "url": "https://cso-workshop-7474655716427570.aws.databricksapps.com/", "stages": ["u2"]},
-    {"key": "workshops-genie-hackathon", "bucket": "Workshops and Training", "label": "Genie Acceleration Hackathon",
+    {"key": "workshops-genie-hackathon", "bucket": "Workshops and Training", "label": "Genie Hackathon",
      "url": "https://go/genie-hackathon", "stages": ["u2", "u4"]},
     {"key": "workshops-training-investment", "bucket": "Workshops and Training", "label": "Training Investment (>100 learners)",
      "url": "https://docs.google.com/presentation/d/1uDVzOgot6vRzK_dupJK7FJaFYrypYdC5oDtF8CpOnOs", "stages": ["u2", "u5"]},
