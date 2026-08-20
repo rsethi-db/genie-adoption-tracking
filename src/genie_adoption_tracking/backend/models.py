@@ -711,3 +711,69 @@ class GenieHistoryEntryOut(BaseModel):
     answer: str
     asked_by: str = ""
     created_at: datetime
+
+
+# --------------------------------------------------------------------------------------
+# App Insights — usage analytics (page views + resource clicks)
+# --------------------------------------------------------------------------------------
+
+
+class PageViewIn(BaseModel):
+    """A page-view event logged by the frontend on route change."""
+
+    path: str
+    title: str = ""
+    session_id: str = ""
+
+
+class PageCountOut(BaseModel):
+    path: str
+    title: str
+    views: int
+    visitors: int  # distinct users who viewed it
+    avg_seconds: float = 0.0  # approx dwell (gap to next view in session, capped)
+
+
+class VisitorOut(BaseModel):
+    user: str
+    views: int
+    last_seen: datetime
+    approx_minutes: float = 0.0  # approx total time in app (summed capped gaps)
+
+
+class TopResourceOut2(BaseModel):
+    resource_key: str
+    label: str
+    bucket: str
+    clicks: int
+
+
+class DayCountOut(BaseModel):
+    day: str  # YYYY-MM-DD
+    views: int
+    visitors: int
+
+
+class AppInsightsOut(BaseModel):
+    total_views: int = 0
+    total_visitors: int = 0
+    views_7d: int = 0
+    visitors_7d: int = 0
+    avg_session_minutes: float = 0.0  # approx, across sessions
+    pages: list[PageCountOut] = []
+    visitors: list[VisitorOut] = []
+    by_day: list[DayCountOut] = []
+    top_resources: list[TopResourceOut2] = []
+
+
+class FeedbackIn(BaseModel):
+    category: str = "idea"  # good | bad | ugly | bug | data_gap | idea
+    message: str
+
+
+class FeedbackOut(BaseModel):
+    id: str
+    category: str
+    message: str
+    submitted_by: str = ""
+    created_at: datetime

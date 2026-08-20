@@ -256,6 +256,35 @@ class ResourceClick(SQLModel, table=True):
     created_by: str = Field(default="")
 
 
+class Feedback(SQLModel, table=True):
+    """In-app feedback left on the Feedback tab — good / bad / ugly, ideas, data gaps.
+    Captured so the team sees it without relying only on email."""
+
+    __tablename__ = "gat_feedback"
+
+    id: str = Field(primary_key=True)
+    category: str = Field(default="idea")  # good | bad | ugly | bug | data_gap | idea
+    message: str = Field(default="")
+    submitted_by: str = Field(default="", index=True)
+    created_at: datetime = Field(default_factory=_utcnow, index=True)
+
+
+class PageView(SQLModel, table=True):
+    """One page-view event — powers the App Insights tab (who's visiting, most-viewed
+    pages, approx time spent). Logged by the frontend on every route change. `path` is
+    the normalized route (account/use-case ids collapsed to :id so pages aggregate);
+    `session_id` is a per-tab id used to approximate dwell time from consecutive views."""
+
+    __tablename__ = "gat_page_view"
+
+    id: str = Field(primary_key=True)
+    path: str = Field(index=True)  # normalized route, e.g. "/accounts/:id"
+    title: str = Field(default="")  # human label, e.g. "Account detail"
+    session_id: str = Field(default="", index=True)
+    viewed_by: str = Field(default="", index=True)
+    created_at: datetime = Field(default_factory=_utcnow, index=True)
+
+
 class VerticalBook(SQLModel, table=True):
     """Per-vertical account-book totals from the GTM Genie Account Activation deep-dive
     (temp__rpt_genie_aibi_activation_chart, latest snapshot, by sales_subregion_level_1).

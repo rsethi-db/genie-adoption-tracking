@@ -160,6 +160,17 @@ export interface AdoptionWorkflowOut {
     stages: AdoptionStageOut[];
     tasks: AdoptionTaskOut[];
 }
+export interface AppInsightsOut {
+    avg_session_minutes?: number;
+    by_day?: DayCountOut[];
+    pages?: PageCountOut[];
+    top_resources?: TopResourceOut2[];
+    total_views?: number;
+    total_visitors?: number;
+    views_7d?: number;
+    visitors?: VisitorOut[];
+    visitors_7d?: number;
+}
 export interface AudienceAccountOut {
     account_id: string;
     account_name: string;
@@ -356,6 +367,22 @@ export interface DashboardOut {
     whitespace_top?: WhitespaceAccountOut[];
     workspaces_with_genie?: number;
 }
+export interface DayCountOut {
+    day: string;
+    views: number;
+    visitors: number;
+}
+export interface FeedbackIn {
+    category?: string;
+    message: string;
+}
+export interface FeedbackOut {
+    category: string;
+    created_at: string;
+    id: string;
+    message: string;
+    submitted_by?: string;
+}
 export interface FunnelBucketOut {
     code: string;
     count: number;
@@ -416,6 +443,18 @@ export interface Name {
 }
 export interface OkOut {
     ok?: boolean;
+}
+export interface PageCountOut {
+    avg_seconds?: number;
+    path: string;
+    title: string;
+    views: number;
+    visitors: number;
+}
+export interface PageViewIn {
+    path: string;
+    session_id?: string;
+    title?: string;
 }
 export interface PlaybookOut {
     blockers: BlockerDefOut[];
@@ -507,6 +546,12 @@ export interface TopResourceOut {
     label: string;
     resource_key: string;
 }
+export interface TopResourceOut2 {
+    bucket: string;
+    clicks: number;
+    label: string;
+    resource_key: string;
+}
 export interface UseCaseDetailOut {
     account_id: string;
     account_name: string;
@@ -571,6 +616,12 @@ export interface ValidationError {
 }
 export interface VersionOut {
     version: string;
+}
+export interface VisitorOut {
+    approx_minutes?: number;
+    last_seen: string;
+    user: string;
+    views: number;
 }
 export interface WhitespaceAccountOut {
     ae_owner?: string;
@@ -1052,6 +1103,58 @@ export function useToggleAccountPlanItem(options?: {
     return useMutation({
         mutationFn: (vars)=>toggleAccountPlanItem(vars.params, vars.data),
         ...options?.mutation
+    });
+}
+export const getAppInsights = async (options?: RequestInit): Promise<{
+    data: AppInsightsOut;
+}> =>{
+    const res = await fetch("/api/app-insights", {
+        ...options,
+        method: "GET"
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export const getAppInsightsKey = ()=>{
+    return [
+        "/api/app-insights"
+    ] as const;
+};
+export function useGetAppInsights<TData = {
+    data: AppInsightsOut;
+}>(options?: {
+    query?: Omit<UseQueryOptions<{
+        data: AppInsightsOut;
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useQuery({
+        queryKey: getAppInsightsKey(),
+        queryFn: ()=>getAppInsights(),
+        ...options?.query
+    });
+}
+export function useGetAppInsightsSuspense<TData = {
+    data: AppInsightsOut;
+}>(options?: {
+    query?: Omit<UseSuspenseQueryOptions<{
+        data: AppInsightsOut;
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useSuspenseQuery({
+        queryKey: getAppInsightsKey(),
+        queryFn: ()=>getAppInsights(),
+        ...options?.query
     });
 }
 export interface ResolveBlockerParams {
@@ -1786,6 +1889,123 @@ export function useGetDashboardSuspense<TData = {
         ...options?.query
     });
 }
+export const listFeedback = async (options?: RequestInit): Promise<{
+    data: FeedbackOut[];
+}> =>{
+    const res = await fetch("/api/feedback", {
+        ...options,
+        method: "GET"
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export const listFeedbackKey = ()=>{
+    return [
+        "/api/feedback"
+    ] as const;
+};
+export function useListFeedback<TData = {
+    data: FeedbackOut[];
+}>(options?: {
+    query?: Omit<UseQueryOptions<{
+        data: FeedbackOut[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useQuery({
+        queryKey: listFeedbackKey(),
+        queryFn: ()=>listFeedback(),
+        ...options?.query
+    });
+}
+export function useListFeedbackSuspense<TData = {
+    data: FeedbackOut[];
+}>(options?: {
+    query?: Omit<UseSuspenseQueryOptions<{
+        data: FeedbackOut[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useSuspenseQuery({
+        queryKey: listFeedbackKey(),
+        queryFn: ()=>listFeedback(),
+        ...options?.query
+    });
+}
+export interface SubmitFeedbackParams {
+    "X-Forwarded-Host"?: string | null;
+    "X-Forwarded-Preferred-Username"?: string | null;
+    "X-Forwarded-User"?: string | null;
+    "X-Forwarded-Email"?: string | null;
+    "X-Request-Id"?: string | null;
+    "X-Forwarded-Access-Token"?: string | null;
+}
+export const submitFeedback = async (data: FeedbackIn, params?: SubmitFeedbackParams, options?: RequestInit): Promise<{
+    data: FeedbackOut;
+}> =>{
+    const res = await fetch("/api/feedback", {
+        ...options,
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...(params?.["X-Forwarded-Host"] != null && {
+                "X-Forwarded-Host": params["X-Forwarded-Host"]
+            }),
+            ...(params?.["X-Forwarded-Preferred-Username"] != null && {
+                "X-Forwarded-Preferred-Username": params["X-Forwarded-Preferred-Username"]
+            }),
+            ...(params?.["X-Forwarded-User"] != null && {
+                "X-Forwarded-User": params["X-Forwarded-User"]
+            }),
+            ...(params?.["X-Forwarded-Email"] != null && {
+                "X-Forwarded-Email": params["X-Forwarded-Email"]
+            }),
+            ...(params?.["X-Request-Id"] != null && {
+                "X-Request-Id": params["X-Request-Id"]
+            }),
+            ...(params?.["X-Forwarded-Access-Token"] != null && {
+                "X-Forwarded-Access-Token": params["X-Forwarded-Access-Token"]
+            }),
+            ...options?.headers
+        },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export function useSubmitFeedback(options?: {
+    mutation?: UseMutationOptions<{
+        data: FeedbackOut;
+    }, ApiError, {
+        params: SubmitFeedbackParams;
+        data: FeedbackIn;
+    }>;
+}) {
+    return useMutation({
+        mutationFn: (vars)=>submitFeedback(vars.data, vars.params),
+        ...options?.mutation
+    });
+}
 export interface GetCampaignFormParams {
     form_token: string;
 }
@@ -2154,6 +2374,71 @@ export function useGetGenieStatusSuspense<TData = {
         queryKey: getGenieStatusKey(),
         queryFn: ()=>getGenieStatus(),
         ...options?.query
+    });
+}
+export interface LogPageViewParams {
+    "X-Forwarded-Host"?: string | null;
+    "X-Forwarded-Preferred-Username"?: string | null;
+    "X-Forwarded-User"?: string | null;
+    "X-Forwarded-Email"?: string | null;
+    "X-Request-Id"?: string | null;
+    "X-Forwarded-Access-Token"?: string | null;
+}
+export const logPageView = async (data: PageViewIn, params?: LogPageViewParams, options?: RequestInit): Promise<{
+    data: OkOut;
+}> =>{
+    const res = await fetch("/api/page-views", {
+        ...options,
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...(params?.["X-Forwarded-Host"] != null && {
+                "X-Forwarded-Host": params["X-Forwarded-Host"]
+            }),
+            ...(params?.["X-Forwarded-Preferred-Username"] != null && {
+                "X-Forwarded-Preferred-Username": params["X-Forwarded-Preferred-Username"]
+            }),
+            ...(params?.["X-Forwarded-User"] != null && {
+                "X-Forwarded-User": params["X-Forwarded-User"]
+            }),
+            ...(params?.["X-Forwarded-Email"] != null && {
+                "X-Forwarded-Email": params["X-Forwarded-Email"]
+            }),
+            ...(params?.["X-Request-Id"] != null && {
+                "X-Request-Id": params["X-Request-Id"]
+            }),
+            ...(params?.["X-Forwarded-Access-Token"] != null && {
+                "X-Forwarded-Access-Token": params["X-Forwarded-Access-Token"]
+            }),
+            ...options?.headers
+        },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export function useLogPageView(options?: {
+    mutation?: UseMutationOptions<{
+        data: OkOut;
+    }, ApiError, {
+        params: LogPageViewParams;
+        data: PageViewIn;
+    }>;
+}) {
+    return useMutation({
+        mutationFn: (vars)=>logPageView(vars.data, vars.params),
+        ...options?.mutation
     });
 }
 export const getPlaybook = async (options?: RequestInit): Promise<{

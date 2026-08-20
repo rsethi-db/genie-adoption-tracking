@@ -62,6 +62,8 @@ export function AppShell({
             <NavLink to="/dashboard" label="Signals" />
             <NavLink to="/campaigns" label="Campaigns" />
             <NavLink to="/playbook" label="Getting Help" />
+            <NavLink to="/insights" label="App Insights" />
+            <NavLink to="/feedback" label="Feedback" />
           </nav>
           <div className="flex-1" />
           <ModeToggle />

@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './../routes/index'
 import { Route as AccountsRouteImport } from './../routes/accounts'
 import { Route as CampaignsRouteImport } from './../routes/campaigns'
 import { Route as DashboardRouteImport } from './../routes/dashboard'
+import { Route as FeedbackRouteImport } from './../routes/feedback'
+import { Route as InsightsRouteImport } from './../routes/insights'
 import { Route as PlaybookRouteImport } from './../routes/playbook'
 import { Route as UseCasesRouteImport } from './../routes/use-cases'
 import { Route as AccountsIndexRouteImport } from './../routes/accounts.index'
@@ -40,6 +42,16 @@ const CampaignsRoute = CampaignsRouteImport.update({
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FeedbackRoute = FeedbackRouteImport.update({
+  id: '/feedback',
+  path: '/feedback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InsightsRoute = InsightsRouteImport.update({
+  id: '/insights',
+  path: '/insights',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlaybookRoute = PlaybookRouteImport.update({
@@ -88,6 +100,8 @@ export interface FileRoutesByFullPath {
   '/accounts': typeof AccountsRouteWithChildren
   '/campaigns': typeof CampaignsRouteWithChildren
   '/dashboard': typeof DashboardRoute
+  '/feedback': typeof FeedbackRoute
+  '/insights': typeof InsightsRoute
   '/playbook': typeof PlaybookRoute
   '/use-cases': typeof UseCasesRouteWithChildren
   '/accounts/$accountId': typeof AccountsAccountIdRoute
@@ -100,6 +114,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
+  '/feedback': typeof FeedbackRoute
+  '/insights': typeof InsightsRoute
   '/playbook': typeof PlaybookRoute
   '/use-cases': typeof UseCasesRouteWithChildren
   '/accounts/$accountId': typeof AccountsAccountIdRoute
@@ -115,6 +131,8 @@ export interface FileRoutesById {
   '/accounts': typeof AccountsRouteWithChildren
   '/campaigns': typeof CampaignsRouteWithChildren
   '/dashboard': typeof DashboardRoute
+  '/feedback': typeof FeedbackRoute
+  '/insights': typeof InsightsRoute
   '/playbook': typeof PlaybookRoute
   '/use-cases': typeof UseCasesRouteWithChildren
   '/accounts/$accountId': typeof AccountsAccountIdRoute
@@ -131,6 +149,8 @@ export interface FileRouteTypes {
     | '/accounts'
     | '/campaigns'
     | '/dashboard'
+    | '/feedback'
+    | '/insights'
     | '/playbook'
     | '/use-cases'
     | '/accounts/$accountId'
@@ -143,6 +163,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/dashboard'
+    | '/feedback'
+    | '/insights'
     | '/playbook'
     | '/use-cases'
     | '/accounts/$accountId'
@@ -157,6 +179,8 @@ export interface FileRouteTypes {
     | '/accounts'
     | '/campaigns'
     | '/dashboard'
+    | '/feedback'
+    | '/insights'
     | '/playbook'
     | '/use-cases'
     | '/accounts/$accountId'
@@ -172,6 +196,8 @@ export interface RootRouteChildren {
   AccountsRoute: typeof AccountsRouteWithChildren
   CampaignsRoute: typeof CampaignsRouteWithChildren
   DashboardRoute: typeof DashboardRoute
+  FeedbackRoute: typeof FeedbackRoute
+  InsightsRoute: typeof InsightsRoute
   PlaybookRoute: typeof PlaybookRoute
   UseCasesRoute: typeof UseCasesRouteWithChildren
   FormsTokenRoute: typeof FormsTokenRoute
@@ -205,6 +231,20 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/feedback': {
+      id: '/feedback'
+      path: '/feedback'
+      fullPath: '/feedback'
+      preLoaderRoute: typeof FeedbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/insights': {
+      id: '/insights'
+      path: '/insights'
+      fullPath: '/insights'
+      preLoaderRoute: typeof InsightsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/playbook': {
@@ -311,6 +351,8 @@ const rootRouteChildren: RootRouteChildren = {
   AccountsRoute: AccountsRouteWithChildren,
   CampaignsRoute: CampaignsRouteWithChildren,
   DashboardRoute: DashboardRoute,
+  FeedbackRoute: FeedbackRoute,
+  InsightsRoute: InsightsRoute,
   PlaybookRoute: PlaybookRoute,
   UseCasesRoute: UseCasesRouteWithChildren,
   FormsTokenRoute: FormsTokenRoute,
