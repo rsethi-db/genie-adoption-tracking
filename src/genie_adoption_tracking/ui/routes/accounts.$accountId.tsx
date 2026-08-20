@@ -4,6 +4,7 @@ import {
   useGetAccountSuspense,
   useToggleAccountPlanItem,
   useSaveAdoptionTasks,
+  useListCampaigns,
   getAccountKey,
   listAccountsKey,
   type AccountPlanItemOut,
@@ -12,6 +13,7 @@ import {
   type AdoptionWorkflowOut,
   type AdoptionTaskOut,
   type UseCaseListOut,
+  type CampaignOut,
 } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
@@ -193,6 +195,8 @@ function AccountDetail({ accountId }: { accountId: string }) {
         plan={data.plan ?? []}
         issues={data.issues ?? []}
       />
+
+      <AccountCampaigns accountId={data.id} />
     </div>
   );
 }
@@ -1260,6 +1264,104 @@ function UseCaseFlow({ useCases }: { useCases: UseCaseListOut[] }) {
   );
 }
 
+// Campaigns this account is part of — customer-specific campaigns that were launched
+// (from the Campaigns page). Collapsible, matching the other account sections. Filters
+// the full campaign list to those whose audience includes this account.
+function fmtCampaignDate(d?: string): string {
+  if (!d) return "";
+  const dt = new Date(`${d}T00:00:00`);
+  if (Number.isNaN(dt.getTime())) return d;
+  return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+const CAMPAIGN_STATUS: Record<string, string> = {
+  draft: "bg-muted text-muted-foreground",
+  active: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  closed: "bg-muted text-muted-foreground",
+};
+
+function AccountCampaigns({ accountId }: { accountId: string }) {
+  const [open, setOpen] = useState(false);
+  const { data: campaigns } = useListCampaigns({ query: { select: (d) => d.data } });
+  const mine = (campaigns ?? []).filter((c: CampaignOut) =>
+    (c.accounts ?? []).some((a) => a.account_id === accountId),
+  );
+  return (
+    <div className="mb-6">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between rounded-lg border bg-card px-4 py-3 text-left hover:border-primary/50 transition-colors"
+      >
+        <span className="text-base font-semibold">
+          Campaigns{" "}
+          <span className="font-normal text-muted-foreground">({mine.length})</span>
+        </span>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+
+      {open && (
+        <Card className="mt-3">
+          <CardContent className="py-4">
+            {mine.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No campaigns have targeted this account yet.{" "}
+                <Link to="/campaigns" className="text-primary hover:underline">
+                  Launch one
+                </Link>
+                .
+              </p>
+            ) : (
+              <div className="grid gap-2">
+                {mine.map((c: CampaignOut) => (
+                  <Link
+                    key={c.id}
+                    to="/campaigns/$campaignId"
+                    params={{ campaignId: c.id }}
+                  >
+                    <Card className="hover:border-primary/50 transition-colors">
+                      <CardContent className="py-3 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{c.title}</div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {(c.start_date || c.end_date) && (
+                              <>
+                                {fmtCampaignDate(c.start_date)}
+                                {c.end_date ? ` → ${fmtCampaignDate(c.end_date)}` : ""} ·{" "}
+                              </>
+                            )}
+                            {c.account_count ?? 0} account
+                            {(c.account_count ?? 0) === 1 ? "" : "s"} ·{" "}
+                            {c.response_count ?? 0} response
+                            {(c.response_count ?? 0) === 1 ? "" : "s"}
+                          </div>
+                        </div>
+                        <span
+                          className={cn(
+                            "shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold uppercase",
+                            CAMPAIGN_STATUS[c.status ?? "draft"] ?? CAMPAIGN_STATUS.draft,
+                          )}
+                        >
+                          {c.status ?? "draft"}
+                        </span>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // Objections & Blockers — kept as its own card (extracted from the removed
 // "Account action plan"; the other plan groups are no longer shown).
 function ObjectionsBlockers({
@@ -1297,7 +1399,7 @@ function ObjectionsBlockers({
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between rounded-lg border bg-card px-4 py-3 text-left hover:border-primary/50 transition-colors"
       >
-        <span className="text-lg font-semibold">
+        <span className="text-base font-semibold">
           Objections &amp; Blockers{" "}
           {openIssues > 0 && (
             <span className="font-normal text-muted-foreground">
